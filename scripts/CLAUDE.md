@@ -6,7 +6,10 @@ brand-browser.sh: 编译 CCBrowser 入口、写入 CC浏览器 名称/图标/各
 sign-browser.py: 内层 Mach-O → Helper 应用 → Framework → 浏览器外壳顺序签名；Developer ID 使用可信时间戳、Hardened Runtime，仅 Renderer/GPU 使用 JIT entitlement；支持显式本机临时签名 -。
 test-sign-browser.py: 临时伪引擎树验证叶子到容器的签名顺序、最小 JIT 授权与符号链接不重复遍历。
 fetch-browser.py: 固定上游引擎 DMG 与 SHA-256，核验版本和 arm64 后恢复引擎；干净 CI 检出不依赖维护者本机 Browser.app。
-release-macos.py: 外部凭据与可选 CC_RELEASE_VERSION 驱动浏览器、宿主、DMG 三阶段公证装订与 Gatekeeper 校验；发布产物和哈希记录写入被忽略的 releases/。
+release-macos.py: 外部凭据与可选 CC_RELEASE_VERSION 驱动浏览器、宿主、像素安装盘三阶段公证装订与 Gatekeeper 校验；dmgbuild 无头写入 Finder 布局，产物和哈希记录写入被忽略的 releases/。
+dmg-settings.py: 固定 800×500 像素背景、两应用到 Applications 的拖拽坐标；通知文件保留在盘内但默认隐藏，不依赖 Finder 自动化。
+verify-dmg.py: 只读挂载实际安装盘，校验双应用严格签名与 Gatekeeper、Applications 链接和像素背景；Finder 元数据不得破坏应用签名。
+release-requirements.txt: dmgbuild、ds-store 与 mac-alias 的完整版本及 wheel SHA-256；仅发布阶段安装，不增大应用包。
 package-browser.sh: 先品牌化签名，再打包引擎，ditto 保留 Framework 链接与可执行权限；归档进入应用资源。
 install-apps.sh: 将 CC清理器 与 CC浏览器 整包替换到 /Applications（启动台可见），清除隔离/来源标记并 lsregister -f；退出、注销并删除 ~/Applications 下的 CC*.app 与旧需求法语*.app；注销应用数据旧引擎副本与工程内包的注册；重启 Dock/Finder 刷新图标。
 setup-vps.sh: 从用户 Downloads 脚本纳入应用的 Debian 12/13 root 设置；Xray Reality 经家宽 SOCKS5 出口、Stripe 直连例外、阻断 UDP、SSH/防火墙加固与自检；仅全部通过输出 CC_SUB_URL，支持 IPv6 订阅地址，失败不打印完整配置，Xray 凭据配置限 root/实际服务组可读。

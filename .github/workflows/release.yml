@@ -44,6 +44,7 @@ jobs:
           rustup toolchain install 1.98.1 --profile minimal
           rustup default 1.98.1
           bun install --frozen-lockfile
+          python3 -m pip install --require-hashes --only-binary=:all: -r scripts/release-requirements.txt
           python3 scripts/fetch-browser.py
       - name: Run checks
         run: |

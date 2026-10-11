@@ -19,3 +19,4 @@ __pycache__/
 releases/
 browser-runtime/Browser.app/
 browser-runtime/Browser.zip
+.venv-release/

@@ -61,6 +61,8 @@ Download the signed installer from [GitHub Releases](https://github.com/liseami/
 | CC Cleaner | `CC清理器.app` | Cleanup, system settings, SSH tasks and verification |
 | CC Browser | `CC浏览器.app` | Companion browser with a dedicated profile |
 
+Download **one DMG**; it contains both applications. There is no separate browser download. The installer uses the same pixel-art style as this README.
+
 1. Open the release disk image and drag **both applications** into Applications.
 2. Launch CC Cleaner. It starts the companion browser automatically.
 3. Choose English at the bottom of the sidebar if needed.
@@ -129,7 +131,7 @@ The UI owns inputs and presentation. Rust owns validation, task locks, process i
 <summary><strong>Repository map</strong></summary>
 
 ```text
-assets/             Compressed source logos shared by icons and README
+assets/             Compressed brand logos and pixel-art DMG background
 src/                Desktop UI, browser test page and localization
 src-tauri/src/      Rust commands and transaction boundaries
 src-tauri/native/   Small macOS API bridges

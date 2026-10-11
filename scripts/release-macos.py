@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# [INPUT]: 双应用源代码、外部 Developer ID 与 Apple API 凭据环境变量、macOS 发布工具。
+# [INPUT]: 双应用源代码、外部 Developer ID 与 Apple API 凭据、哈希锁定的 dmgbuild 与 macOS 发布工具。
 # [OUTPUT]: 公证并装订票据的双应用 DMG、SHA256SUMS 和实际签名/公证记录。
 # [POS]: 发布唯一顺序入口；浏览器票据先进入宿主资源，签名后的包不再修改内容。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -7,8 +7,11 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
+import sys
 import tempfile
+import dmgbuild
 
 ROOT = Path(__file__).resolve().parent.parent
 BROWSER = ROOT / 'browser-runtime/Browser.app'
@@ -30,7 +33,7 @@ def main():
     if not Path(os.environ['APPLE_API_KEY_PATH']).is_file():
         raise SystemExit('Apple API key file does not exist')
     version = os.environ.get('CC_RELEASE_VERSION', json.loads((ROOT / 'package.json').read_text())['version'])
-    if not __import__('re').fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
+    if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
         raise SystemExit('Release version must have three numeric components')
     output = ROOT / 'releases'
     output.mkdir(exist_ok=True)
@@ -74,12 +77,12 @@ def main():
             run('codesign', '--verify', '--deep', '--strict', app)
             run('spctl', '--assess', '--type', 'execute', '--verbose=2', app)
             run('ditto', app, stage / app.name)
-        (stage / 'Applications').symlink_to('/Applications')
         for name in ['LICENSE', 'NOTICE.md']:
             run('ditto', ROOT / name, stage / name)
         (stage / 'Install.txt').write_text('Drag both apps into Applications. Requires Apple Silicon and macOS 12 or later.\n')
         dmg = output / f'CCTool-{version}-macos-arm64.dmg'
-        run('hdiutil', 'create', '-volname', 'CCTool', '-srcfolder', stage, '-format', 'UDZO', '-ov', dmg)
+        dmgbuild.build_dmg(str(dmg), 'CCTool', settings_file=str(ROOT / 'scripts/dmg-settings.py'), defines={'stage': str(stage), 'root': str(ROOT)})
+        run(sys.executable, 'scripts/verify-dmg.py', dmg)
         run('codesign', '--force', '--sign', identity, '--timestamp', dmg)
         notarize(dmg, dmg)
         run('spctl', '--assess', '--type', 'open', '--context', 'context:primary-signature', '--verbose=2', dmg)

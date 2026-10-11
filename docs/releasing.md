@@ -44,6 +44,14 @@ The build job has read-only repository access; only the separate publish job can
 
 ## Build and notarize
 
+Install the hash-locked, release-only DMG tooling in a virtual environment:
+
+```sh
+python3 -m venv .venv-release
+source .venv-release/bin/activate
+python3 -m pip install --require-hashes --only-binary=:all: -r scripts/release-requirements.txt
+```
+
 ```sh
 python3 scripts/test-sign-browser.py
 bun test
@@ -57,7 +65,7 @@ The release script performs this sequence:
 3. Submit the browser archive to Apple, require `Accepted`, staple and validate its ticket.
 4. Embed the stapled browser archive, build and sign the cleaner with the embedded frontend (`custom-protocol`).
 5. Notarize and staple the cleaner, then require Gatekeeper acceptance for both apps.
-6. Package the apps, Applications shortcut and notices in a signed DMG; notarize, staple and assess the DMG.
+6. Use `dmgbuild` to package both apps and the Applications shortcut in an 800 × 500 pixel-art Finder window, with fixed icon positions and a drag arrow. Notices remain included as hidden files. No Finder UI automation is needed. Read-only mount the result and verify both embedded app signatures, Gatekeeper acceptance, shortcut and background before signing, notarizing, stapling and assessing the DMG.
 7. Write `releases/SHA256SUMS` and `releases/notarization.json`.
 
 Apple may take several minutes to process each submission. A submission ID alone is not acceptance. The script stops on any failed build, signature, notarization, ticket or Gatekeeper check. Rebuilding or modifying a signed bundle requires a new signature and notarization.
