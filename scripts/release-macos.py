@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # [INPUT]: 双应用源代码、外部 Developer ID 与 Apple API 凭据、哈希锁定的 dmgbuild 与 macOS 发布工具。
 # [OUTPUT]: 公证并装订票据的双应用 DMG、SHA256SUMS 和实际签名/公证记录。
-# [POS]: 发布唯一顺序入口；浏览器票据先进入宿主资源，签名后的包不再修改内容。
+# [POS]: 发布唯一顺序入口；浏览器票据先进入宿主资源，Browser.app 暂存为 CC浏览器.app，签名后不改包内容。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import hashlib
 import json
@@ -73,10 +73,10 @@ def main():
         notarize(archive, HOST)
         stage = work / 'CCTool'
         stage.mkdir()
-        for app in [HOST, BROWSER]:
+        for app, name in [(HOST, 'CC清理器.app'), (BROWSER, 'CC浏览器.app')]:
             run('codesign', '--verify', '--deep', '--strict', app)
             run('spctl', '--assess', '--type', 'execute', '--verbose=2', app)
-            run('ditto', app, stage / app.name)
+            run('ditto', app, stage / name)
         for name in ['LICENSE', 'NOTICE.md']:
             run('ditto', ROOT / name, stage / name)
         (stage / 'Install.txt').write_text('Drag both apps into Applications. Requires Apple Silicon and macOS 12 or later.\n')

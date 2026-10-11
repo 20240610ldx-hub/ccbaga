@@ -6,7 +6,7 @@ brand-browser.sh: 编译 CCBrowser 入口、写入 CC浏览器 名称/图标/各
 sign-browser.py: 内层 Mach-O → Helper 应用 → Framework → 浏览器外壳顺序签名；Developer ID 使用可信时间戳、Hardened Runtime，仅 Renderer/GPU 使用 JIT entitlement；支持显式本机临时签名 -。
 test-sign-browser.py: 临时伪引擎树验证叶子到容器的签名顺序、最小 JIT 授权与符号链接不重复遍历。
 fetch-browser.py: 固定上游引擎 DMG 与 SHA-256，核验版本和 arm64 后恢复引擎；干净 CI 检出不依赖维护者本机 Browser.app。
-release-macos.py: 外部凭据与可选 CC_RELEASE_VERSION 驱动浏览器、宿主、像素安装盘三阶段公证装订与 Gatekeeper 校验；dmgbuild 无头写入 Finder 布局，产物和哈希记录写入被忽略的 releases/。
+release-macos.py: 外部凭据与可选 CC_RELEASE_VERSION 驱动三阶段公证装订；明确将原生构建目录 Browser.app 暂存为交付名 CC浏览器.app，再由 dmgbuild 无头写入 Finder 布局；产物和哈希记录写入被忽略的 releases/。
 dmg-settings.py: 固定 800×500 像素背景、两应用到 Applications 的拖拽坐标；通知文件保留在盘内但默认隐藏，不依赖 Finder 自动化。
 verify-dmg.py: 只读挂载实际安装盘，校验双应用严格签名与 Gatekeeper、Applications 链接和像素背景；Finder 元数据不得破坏应用签名。
 release-requirements.txt: dmgbuild、ds-store 与 mac-alias 的完整版本及 wheel SHA-256；仅发布阶段安装，不增大应用包。
