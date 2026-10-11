@@ -307,8 +307,8 @@ fn timezone() -> String {
             output("timedatectl", &["show", "--property=Timezone", "--value"]).unwrap_or_default()
         })
 }
-fn locale() -> String {
-    ["LC_ALL", "LC_MESSAGES", "LANG"]
+fn session_locale(category: &str) -> String {
+    ["LC_ALL", category, "LANG"]
         .iter()
         .find_map(|key| std::env::var(key).ok().filter(|s| !s.is_empty()))
         .unwrap_or_else(|| "C".into())
@@ -316,6 +316,19 @@ fn locale() -> String {
         .next()
         .unwrap_or("C")
         .into()
+}
+fn locale() -> String {
+    session_locale("LC_TIME")
+}
+fn session_language() -> String {
+    language(&session_locale("LC_MESSAGES"))
+}
+fn language_matches(current: &str, requested: &str) -> bool {
+    !requested.is_empty()
+        && (current == requested
+            || current
+                .strip_prefix(requested)
+                .is_some_and(|s| s.starts_with('-')))
 }
 fn language(locale: &str) -> String {
     match locale {
@@ -345,9 +358,8 @@ fn location() -> Option<bool> {
     })
 }
 fn snapshot() -> Value {
-    let locale = locale();
     json!({"timezone":timezone(), "timezones":zones(), "automatic_timezone":null,
-        "languages":[language(&locale)], "location_enabled":location(), "accessibility":false})
+        "languages":[session_language()], "location_enabled":location(), "accessibility":false})
 }
 pub unsafe fn rf_browser_machine() -> *mut c_char {
     let mut state = snapshot();
@@ -388,7 +400,7 @@ pub unsafe fn rf_system_timezone(zone: *const c_char) -> *mut c_char {
 }
 pub unsafe fn rf_system_language(requested: *const c_char) -> *mut c_char {
     let requested = input(requested);
-    if language(&locale()).starts_with(requested) && !requested.is_empty() {
+    if language_matches(&session_language(), requested) {
         response(Ok(
             json!({"state":snapshot(), "message":"The current login-session language already matches."}),
         ))
@@ -399,10 +411,7 @@ pub unsafe fn rf_system_language(requested: *const c_char) -> *mut c_char {
 pub unsafe fn rf_system_region(requested: *const c_char, region: *const c_char) -> *mut c_char {
     let current = locale();
     let requested = input(requested);
-    if !requested.is_empty()
-        && language(&current).starts_with(requested)
-        && current == input(region)
-    {
+    if language_matches(&session_language(), requested) && current == input(region) {
         response(Ok(
             json!({"state":snapshot(), "message":"Current session language and regional formats verified."}),
         ))
@@ -455,6 +464,18 @@ mod tests {
         p.args
             .push("/tmp/node_modules/@anthropic-ai/claude-code/cli.js".into());
         assert!(!node_cli(&p));
+    }
+    #[test]
+    fn session_language_mapping_and_matching_respect_language_boundaries() {
+        assert_eq!(language("zh_TW"), "zh-Hant");
+        assert_eq!(language("zh_CN"), "zh-Hans");
+        assert_eq!(language("en_US"), "en-US");
+        assert_eq!(language("de_DE"), "de");
+        assert!(language_matches("en-US", "en"));
+        assert!(language_matches("en-US", "en-US"));
+        for invalid in ["", "e", "en-U", "en-GB", "en-US;bad"] {
+            assert!(!language_matches("en-US", invalid));
+        }
     }
     #[test]
     fn unsupported_credentials_do_not_report_empty_success() {
