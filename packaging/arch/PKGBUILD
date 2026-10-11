@@ -10,7 +10,7 @@ url='https://github.com/liseami/CCBaga'
 license=('MIT')
 depends=('gtk3' 'webkit2gtk-4.1' 'libayatana-appindicator' 'nss' 'nspr'
          'mesa' 'alsa-lib' 'libxss' 'zsh' 'openssh' 'xdg-utils' 'curl')
-makedepends=('bun' 'rust' 'git' 'pkgconf' 'python')
+makedepends=('bun' 'rust' 'git' 'pkgconf' 'python' 'cmake')
 optdepends=('zenity: SSH key file chooser on GTK desktops'
             'kdialog: SSH key file chooser on KDE'
             'wl-clipboard: Wayland clipboard support'
@@ -61,7 +61,9 @@ PY
 build() {
   cd "$srcdir/ccbaga"
   bun install --frozen-lockfile
-  bun run tauri build --no-bundle --features custom-protocol
+  # AWS-LC's cc builder caches makepkg CFLAGS before disabling optimization
+  # for jitterentropy. CMake preserves that component's required -O0 flags.
+  AWS_LC_SYS_CMAKE_BUILDER=1 bun run tauri build --no-bundle --features custom-protocol
 }
 
 package() {
