@@ -19,7 +19,9 @@ provides=('ccbaga')
 conflicts=('ccbaga')
 # Keep the vendor engine intact; its sandbox and bundled libraries must not
 # be changed by makepkg's automatic ELF strip pass.
-options=('!strip' '!debug')
+# Cargo owns Rust LTO. makepkg's GCC -flto objects cannot be consumed by
+# Rust's LLVM LTO linker when embedding AWS-LC/ring static archives.
+options=('!strip' '!debug' '!lto')
 _engine_version=148.0.7778.215
 _source_url=${CCBAGA_GIT_URL:-https://github.com/liseami/CCBaga.git}
 _source_ref=${CCBAGA_GIT_REF:-branch=main}
