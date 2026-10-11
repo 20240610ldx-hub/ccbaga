@@ -1,5 +1,5 @@
 // [INPUT]: Linux procfs, zoneinfo, desktop settings and user-session utilities.
-// [OUTPUT]: Linux implementations of the internal native JSON bridge; unknown state stays null.
+// [OUTPUT]: Linux native JSON bridge; unknown state stays null, session locale changes require manual action.
 // [POS]: Platform boundary. No shell interpolation, root execution, secret reads or user-data deletion.
 // [PROTOCOL]: Update this header and CLAUDE.md when changing the contract.
 use serde_json::{json, Value};
@@ -321,7 +321,8 @@ fn language(locale: &str) -> String {
     match locale {
         "zh_CN" | "zh_SG" => "zh-Hans".into(),
         "zh_TW" | "zh_HK" => "zh-Hant".into(),
-        s => s.replace('_', "-"),
+        s if s.starts_with("en_") || s == "pt_BR" => s.replace('_', "-"),
+        s => s.split('_').next().unwrap_or(s).into(),
     }
 }
 fn location() -> Option<bool> {
@@ -385,11 +386,29 @@ pub unsafe fn rf_system_timezone(zone: *const c_char) -> *mut c_char {
         )
     })())
 }
-pub unsafe fn rf_system_language(_: *const c_char) -> *mut c_char {
-    response(Err("Change the login-session language in desktop settings, then sign out and back in. Linux has no portable per-user language setter.".into()))
+pub unsafe fn rf_system_language(requested: *const c_char) -> *mut c_char {
+    let requested = input(requested);
+    if language(&locale()).starts_with(requested) && !requested.is_empty() {
+        response(Ok(
+            json!({"state":snapshot(), "message":"The current login-session language already matches."}),
+        ))
+    } else {
+        response(Err("Change the login-session language in desktop settings, then sign out and back in. Linux has no portable per-user language setter.".into()))
+    }
 }
-pub unsafe fn rf_system_region(_: *const c_char, _: *const c_char) -> *mut c_char {
-    response(Err("Set language and regional formats in desktop settings, then sign out and back in. The time zone may already have changed.".into()))
+pub unsafe fn rf_system_region(requested: *const c_char, region: *const c_char) -> *mut c_char {
+    let current = locale();
+    let requested = input(requested);
+    if !requested.is_empty()
+        && language(&current).starts_with(requested)
+        && current == input(region)
+    {
+        response(Ok(
+            json!({"state":snapshot(), "message":"Current session language and regional formats verified."}),
+        ))
+    } else {
+        response(Err("Set language and regional formats in desktop settings, then sign out and back in before applying this region.".into()))
+    }
 }
 pub unsafe fn rf_system_location() -> *mut c_char {
     response((|| {

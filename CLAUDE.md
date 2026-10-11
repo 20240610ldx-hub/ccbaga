@@ -8,6 +8,7 @@ src/ - Cromma UI 极简侧栏导航与右侧傻瓜设置（国家地区选择和
 src-tauri/ - 白名单深度清理、Claude Code CLI 安装管理、独立指纹浏览器、国家地区目录、电脑环境设置与 OpenSSH 远程执行；见其 CLAUDE.md
 browser-runtime/ - 已迁入的独立 Fingerprint Chromium 引擎与保留 Framework 链接的打包归档；见其 CLAUDE.md
 scripts/ - 图标、签名、引擎打包、应用安装与宿主内嵌的 VPS 设置、Claude Code CLI 管理脚本；见其 CLAUDE.md
+packaging/arch/ - 原生 Arch x86_64 pacman 包配方、运行依赖和 A 桌面入口；引擎固定哈希，不剥离第三方 ELF
 assets/ - 两张压缩品牌图与极客像素安装盘背景，分别供图标/README 和 DMG 布局使用；见其 CLAUDE.md
 docs/ - 英文仓库封面与可执行发布说明；见其 CLAUDE.md
 vendor/ - cromma-web 同款组件库副本，主题、原语与 Pika 图标自包含；见其 CLAUDE.md

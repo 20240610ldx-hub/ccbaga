@@ -85,6 +85,9 @@ pub async fn system_set_region(region: String) -> Result<serde_json::Value, Stri
         let zone = CString::new(region.timezone).unwrap();
         let language = CString::new(region.language).unwrap();
         let locale = CString::new(region.locale).unwrap();
+        #[cfg(target_os = "linux")]
+        let _: serde_json::Value =
+            decode(unsafe { rf_system_region(language.as_ptr(), locale.as_ptr()) })?;
         let _: serde_json::Value = decode(unsafe { rf_system_timezone(zone.as_ptr()) })?;
         let result = decode(unsafe { rf_system_region(language.as_ptr(), locale.as_ptr()) });
         result.map_err(|error| format!("时区已修改；{error}"))

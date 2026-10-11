@@ -665,6 +665,10 @@ pub async fn browser_align(
         if !machine.timezones.contains(&exit.timezone) {
             return Err("出口未返回可用时区，未修改机器。".into());
         }
+        #[cfg(target_os = "linux")]
+        let _: serde_json::Value = decode(unsafe {
+            rf_system_region(b"en-US\0".as_ptr().cast(), b"en_US\0".as_ptr().cast())
+        })?;
         log.log(
             "browser",
             "running",

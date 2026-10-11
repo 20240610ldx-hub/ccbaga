@@ -25,6 +25,25 @@ sudo pacman -S --needed base-devel webkit2gtk-4.1 gtk3 libayatana-appindicator \
 
 Chromium uses its normal Linux sandbox. Run as a regular user with working user namespaces; do not add `--no-sandbox`. AppImage packaging may need additional Tauri bundler tools and FUSE support. Build packages on the oldest distribution you intend to support: a build on a recent Arch installation does not establish compatibility with older glibc systems.
 
+## Arch Linux package
+
+Arch Linux and Arch-based desktops such as Omarchy are supported on x86_64. A native pacman package recipe is included; it is not an AUR publication. Install `base-devel`, `bun`, `rust` (or `rustup` with a stable toolchain), `git`, `pkgconf` and `python`, plus the runtime dependencies above, then:
+
+```sh
+cd packaging/arch
+makepkg -f
+sudo pacman -U ./ccbaga-git-*.pkg.tar.zst
+```
+
+The recipe builds upstream `main`, downloads the pinned browser with SHA-256 verification, and installs the A/B desktop entries and icons. It preserves the bundled engine instead of stripping vendor ELF files. To build this checkout before its changes are merged upstream, run from `packaging/arch`:
+
+```sh
+CCBAGA_GIT_URL="file://$(git rev-parse --show-toplevel)" \
+  CCBAGA_GIT_REF="commit=$(git rev-parse HEAD)" makepkg -f
+```
+
+Only committed changes are included. The package does not enable services, change desktop settings, or change your default browser. Omarchy/Hyprland uses the Wayland clipboard helper; desktop language and location settings remain subject to the limits below.
+
 ## Build and install
 
 ```sh
@@ -64,7 +83,7 @@ This installs application files under `~/.local/share/ccbaga-install`, creates A
 | Network route | Use TUN or the explicit browser proxy. Native exit probes can use proxy environment variables; GNOME/KDE desktop proxy settings and PAC are not independently discovered. Proxy credentials stay in native code. |
 | VPS | Same explicit OpenSSH and three-key validation; provider links open through xdg-open. |
 | Time zone | Reads zoneinfo; `timedatectl set-timezone` uses systemd/polkit authorization and verifies the result. Desktop automatic time-zone policies remain separate. Non-systemd systems return an actionable error. |
-| Language/region | Reads the current login-session locale. Open GNOME/KDE settings, change language/formats, then sign out and back in. Automated language/region commands return an explicit error; a region action may already have changed the time zone. |
+| Language/region | Reads the current login-session locale. Open GNOME/KDE settings, change language/formats, then sign out and back in. Existing matching session settings are verified. A differing language/region returns a manual-action error before the region action changes the time zone. |
 | Location | GNOME's location preference can be read, disabled and reread. Other desktops return unknown, never disabled. Portal/other location services are not independently verified; do not treat this preference as a global privacy guarantee. |
 | Settings launcher | GNOME and KDE panels; other desktops return a manual-action message. |
 

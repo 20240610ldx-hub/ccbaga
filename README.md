@@ -55,7 +55,7 @@ The interface supports **English and Chinese**, with shared YAML catalogs. Switc
 
 **Platforms:** macOS 12 or later on Apple Silicon; Linux x86_64 with GTK 3 and WebKitGTK 4.1. Windows, Intel macOS and Linux ARM64 are not supported.
 
-Linux source builds and `.deb`, `.rpm`, and AppImage packaging are described in [Linux setup](docs/linux.md). The existing automated release and in-app update feed remains macOS-only; this change does not publish Linux releases. Linux packages include the companion engine.
+Arch Linux native pacman packaging, Linux source builds, and `.deb`, `.rpm`, and AppImage packaging are described in [Linux setup](docs/linux.md). The existing automated release and in-app update feed remains macOS-only; this change does not publish Linux releases. Linux packages include the companion engine.
 
 Download the signed installer from [GitHub Releases](https://github.com/liseami/CCBaga/releases/latest). The distribution package is named `CCBaga-<version>-macos-arm64.dmg`. It contains both applications:
 
@@ -148,6 +148,7 @@ src-tauri/src/      Rust commands and transaction boundaries
 src-tauri/native/   Small macOS API bridges
 browser-runtime/    Engine metadata, launcher, entitlements and licenses
 scripts/            Icons, signing, packaging and setup scripts
+packaging/arch/     Native Arch Linux PKGBUILD and desktop entry
 docs/               README artwork and release procedure
 vendor/cromma-ui/   Vendored interface components
 ```
