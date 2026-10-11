@@ -39,7 +39,7 @@
         ],
         "files": {
           "/usr/share/applications/ccbaga-browser.desktop": "../browser-runtime/ccbaga-browser.desktop",
-          "/usr/share/icons/hicolor/256x256/apps/ccbaga-browser.png": "../browser-runtime/icons/icon.png"
+          "/usr/share/icons/hicolor/512x512/apps/ccbaga-browser.png": "../browser-runtime/icons/icon.png"
         }
       },
       "rpm": {
@@ -59,7 +59,7 @@
         ],
         "files": {
           "/usr/share/applications/ccbaga-browser.desktop": "../browser-runtime/ccbaga-browser.desktop",
-          "/usr/share/icons/hicolor/256x256/apps/ccbaga-browser.png": "../browser-runtime/icons/icon.png"
+          "/usr/share/icons/hicolor/512x512/apps/ccbaga-browser.png": "../browser-runtime/icons/icon.png"
         },
         "compression": {
           "type": "zstd",
@@ -69,7 +69,7 @@
       "appimage": {
         "files": {
           "usr/share/applications/ccbaga-browser.desktop": "../browser-runtime/ccbaga-browser.desktop",
-          "usr/share/icons/hicolor/256x256/apps/ccbaga-browser.png": "../browser-runtime/icons/icon.png"
+          "usr/share/icons/hicolor/512x512/apps/ccbaga-browser.png": "../browser-runtime/icons/icon.png"
         }
       }
     }

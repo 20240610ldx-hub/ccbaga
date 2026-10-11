@@ -84,7 +84,7 @@ This installs application files under `~/.local/share/ccbaga-install`, creates A
 | VPS | Same explicit OpenSSH and three-key validation; provider links open through xdg-open. |
 | Time zone | Reads zoneinfo; `timedatectl set-timezone` uses systemd/polkit authorization and verifies the result. Desktop automatic time-zone policies remain separate. Non-systemd systems return an actionable error. |
 | Language/region | Reads login-session language (`LC_MESSAGES`) and regional time formats (`LC_TIME`), respecting `LC_ALL`. Open GNOME/KDE settings, change language/formats, then sign out and back in. Existing matching session settings are verified. A differing language/region returns a manual-action error before the region action changes the time zone. |
-| Location | GNOME's location preference can be read, disabled and reread. Other desktops return unknown, never disabled. Portal/other location services are not independently verified; do not treat this preference as a global privacy guarantee. |
+| Location | GNOME's location preference can be read, disabled and reread. Other desktops return unknown, never disabled. Full machine alignment stops before modifying settings on desktops with unknown location state. Portal/other location services are not independently verified; do not treat this preference as a global privacy guarantee. |
 | Settings launcher | GNOME and KDE panels; other desktops return a manual-action message. |
 
 Linux keyring and third-party desktop reset, session-language changes, and independent portal/location verification remain platform limitations. A Linux build passing local tests does not validate every distribution, display server, desktop, privileged operation or remote VPS.

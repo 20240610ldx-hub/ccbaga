@@ -666,9 +666,14 @@ pub async fn browser_align(
             return Err("出口未返回可用时区，未修改机器。".into());
         }
         #[cfg(target_os = "linux")]
-        let _: serde_json::Value = decode(unsafe {
-            rf_system_region(b"en-US\0".as_ptr().cast(), b"en_US\0".as_ptr().cast())
-        })?;
+        {
+            if machine.location_enabled.is_none() {
+                return Err("Linux location state is unknown on this desktop; full machine alignment cannot be verified. No system settings were changed.".into());
+            }
+            let _: serde_json::Value = decode(unsafe {
+                rf_system_region(b"en-US\0".as_ptr().cast(), b"en_US\0".as_ptr().cast())
+            })?;
+        }
         log.log(
             "browser",
             "running",
