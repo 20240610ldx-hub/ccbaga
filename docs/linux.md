@@ -1,0 +1,71 @@
+# Linux
+
+CCBaga-A builds on Linux x86_64. The pinned Fingerprint Chromium 148.0.7778.215 Linux engine is bundled with A; CCBaga-B is a desktop launcher into the same isolated browser profile. Both launch paths start the host and its authenticated local measurement session. There is no upstream Linux ARM64 engine for this pinned version.
+
+## Dependencies
+
+Use stable Rust, Bun, Python 3.12+ (safe tar extraction), a C compiler, pkg-config, and the [Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux). Runtime operations also use zsh, OpenSSH, curl, and xdg-utils. File selection uses zenity or kdialog; dragging key files works without either dialog utility. Clipboard copying uses wl-clipboard on Wayland and xclip on X11. A tray indicator requires desktop AppIndicator support; closing the window hides it, and launching A again restores it.
+
+Ubuntu 24.04 / Debian 13:
+
+```sh
+sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev \
+  libayatana-appindicator3-dev librsvg2-dev patchelf python3 curl zsh \
+  openssh-client xdg-utils zenity wl-clipboard xclip libnss3 libnspr4 \
+  libgbm1 libasound2t64 libxss1
+```
+
+Arch Linux:
+
+```sh
+sudo pacman -S --needed base-devel webkit2gtk-4.1 gtk3 libayatana-appindicator \
+  librsvg patchelf python curl zsh openssh xdg-utils zenity wl-clipboard xclip \
+  nss nspr mesa alsa-lib libxss
+```
+
+Chromium uses its normal Linux sandbox. Run as a regular user with working user namespaces; do not add `--no-sandbox`. AppImage packaging may need additional Tauri bundler tools and FUSE support. Build packages on the oldest distribution you intend to support: a build on a recent Arch installation does not establish compatibility with older glibc systems.
+
+## Build and install
+
+```sh
+bun install --frozen-lockfile
+python3 scripts/fetch-browser.py
+bun run build
+bun test
+cargo test --locked --manifest-path src-tauri/Cargo.toml
+python3 scripts/test-linux.py
+bun run tauri build --features custom-protocol
+```
+
+The fetcher checks the pinned publisher SHA-256, ELF architecture and actual browser version before preparing `browser-runtime/LinuxBrowser`. It refuses to overwrite an existing prepared engine. Linux packaging uses the existing PNG icon and never runs the Swift icon generator, `codesign`, `ditto` or Apple notarization.
+
+Packages appear under `src-tauri/target/release/bundle/{deb,rpm,appimage}`. Install the package matching your distribution, or make the AppImage executable and run it. The pinned browser and its notices travel with the package. No Linux package is uploaded by the existing macOS release workflow, and the current update feed has no Linux artifacts. Update Linux installations manually until the maintainer adds a Linux release feed.
+
+For a local source installation without a package manager:
+
+```sh
+bun run tauri build --no-bundle --features custom-protocol
+bun run install:apps
+~/.local/bin/ccbaga-a
+```
+
+This installs application files under `~/.local/share/ccbaga-install`, creates A/B entries under `~/.local/share/applications`, and refuses to replace an unrelated launcher or a running installation. It leaves user profiles and settings intact. A custom prefix is supported with `sh scripts/install-apps.sh --prefix /absolute/prefix`; include that prefix's `share` directory in `XDG_DATA_DIRS` if needed. Installation does not change the default browser. The browser page's explicit default-browser action registers the persistent installed executable (or the AppImage path) and verifies both HTTP and HTTPS associations.
+
+## Features and limits
+
+| Feature | Linux behavior |
+| --- | --- |
+| Claude Code cleanup | Same snapshot, owner, symlink and process checks; preserves skills, plugins and project source. |
+| Paths | Shared `.claude` targets plus Claude CLI cache in `XDG_CACHE_HOME` (default `~/.cache`); Claude Desktop cache/logs in `XDG_CONFIG_HOME` (default `~/.config`). Absolute custom XDG paths are supported. |
+| Third-party Claude Desktop | Only explicit cache/log paths are scanned. Full desktop account reset is intentionally unavailable because Linux desktop distributions have differing layouts. |
+| Credentials | File-based CLI credentials are selectable. Secret Service/KWallet cleanup and unlock are unavailable and produce an explicit warning/error. No empty-success keyring result is fabricated. |
+| CLI install management | Existing native and npm flows, including nvm. Requires zsh; Homebrew cask detection runs only on macOS. |
+| Browser | Pinned Linux fingerprint engine, isolated Default profile, cache/site-data separation, rotation and real observations. Linux platform is checked; Chromium does not expose the kernel release through UA client hints, so that field is not compared with `uname`. |
+| Network route | Use TUN or the explicit browser proxy. Native exit probes can use proxy environment variables; GNOME/KDE desktop proxy settings and PAC are not independently discovered. Proxy credentials stay in native code. |
+| VPS | Same explicit OpenSSH and three-key validation; provider links open through xdg-open. |
+| Time zone | Reads zoneinfo; `timedatectl set-timezone` uses systemd/polkit authorization and verifies the result. Desktop automatic time-zone policies remain separate. Non-systemd systems return an actionable error. |
+| Language/region | Reads the current login-session locale. Open GNOME/KDE settings, change language/formats, then sign out and back in. Automated language/region commands return an explicit error; a region action may already have changed the time zone. |
+| Location | GNOME's location preference can be read, disabled and reread. Other desktops return unknown, never disabled. Portal/other location services are not independently verified; do not treat this preference as a global privacy guarantee. |
+| Settings launcher | GNOME and KDE panels; other desktops return a manual-action message. |
+
+Linux keyring and third-party desktop reset, session-language changes, and independent portal/location verification remain platform limitations. A Linux build passing local tests does not validate every distribution, display server, desktop, privileged operation or remote VPS.

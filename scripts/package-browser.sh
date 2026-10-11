@@ -5,6 +5,11 @@
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 set -eu
 cd "$(dirname "$0")/.."
+if [ "$(uname -s)" = Linux ]; then
+  test -x browser-runtime/LinuxBrowser/chrome || { echo 'Run python3 scripts/fetch-browser.py first' >&2; exit 1; }
+  test "$(cat browser-runtime/LinuxBrowser/version.txt)" = "$(cat browser-runtime/version.txt)" || { echo 'Engine version mismatch' >&2; exit 1; }
+  exit 0
+fi
 sh scripts/brand-browser.sh
 /usr/bin/codesign --verify --deep --strict browser-runtime/Browser.app
 /usr/bin/plutil -extract CFBundleShortVersionString raw -o browser-runtime/version.txt browser-runtime/Browser.app/Contents/Info.plist

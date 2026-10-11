@@ -30,4 +30,5 @@ NOTICE.md - 第三方引擎、组件与图标的授权边界
 CLI 管理：Claude 清理页提供一键卸载/重装，确认后结束全部已识别 Claude 进程；原生、Homebrew 与登录终端/nvm 全局 npm 按官方流程卸载程序，配置、会话、技能、项目与钥匙串保留。拒绝删除自定义启动器或外部链接；重装沿用已识别包管理器，无安装时用官方原生安装器；版本核验成功且收到完整回报才报告完成。超时结束本次子进程组，错误保留部分修改的事实。
 发布契约：开发构建默认临时签名；release-macos.py 使用外部环境变量指定 Developer ID 和 Apple API key，先公证装订浏览器，再将其归档嵌入宿主，最后公证宿主与双应用 DMG。单个 DMG 同时交付两个应用；每次品牌化都明确设置浏览器 Bundle ID（不能依赖本机旧引擎）；安装盘验收核对双应用名称/标识/入口。哈希锁定的 dmgbuild 只用于发布，写入像素背景与固定拖拽布局，不依赖 Finder GUI。必须取得 Accepted、装订票据并通过 Gatekeeper；不以移除隔离属性替代验收。装订后的 A 由官方 CLI 生成带版本签名的 .app.tar.gz 与公开 latest.json；仅公钥进入应用，原生 updater 强制验证版本，安装后重启，B 继续使用完整 DMG。CI 只缓存 Rust 依赖，签名私钥不传给构建子进程。密钥和发布产物不入 Git。
 交付流程：旧历史只整理为一次安全基线，后续修改使用新的正常提交；每轮将同一提交同步推送 main 与 release（git push --atomic origin main release），由 release push 触发新版本、公证包和 tag。每轮修改和测试完成后，必须重新打包正式应用、校验签名并安装到 /Applications，然后启动并激活新版本。视觉与功能验收由用户负责，助手持续根据反馈修改、验证及重装。
+Linux x86_64 适配：见 docs/linux.md；平台配置拆分为 tauri.macos.conf.json / tauri.linux.conf.json。Linux 原生边界位于 src-tauri/src/linux.rs，浏览器使用带哈希固定的 LinuxBrowser 与 XDG 启动项；Linux 仅本地构建/测试，不触发现有 macOS 发布流程。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

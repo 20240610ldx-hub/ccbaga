@@ -1,0 +1,148 @@
+// [INPUT]: Bundled Linux Chromium, XDG desktop registrations and shared browser profile/session.
+// [OUTPUT]: Native Linux engine discovery, launch and explicit default-browser registration.
+// [POS]: Included in browser orchestration; no macOS bundle extraction or LaunchServices.
+// [PROTOCOL]: Update this header and CLAUDE.md when changing the contract.
+fn register(_: &Path) -> Result<(), String> {
+    Ok(())
+}
+fn binary(engine: &Path) -> PathBuf {
+    engine.join("chrome")
+}
+fn engine(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let packaged = app
+        .path()
+        .resource_dir()
+        .map_err(|_| "资源目录不可用。")?
+        .join("browser-runtime/LinuxBrowser");
+    if binary(&packaged).is_file() {
+        return Ok(packaged);
+    }
+    if cfg!(debug_assertions) {
+        return Ok(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../browser-runtime/LinuxBrowser")
+        );
+    }
+    Ok(app
+        .path()
+        .resource_dir()
+        .map_err(|_| "资源目录不可用。")?
+        .join("browser-runtime/LinuxBrowser"))
+}
+fn prepare_engine(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let engine = engine(app)?;
+    if !binary(&engine).is_file() {
+        return Err(
+            "Linux browser engine missing. Run python3 scripts/fetch-browser.py before building."
+                .into(),
+        );
+    }
+    Ok(engine)
+}
+fn version(engine: &Path) -> String {
+    fs::read_to_string(engine.join("version.txt"))
+        .unwrap_or_default()
+        .trim()
+        .into()
+}
+pub fn open_urls(app: tauri::AppHandle, args: Vec<String>) {
+    let urls = args
+        .into_iter()
+        .skip(1)
+        .filter(|s| {
+            s.starts_with("https://")
+                || s.starts_with("http://")
+                || s.starts_with("file://")
+                || Path::new(s).is_absolute()
+        })
+        .collect::<Vec<_>>();
+    std::thread::spawn(move || {
+        if let Err(error) = start_linux_companion(&app, &urls) {
+            eprintln!("CCBaga-B: {error}");
+        }
+    });
+}
+fn start_linux_companion(app: &tauri::AppHandle, urls: &[String]) -> Result<(), String> {
+    let state = app.state::<Browser>();
+    let _guard = state.gate.lock().unwrap();
+    let engine = prepare_engine(app)?;
+    let root = root(app)?;
+    let profile = root.join("profile");
+    profile::check_path(&root, &profile)?;
+    let config = config::load(&root)?;
+    let machine = config::machine()?;
+    config.validate(&machine)?;
+    if !profile::running(&profile)? {
+        profile::preferences(&profile, &config, &machine)?;
+    }
+    write_launch_args(&root, &config, &machine, &profile, &version(&engine))?;
+    let page = open_session(app, &config, &machine, version(&engine))?;
+    let mut child = Command::new(binary(&engine))
+        .args(config::arguments(
+            &config,
+            &machine,
+            &profile,
+            &page,
+            &version(&engine),
+        ))
+        .args(urls)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| {
+            "Could not launch Linux Chromium. Check engine permissions and runtime libraries."
+                .to_string()
+        })?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+const LINUX_DESKTOP_ID: &str = "ccbaga-browser.desktop";
+fn default_read() -> Result<DefaultBrowser, String> {
+    let query = |scheme| -> Result<String, String> {
+        let out = Command::new("xdg-mime")
+            .args(["query", "default", scheme])
+            .output()
+            .map_err(|_| "Install xdg-utils to manage the default browser.")?;
+        if !out.status.success() {
+            return Err("Cannot query the desktop's default browser.".into());
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).trim().into())
+    };
+    let http = query("x-scheme-handler/http")?;
+    let https = query("x-scheme-handler/https")?;
+    Ok(DefaultBrowser {
+        is_default: http == LINUX_DESKTOP_ID && https == LINUX_DESKTOP_ID,
+        http,
+        https,
+        installed: true,
+        app: std::env::current_exe()
+            .map_err(|_| "Cannot locate CCBaga-A.")?
+            .display()
+            .to_string(),
+    })
+}
+#[tauri::command]
+pub async fn browser_set_default(app: tauri::AppHandle) -> Result<DefaultBrowser, String> {
+    run(move || {
+        prepare_engine(&app)?;
+        let data = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).filter(|p| p.is_absolute())
+            .or_else(|| std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".local/share"))).ok_or("Cannot locate XDG data directory.")?;
+        let desktop = data.join("applications").join(LINUX_DESKTOP_ID);
+        profile::check_path(&data, &desktop)?;
+        fs::create_dir_all(desktop.parent().unwrap()).map_err(|_| "Cannot create applications directory.")?;
+        // AppImage extraction paths are temporary: register the persistent AppImage when available.
+        let executable = std::env::var_os("APPIMAGE").map(PathBuf::from).unwrap_or(std::env::current_exe().map_err(|_| "Cannot locate CCBaga-A.")?);
+        let escaped = executable.to_string_lossy().replace('\\', "\\\\\\\\").replace('"', "\\\\\\\"").replace('`', "\\\\`").replace('$', "\\\\$").replace('%', "%%");
+        if escaped.contains(['\n', '\r']) { return Err("Invalid application path.".into()); }
+        fs::write(&desktop, format!("[Desktop Entry]\nType=Application\nName=CCBaga-B\nExec=\"{escaped}\" --browser %U\nIcon=ccbaga-browser\nTerminal=false\nCategories=Network;WebBrowser;\nMimeType=x-scheme-handler/http;x-scheme-handler/https;text/html;\n")).map_err(|_| "Cannot register CCBaga-B desktop entry.")?;
+        for scheme in ["x-scheme-handler/http", "x-scheme-handler/https"] {
+            let status = Command::new("xdg-mime").args(["default", LINUX_DESKTOP_ID, scheme]).status().map_err(|_| "Install xdg-utils to manage default applications.")?;
+            if !status.success() { return Err("Default browser update failed; check desktop settings.".into()); }
+        }
+        let state = default_read()?;
+        if !state.is_default { return Err("Desktop did not confirm CCBaga-B as the default browser.".into()); }
+        Ok(state)
+    }).await
+}

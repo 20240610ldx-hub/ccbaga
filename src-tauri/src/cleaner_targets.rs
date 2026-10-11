@@ -250,9 +250,48 @@ pub(super) fn definitions(root: &Path) -> Vec<Target> {
         item.operation = Operation::Edit(kind);
         result.push(item);
     }
+    #[cfg(target_os = "linux")]
+    {
+        result.retain(|item| !item.path.starts_with(root.join("Library")));
+        let cache = xdg_dir(root, "XDG_CACHE_HOME", ".cache");
+        let config = xdg_dir(root, "XDG_CONFIG_HOME", ".config");
+        for path in [
+            cache.join("claude-cli-nodejs"),
+            config.join("Claude/Cache"),
+            config.join("Claude/Code Cache"),
+            config.join("Claude/GPUCache"),
+            config.join("Claude/logs"),
+        ] {
+            let mut item = target(
+                root,
+                "",
+                "Claude Linux 缓存",
+                "cache",
+                "safe",
+                "仅移除 Claude 缓存或日志。",
+            );
+            item.path = path;
+            result.push(item);
+        }
+        // Linux Desktop packages are third-party; do not reset the whole config directory.
+    }
     result.sort_by(|a, b| a.path.cmp(&b.path));
     result.dedup_by(|a, b| a.path == b.path);
     result
+}
+
+#[cfg(target_os = "linux")]
+fn xdg_dir(root: &Path, variable: &str, fallback: &str) -> PathBuf {
+    // Fixture scans must not escape into the real user's XDG directories.
+    if super::home().ok().as_deref() == Some(root) {
+        if let Some(path) = std::env::var_os(variable)
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+        {
+            return path;
+        }
+    }
+    root.join(fallback)
 }
 
 // ----- 受限统计；链接只计入条目，不进入链接目标 -----
@@ -267,7 +306,9 @@ pub(super) fn measure(path: &Path) -> (u64, usize, bool, Vec<u8>) {
         if seen > 30_000 || Instant::now() > deadline {
             return (bytes, files, false, hash.finalize().to_vec());
         }
-        let Ok(meta) = fs::symlink_metadata(&path) else { return (bytes, files, false, hash.finalize().to_vec()); };
+        let Ok(meta) = fs::symlink_metadata(&path) else {
+            return (bytes, files, false, hash.finalize().to_vec());
+        };
         hash.update(path.as_os_str().as_encoded_bytes());
         hash.update([0]);
         for field in [
@@ -285,10 +326,14 @@ pub(super) fn measure(path: &Path) -> (u64, usize, bool, Vec<u8>) {
             bytes = bytes.saturating_add(meta.len());
             files += 1;
         } else if meta.is_dir() && !meta.file_type().is_symlink() {
-            let Ok(entries) = fs::read_dir(&path) else { return (bytes, files, false, hash.finalize().to_vec()); };
+            let Ok(entries) = fs::read_dir(&path) else {
+                return (bytes, files, false, hash.finalize().to_vec());
+            };
             let mut children = Vec::new();
             for entry in entries.take(30_001) {
-                let Ok(entry) = entry else { return (bytes, files, false, hash.finalize().to_vec()); };
+                let Ok(entry) = entry else {
+                    return (bytes, files, false, hash.finalize().to_vec());
+                };
                 children.push(entry.path());
             }
             children.sort();
@@ -317,6 +362,9 @@ pub(super) fn org_files(root: &Path, org: &str) -> Result<(Vec<PathBuf>, bool), 
         "Library/Application Support/Claude/local_sessions",
         "Library/Application Support/Claude/conversations",
     ] {
+        if cfg!(target_os = "linux") && relative.starts_with("Library/") {
+            continue;
+        }
         let p = root.join(relative);
         if fs::canonicalize(&p).ok().as_deref() == Some(p.as_path()) {
             pending.push((p, 0));
@@ -329,7 +377,10 @@ pub(super) fn org_files(root: &Path, org: &str) -> Result<(Vec<PathBuf>, bool), 
         if seen > 20_000 || Instant::now() > deadline {
             return Ok((files, false));
         }
-        let Ok(meta)=fs::symlink_metadata(&path) else { complete=false;continue; };
+        let Ok(meta) = fs::symlink_metadata(&path) else {
+            complete = false;
+            continue;
+        };
         if meta.uid() != unsafe { getuid() } || meta.file_type().is_symlink() {
             continue;
         }
@@ -338,7 +389,10 @@ pub(super) fn org_files(root: &Path, org: &str) -> Result<(Vec<PathBuf>, bool), 
                 complete = false;
                 continue;
             }
-            let Ok(entries)=fs::read_dir(&path) else { complete=false;continue; };
+            let Ok(entries) = fs::read_dir(&path) else {
+                complete = false;
+                continue;
+            };
             for entry in entries.take(20_001) {
                 match entry {
                     Ok(entry) => pending.push((entry.path(), depth + 1)),
@@ -358,7 +412,10 @@ pub(super) fn org_files(root: &Path, org: &str) -> Result<(Vec<PathBuf>, bool), 
                 complete = false;
                 continue;
             }
-            let Ok(file)=fs::File::open(&path) else { complete=false;continue; };
+            let Ok(file) = fs::File::open(&path) else {
+                complete = false;
+                continue;
+            };
             let mut reader = BufReader::new(file);
             let mut line = Vec::new();
             loop {

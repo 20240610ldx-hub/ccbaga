@@ -1,9 +1,14 @@
-// [INPUT]: macOS 电脑设置原生桥与 Tauri 后台任务。
+// [INPUT]: macOS/Linux 电脑设置桥与 Tauri 后台任务。
 // [OUTPUT]: 电脑状态查询、时区与语言应用、定位关闭和系统设置入口。
 // [POS]: 独立于清理的命令边界；所有成功状态来自原生核验。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+#[cfg(target_os = "linux")]
+use crate::linux::*;
 use crate::native::decode;
-use std::ffi::{c_char, CString};
+#[cfg(target_os = "macos")]
+use std::ffi::c_char;
+use std::ffi::CString;
+#[cfg(target_os = "macos")]
 extern "C" {
     fn rf_system_region(language: *const c_char, locale: *const c_char) -> *mut c_char;
     fn rf_system_read() -> *mut c_char;
@@ -61,7 +66,7 @@ mod tests {
         assert!(state["timezone"].as_str().is_some());
         assert!(state["timezones"].as_array().unwrap().len() > 100);
         assert!(state["languages"].is_array());
-        assert!(state["location_enabled"].is_boolean());
+        assert!(state["location_enabled"].is_boolean() || state["location_enabled"].is_null());
         let invalid = CString::new("Invalid/Zone; touch /tmp/rf-injected").unwrap();
         assert!(
             decode::<serde_json::Value>(unsafe { rf_system_timezone(invalid.as_ptr()) }).is_err()

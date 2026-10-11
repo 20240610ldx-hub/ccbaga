@@ -11,7 +11,7 @@ fn machine() -> Machine {
         timezone: "America/New_York".into(),
         languages: vec!["en-US".into()],
         locale: "en_US".into(),
-        location_enabled: false,
+        location_enabled: Some(false),
         timezones: vec!["America/New_York".into()],
         system_proxy: String::new(),
     }
@@ -211,4 +211,59 @@ fn rate_limited_service_falls_back_without_changing_route() {
     )
     .is_err());
     server.join().unwrap();
+}
+
+#[test]
+fn linux_platform_and_unknown_location_cannot_be_misreported_as_mac_or_disabled() {
+    let mut m = machine();
+    m.platform = "linux".into();
+    m.version = "6.18.0".into();
+    m.location_enabled = None;
+    let args = config::arguments(
+        &Config::default(),
+        &m,
+        Path::new("/profile"),
+        "http://localhost",
+        "148",
+    );
+    assert!(args.contains(&"--fingerprint-platform=linux".into()));
+    let report = network::Report {
+        language: "en-US".into(),
+        languages: vec!["en-US".into()],
+        timezone: m.timezone.clone(),
+        platform: "Linux x86_64".into(),
+        cores: m.cores,
+        user_agent: "fixture".into(),
+        platform_version: String::new(),
+        browser_version: "148".into(),
+        geolocation: "denied".into(),
+        error: String::new(),
+        exit: None,
+    };
+    let checks = network::checks(&m, &Config::default(), Some(&report), None, "148");
+    assert_eq!(
+        checks
+            .iter()
+            .find(|c| c.title == "真实设备与 CPU")
+            .unwrap()
+            .status,
+        "ok"
+    );
+    assert_ne!(
+        checks
+            .iter()
+            .find(|c| c.title == "地理位置关闭")
+            .unwrap()
+            .status,
+        "ok"
+    );
+}
+
+#[test]
+fn machine_proxy_credentials_never_leave_native_code() {
+    let mut m = machine();
+    m.system_proxy = "http://private-user:private-password@localhost:8080".into();
+    let value = serde_json::to_string(&m).unwrap();
+    assert!(!value.contains("private-password"));
+    assert!(!value.contains("system_proxy"));
 }

@@ -19,4 +19,5 @@ cleaner_tests.rs: 临时白名单/快照/日志验证；官方原生版本路径
 regions.rs: 地区编号到语言、区域格式和代表时区的唯一白名单与目标语言/时区地区匹配；供前端选择与系统/浏览器快捷操作共用，包含目录与本机时区验证。
 vps.rs: 固定 Webshare referral / DMIT affiliate 入口白名单；主线程密钥文件选择、root:22 显式 OpenSSH 私钥登录，禁用密码与 Agent；家宽秘密标准输入传输、任务互斥/超时/有界输出与订阅校验，自检失败不返回订阅。
 vps_keys.rs: 仅接受完整 pem/ppk/pub 包，PPK 公钥与 PUB 比对，再由 ssh-keygen 验证 PEM/PUB；0600 临时私钥随事务删除，源文件不改、不发送到 WebView，临时生成密钥验证配对/缺文件/格式/权限与释放。
+linux.rs: Linux procfs 当前用户进程、zoneinfo/timedatectl、GNOME 定位偏好、GNOME/KDE 设置入口、文件选择与 Wayland/X11 剪贴板；未知定位为 null，Linux 钥匙串明确不可用；不将系统代理凭据序列化给 WebView。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

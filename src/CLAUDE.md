@@ -25,4 +25,5 @@ style.css: 极简侧栏、统一标题/操作/结果层次、系统字体留白�
 quick-actions.tsx: 傻瓜设置页地区与四个带图标快捷操作；Claude 预览可结束全部进程并重扫再确认，进程状态与高级页共用；复用浏览器/系统/清理命令。
 vps.tsx: 网络环境只要求 VPS 地址与完整三文件密钥包；固定 root:22，无密码/Agent/手填路径；家宽 SOCKS5、远端修改确认与订阅展示保持独立。蓝色 VPS / 绿色家宽获取按钮和问号选购指南放标题下；DMIT 指明 Generate SSH Key after order；家宽密码不持久化、设置后清空。
 vps-keys.tsx: PEM/PPK/PUB 文件图标占位，原生点选与拖放统一提交路径；缺任一种不允许连接，文件正文与配对只由 Rust 核验。
+Linux 呈现边界：设备平台由原生快照提供；未知定位不显示关闭；系统授权提示不固定 macOS；更新入口在 Linux 明确要求通过包或源码更新，不请求现有 macOS-only 更新源。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

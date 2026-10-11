@@ -10,11 +10,11 @@ Thank you for helping make native maintenance predictable and understandable.
 
 ## Getting started
 
-Follow the [development guide](README.md#development). The desktop host and native tests require macOS; the companion browser currently targets Apple Silicon. Use the lockfiles and the vendored UI components already in this repository.
+Follow the [development guide](README.md#development). The desktop host and native tests support macOS and Linux. The pinned companion engine supports macOS Apple Silicon and Linux x86_64. See [Linux setup](docs/linux.md) for dependencies, local checks and feature boundaries. Use the lockfiles and the vendored UI components already in this repository.
 
 ## Reporting a bug
 
-Include the macOS and app versions, the operation you attempted, expected behavior, actual behavior and a sanitized error message. For browser checks, distinguish the browser exit from the machine exit. For a build failure, include the failing command and toolchain versions.
+Include the operating system and app versions, the operation you attempted, expected behavior, actual behavior and a sanitized error message. For browser checks, distinguish the browser exit from the machine exit. For a build failure, include the failing command and toolchain versions.
 
 Do not include private keys, account tokens, passwords, full subscription URLs or personal file contents. Report security-sensitive details through a maintainer-provided private channel once the public repository is configured.
 

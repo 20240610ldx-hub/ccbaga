@@ -52,10 +52,14 @@ fn provider_url(provider: &str) -> Result<&'static str, String> {
 pub async fn vps_open_provider(provider: String) -> Result<(), String> {
     let url = provider_url(&provider)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let status = Command::new("/usr/bin/open")
-            .arg(url)
-            .status()
-            .map_err(|_| "无法打开供应商网站。")?;
+        let status = Command::new(if cfg!(target_os = "linux") {
+            "xdg-open"
+        } else {
+            "/usr/bin/open"
+        })
+        .arg(url)
+        .status()
+        .map_err(|_| "无法打开供应商网站。")?;
         if status.success() {
             Ok(())
         } else {

@@ -7,12 +7,12 @@
 <div align="center">
   <img src="docs/brand-logos.svg" width="320" height="149" alt="CCBaga-A and CCBaga-B logos, side by side" />
   <h1>CCBaga</h1>
-  <p><strong>A native macOS toolkit for a cleaner workspace and an environment you can verify.</strong></p>
+  <p><strong>A native macOS and Linux toolkit for a cleaner workspace and an environment you can verify.</strong></p>
   <p>Claude cleanup · Browser fingerprints · System settings · Network setup</p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-e8a181?style=flat-square" alt="MIT license" /></a>
     <img src="https://img.shields.io/badge/macOS-12%2B-111827?style=flat-square&amp;logo=apple&amp;logoColor=white" alt="macOS 12 and later" />
-    <img src="https://img.shields.io/badge/architecture-Apple%20Silicon-111827?style=flat-square" alt="Apple Silicon" />
+    <img src="https://img.shields.io/badge/Linux-x86__64-111827?style=flat-square&amp;logo=linux&amp;logoColor=white" alt="Linux x86_64" />
     <img src="https://img.shields.io/badge/core-Rust%20%2B%20Tauri-111827?style=flat-square&amp;logo=rust&amp;logoColor=white" alt="Rust and Tauri" />
   </p>
   <p>
@@ -41,7 +41,7 @@ Two applications work together: **CCBaga-A** owns native operations; **CCBaga-B*
     <td width="33%"><strong>Real environment checks</strong><br /><br />Compare browser and machine readings with the actual network exit. Passing measured checks produces a green page and a large checkmark.</td>
   </tr>
   <tr>
-    <td><strong>Native system settings</strong><br /><br />Apply timezone, preferred language and region settings. Open macOS controls for location and permissions.</td>
+    <td><strong>Native system settings</strong><br /><br />Apply timezone, preferred language and region settings. Open desktop controls for location and permissions; see Linux feature limits.</td>
     <td><strong>SSH network setup</strong><br /><br />Provide a VPS address, three key files and a residential SOCKS5 exit. Receive a subscription after server self-checks pass.</td>
     <td><strong>Claude Code CLI tools</strong><br /><br />Detect the installation method and version. Uninstall or reinstall through native, npm or Homebrew workflows.</td>
   </tr>
@@ -53,7 +53,9 @@ The interface supports **English and Chinese**, with shared YAML catalogs. Switc
 
 ## Installation
 
-**Platform:** macOS 12 or later, Apple Silicon. Intel, Windows and Linux application builds are not currently supported.
+**Platforms:** macOS 12 or later on Apple Silicon; Linux x86_64 with GTK 3 and WebKitGTK 4.1. Windows, Intel macOS and Linux ARM64 are not supported.
+
+Linux source builds and `.deb`, `.rpm`, and AppImage packaging are described in [Linux setup](docs/linux.md). The existing automated release and in-app update feed remains macOS-only; this change does not publish Linux releases. Linux packages include the companion engine.
 
 Download the signed installer from [GitHub Releases](https://github.com/liseami/CCBaga/releases/latest). The distribution package is named `CCBaga-<version>-macos-arm64.dmg`. It contains both applications:
 
@@ -125,13 +127,13 @@ Provider buttons link to [DMIT](https://www.dmit.io/aff.php?aff=28800) and [Webs
 
 ![Pixel architecture map: native core, companion browser and explicit SSH](docs/architecture.svg)
 
-The UI owns inputs and presentation. Rust owns validation, task locks, process identity checks and execution. Small Objective-C bridges call platform APIs. The browser test page has no Tauri command access; it exchanges context and measurements through a random-token loopback session.
+The UI owns inputs and presentation. Rust owns validation, task locks, process identity checks and execution. Small Objective-C bridges call macOS APIs; a Rust Linux boundary uses procfs and desktop/session utilities. The browser test page has no Tauri command access; it exchanges context and measurements through a random-token loopback session.
 
 | Layer | Technology | Responsibility |
 | --- | --- | --- |
 | Desktop host | Rust · Tauri 2 | Native commands, transactions, progress and lifecycle |
 | Interface | React 19 · TypeScript · Cromma UI | Forms, previews and execution results |
-| Platform bridges | AppKit · Security · CoreLocation | macOS permissions and system integration |
+| Platform bridges | AppKit · Security · CoreLocation · Linux Rust | Platform permissions and system integration |
 | Companion browser | Fingerprint Chromium | Dedicated profile and real browser measurements |
 | Network setup | OpenSSH · Bash · Xray | Explicit remote setup and server self-checks |
 | Localization | YAML · Vite | Build-time English/Chinese catalogs |
@@ -158,7 +160,7 @@ The large browser application and archive are generated/runtime inputs, excluded
 
 ### Prerequisites
 
-Use an Apple Silicon Mac with Xcode Command Line Tools, stable Rust and Bun. Follow [Tauri's macOS prerequisites](https://v2.tauri.app/start/prerequisites/#macos) for the native toolchain.
+On Linux, follow [Linux setup](docs/linux.md). On macOS, use an Apple Silicon Mac with Xcode Command Line Tools, stable Rust and Bun. Follow [Tauri's macOS prerequisites](https://v2.tauri.app/start/prerequisites/#macos) for the native toolchain.
 
 The browser engine is an external build input. `python3 scripts/fetch-browser.py` downloads the pinned macOS arm64 **Fingerprint Chromium 148.0.7778.215** engine from the [upstream project](https://github.com/adryfish/fingerprint-chromium), verifies its SHA-256 and preserves its bundle structure and notices. Browser runtime binaries are not included in the source repository.
 
@@ -214,7 +216,7 @@ Custom `CLAUDE_CONFIG_DIR` locations are not automatically included in the defau
 
 ## Contributing
 
-Start with [CONTRIBUTING.md](CONTRIBUTING.md). Small, focused changes with clear behavior and relevant checks are welcome. For bug reports, include the macOS version, app version, operation and sanitized error; never attach private keys, passwords or subscription URLs.
+Start with [CONTRIBUTING.md](CONTRIBUTING.md). Small, focused changes with clear behavior and relevant checks are welcome. For bug reports, include the operating system and version, app version, operation and sanitized error; never attach private keys, passwords or subscription URLs.
 
 ## License & credits
 

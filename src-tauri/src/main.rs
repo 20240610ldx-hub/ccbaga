@@ -8,6 +8,8 @@ compile_error!("发布构建需要 custom-protocol；使用 tauri build 或 carg
 mod browser;
 mod claude_cli;
 mod cleaner;
+#[cfg(target_os = "linux")]
+mod linux;
 mod native;
 mod progress;
 mod regions;
@@ -25,9 +27,13 @@ fn show(app: &tauri::AppHandle) {
     }
 }
 #[tauri::command]
-fn open_permissions(app: tauri::AppHandle) -> Result<(), String> {
-    app.run_on_main_thread(native::permissions)
-        .map_err(|_| "无法打开系统权限设置。".into())
+async fn open_permissions(app: tauri::AppHandle) -> Result<(), String> {
+    let (send, receive) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let _ = send.send(native::permissions());
+    })
+    .map_err(|_| "无法打开系统权限设置。")?;
+    receive.await.map_err(|_| "无法打开系统权限设置。")?
 }
 #[tauri::command]
 async fn unlock_keychain() -> Result<String, String> {
@@ -44,17 +50,32 @@ async fn copy_result(app: tauri::AppHandle, text: String) -> Result<(), String> 
     .map_err(|_| "复制失败。")?;
     receive.await.map_err(|_| "复制失败。")?
 }
+#[tauri::command]
+fn runtime_platform() -> &'static str {
+    std::env::consts::OS
+}
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, args, _| {
+            #[cfg(target_os = "linux")]
+            if args.iter().any(|arg| arg == "--browser") {
+                browser::open_urls(app.clone(), args);
+                return;
+            }
+            let _ = args;
+            show(app)
+        }))
         .setup(|app| {
             app.manage(ui_language::UiLanguage::load(app.handle()));
             app.manage(cleaner::Cleaner::default());
             app.manage(browser::Browser::default());
             app.manage(vps::Vps::default());
+            #[cfg(target_os = "macos")]
             browser::companion(app.handle().clone());
+            #[cfg(target_os = "linux")]
+            browser::open_urls(app.handle().clone(), std::env::args().collect());
             let menu = ui_language::menu(
                 app.handle(),
                 &ui_language::ui_language_read(app.handle().clone()),
@@ -80,6 +101,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             ui_language::ui_language_read,
             ui_language::ui_language_write,
+            runtime_platform,
             open_permissions,
             unlock_keychain,
             copy_result,
@@ -114,6 +136,7 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("无法启动 CCBaga-A")
         .run(|app, event| match event {
+            #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { .. } => show(app),
             tauri::RunEvent::Exit => browser::forget_start_url(app),
             _ => {}

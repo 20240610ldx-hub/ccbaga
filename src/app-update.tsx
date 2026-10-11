@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 /**
  * [INPUT]: Tauri 官方 updater/process 插件、应用版本、共享 YAML、Cromma UI 与父层事务锁。
  * [OUTPUT]: 侧栏检查更新、静默启动检查、真实下载进度和经签名核验的安装/重启；失败可重试。
@@ -30,6 +31,10 @@ export function AppUpdate({blocked,onBusy}:{blocked:boolean;onBusy:(busy:boolean
     if(running.current||installed.current)return;
     running.current=true;setPhase('checking');setError('');
     try{
+      if(await invoke<string>('runtime_platform') === 'linux'){
+        if(live.current){setPhase('idle');if(show)setError(t('Linux 版本请通过安装包或源码更新，当前更新源仅提供 macOS。'));}
+        return;
+      }
       const next=await check({timeout:20000});
       if(!live.current){await next?.close();return;}
       await resource.current?.close();resource.current=next;setUpdate(next);setPhase(next?'available':'current');

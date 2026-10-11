@@ -9,4 +9,5 @@ Cargo.toml: Tauri 宿主、官方 updater/process 插件与原生桥依赖；cus
 Cargo.lock: 锁定 Rust 与平台库的实际版本。
 build.rs: 编译 Objective-C 桥并生成 Tauri 构建元数据。
 tauri.conf.json: 产品名 CCBaga-A、窗口、应用包标识、内容安全策略、公开 HTTPS 更新清单/公钥/强制签名版本与开发默认临时签名；发布脚本显式覆盖 Developer ID 签名身份。
+tauri.macos.conf.json / tauri.linux.conf.json: 分平台资源与打包配置；macOS 保持双应用归档，Linux 使用 PNG、内置 x86_64 引擎及 deb/rpm/AppImage；build.rs 只在 macOS 编译 Objective-C。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

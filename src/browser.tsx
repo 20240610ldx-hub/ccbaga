@@ -36,7 +36,7 @@ export function BrowserPanel({ onBusy }: {
     async function makeDefault() { setAsking(true); setDefaultNote(''); try {
         const next = await invoke<DefaultBrowser>('browser_set_default');
         setPreferred(next);
-        setDefaultNote(next.is_default ? "CCBaga-B已是默认浏览器。" : "已向 macOS 发出请求，请在系统弹窗中选择「使用“CCBaga-B”」。");
+        setDefaultNote(next.is_default ? "CCBaga-B已是默认浏览器。" : "已向系统请求设为默认浏览器，请检查系统确认。");
         for (let i = 0; i < 20 && live.current; i++) {
             await new Promise(r => setTimeout(r, 1500));
             const fresh = await readDefault();

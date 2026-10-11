@@ -15,4 +15,5 @@ install-apps.sh: bun install:apps 兼容入口，只转交统一安装层。
 install-apps.py: 严格签名与 Gatekeeper 验收后的事务替换、同标识旧名迁移与失败回滚；保留隔离和资料，正常退出后安装、只刷新相关 Dock 项并启动宿主。
 setup-vps.sh: 从用户 Downloads 脚本纳入应用的 Debian 12/13 root 设置；Xray Reality 经家宽 SOCKS5 出口、Stripe 直连例外、阻断 UDP、SSH/防火墙加固与自检；仅全部通过输出 CC_SUB_URL，支持 IPv6 订阅地址，失败不打印完整配置，Xray 凭据配置限 root/实际服务组可读。
 claude-cli.sh: 原生宿主内嵌的只读安装检查与官方 CLI 卸载/重装，使用登录终端 PATH，发现 nvm/全局 npm、Homebrew 双通道与原生版本；只卸载程序，保护自定义启动器与配置资产，重装沿用已识别包管理器并核验版本。
+install-linux.py / test-linux.py: Linux 用户前缀源码安装与临时目录回归，替换应用文件但保留资料；拒绝自定义启动器、链接父目录与运行中的安装，失败回滚。fetch-browser.py 按平台选择哈希固定引擎；package-browser.sh 在 Linux 核验引擎而不运行 Apple 工具。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

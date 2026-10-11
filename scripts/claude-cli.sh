@@ -27,7 +27,7 @@ if [[ -e "$native_dir" || -L "$native_dir" || -e "$launcher" || -L "$launcher" ]
   native=1
   methods+=(native)
 fi
-if [[ -n "$brew" ]]; then
+if [[ "$OSTYPE" == darwin* && -n "$brew" ]]; then
   list=$("$brew" list --cask 2>/dev/null) || fail '无法读取 Homebrew 安装状态。'
   for name in ${(f)list}; do
     if [[ "$name" == claude-code || "$name" == claude-code@latest ]]; then

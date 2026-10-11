@@ -228,12 +228,19 @@ pub fn checks(
         check(
             "真实设备与 CPU",
             report.map(|r| {
-                r.platform.to_lowercase().contains("mac")
+                r.platform
+                    .to_lowercase()
+                    .contains(if machine.platform == "linux" {
+                        "linux"
+                    } else {
+                        "mac"
+                    })
                     && r.cores == machine.cores
-                    && r.platform_version == machine.version
+                    && (machine.platform == "linux" || r.platform_version == machine.version)
             }),
             format!(
-                "macOS {} · {} 核；浏览器版本 {} · {} 核",
+                "{} {} · {} 核；浏览器版本 {} · {} 核",
+                machine.platform,
                 machine.version,
                 machine.cores,
                 report
@@ -252,13 +259,13 @@ pub fn checks(
         ),
         check(
             "地理位置关闭",
-            report.map(|r| !machine.location_enabled && r.geolocation == "denied"),
+            report.map(|r| machine.location_enabled == Some(false) && r.geolocation == "denied"),
             format!(
                 "机器定位：{}；网页权限：{}",
-                if machine.location_enabled {
-                    "开启"
-                } else {
-                    "关闭"
+                match machine.location_enabled {
+                    Some(true) => "开启",
+                    Some(false) => "关闭",
+                    None => "未核验",
                 },
                 report.map(|x| x.geolocation.as_str()).unwrap_or("待测")
             ),

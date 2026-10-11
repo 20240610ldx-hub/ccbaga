@@ -15,7 +15,7 @@ type SystemState = {
     timezones: string[];
     automatic_timezone: boolean | null;
     languages: string[];
-    location_enabled: boolean;
+    location_enabled: boolean | null;
     accessibility: boolean;
 };
 type SystemResult = {
@@ -65,11 +65,11 @@ export function SystemPanel({ onBusy }: {
         setBusy(kind);
         setError('');
         activity.start('system');
-        activity.log('system', 'running', kind === 'timezone' ? `正在应用 ${zone}，请完成 macOS 管理员授权。` : kind === 'language' ? `正在保存首选语言：${languages[language]}。` : "正在关闭定位；需要时请完成系统设置授权。");
+        activity.log('system', 'running', kind === 'timezone' ? `正在应用 ${zone}，请完成系统管理员授权。` : kind === 'language' ? `正在保存首选语言：${languages[language]}。` : "正在关闭定位；需要时请完成系统设置授权。");
         try {
             const result = await invoke<SystemResult>(kind === 'timezone' ? 'system_set_timezone' : kind === 'language' ? 'system_set_language' : 'system_disable_location', kind === 'timezone' ? { timezone: zone } : kind === 'language' ? { language } : {});
             setState(result.state);
-            const confirmed = kind !== 'location' || !result.state.location_enabled;
+            const confirmed = kind !== 'location' || result.state.location_enabled === false;
             activity.log('system', confirmed ? 'ok' : 'warning', result.message);
             activity.finish(confirmed, result.message);
         }
@@ -131,7 +131,7 @@ export function SystemPanel({ onBusy }: {
         setLanguage(value); }} items={Object.entries(languages).map(([value, label]) => ({ value, label: t(label) }))} disabled={disabled}/><p className="system-hint">{t("应用重启后生效；系统完整切换可能需要注销。")}</p>
         <div className="system-card-actions"><Button size="small" variant="ghost" disabled={busy !== null} onClick={() => void open('language')}>{t("系统设置")}</Button><Button variant="ink" size="small" loading={busy === 'language'} disabled={disabled || language === languageChoice(state?.languages[0] || 'en')} onClick={() => void apply('language')}>{t("应用语言")}</Button></div>
       </div></Panel>
-      <Panel className="system-card system-location"><PanelHeader title={<span className="system-card-title"><MapPinIcon size={18}/>{t("地理位置")}</span>}/><div className="system-card-body"><div className="system-current"><span>{t("定位服务总开关")}</span><strong>{!state ? t("读取中…") : state.location_enabled ? t("开启") : t("已关闭")}</strong></div><p className="system-hint">{state && !state.accessibility ? t("需要辅助功能权限，或在系统设置中手动关闭。") : t("需要时请完成系统授权。")}</p><div className="system-card-actions"><Button size="small" variant="ghost" disabled={busy !== null} onClick={() => void open('location')}>{t("打开定位设置")}</Button><Button variant="ink" size="small" loading={busy === 'location'} disabled={disabled || !state?.location_enabled} onClick={() => void apply('location')}>{state && !state.location_enabled ? t("已关闭定位") : t("关闭地理位置")}</Button></div></div></Panel>
+      <Panel className="system-card system-location"><PanelHeader title={<span className="system-card-title"><MapPinIcon size={18}/>{t("地理位置")}</span>}/><div className="system-card-body"><div className="system-current"><span>{t("系统定位偏好")}</span><strong>{!state ? t("读取中…") : state.location_enabled === null ? t("尚未核验") : state.location_enabled ? t("开启") : t("已关闭")}</strong></div><p className="system-hint">{state && !state.accessibility ? t("需要辅助功能权限，或在系统设置中手动关闭。") : t("需要时请完成系统授权。")}</p><div className="system-card-actions"><Button size="small" variant="ghost" disabled={busy !== null} onClick={() => void open('location')}>{t("打开定位设置")}</Button><Button variant="ink" size="small" loading={busy === 'location'} disabled={disabled || state?.location_enabled === false} onClick={() => void apply('location')}>{state?.location_enabled === false ? t("已关闭定位") : t("关闭地理位置")}</Button></div></div></Panel>
     </div>
     <div className="permission-actions"><Button variant="ghost" size="small" disabled={busy!==null} loading={busy==='keychain'} onClick={async()=>{if(busyRef.current)return;busyRef.current=true;setBusy('keychain');setError('');activity.start('system');try{activity.finish(true,await invoke<string>('unlock_keychain'));}catch(e){setError(String(e));activity.finish(false,String(e));}finally{busyRef.current=false;setBusy(null);}}}>{t("解锁清理钥匙串")}</Button><Button variant="ghost" size="small" disabled={busy!==null} onClick={async()=>{try{await invoke('open_permissions');}catch(e){setError(String(e));}}}>{t("系统授权设置")}</Button></div>
     <CleanupActivity activity={activity.state}/>
