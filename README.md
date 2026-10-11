@@ -76,6 +76,8 @@ Source builds are available through the [development guide](#development). Every
 
 Use **Check for updates** at the bottom of CCBaga-A’s sidebar. Startup checks quietly; installation only starts when you choose **Update and restart**. Downloads show actual progress and are verified against the embedded public key, including the signed version, before installation. Failed downloads can be retried; a failed restart does not download the update again.
 
+**Upgrading from v0.2.7 or v0.2.8:** replace both apps from the latest DMG once to correct the companion browser identity.
+
 In-app updates replace **CCBaga-A**. To update **both A and B**, download the latest DMG and drag both apps into Applications. No GitHub token or signing private key is included in either app.
 
 ## Quick start

@@ -1,6 +1,6 @@
 #!/bin/sh
 # [INPUT]: browser-runtime/Browser.app、launcher/CCBrowser.c、icons/app.icns 与 Developer ID 签名身份。
-# [OUTPUT]: 品牌为「CCBaga-B」的引擎包：启动入口 CCBrowser、橙底奶白浏览器 B 图标、各语言显示名、清除构建资源扩展属性，嵌套程序启用 Hardened Runtime 与可信时间戳后签名。
+# [OUTPUT]: 品牌为「CCBaga-B」的引擎包：启动入口 CCBrowser、橙底奶白浏览器 B 图标、各语言显示名与固定宿主约定的 Bundle ID、清除构建资源扩展属性，嵌套程序启用 Hardened Runtime 与可信时间戳后签名。
 # [POS]: package-browser.sh 的前置步骤；可重复执行，只改应用包元数据与入口，不触碰浏览器资料。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 set -eu
@@ -14,6 +14,7 @@ name=CCBaga-B
   -o "${app}/Contents/MacOS/CCBrowser" "${root}/browser-runtime/launcher/CCBrowser.c"
 cp "${root}/browser-runtime/icons/app.icns" "${app}/Contents/Resources/app.icns"
 
+/usr/bin/plutil -replace CFBundleIdentifier -string ai.local.requirement-french.browser "$plist"
 /usr/bin/plutil -replace CFBundleExecutable -string CCBrowser "$plist"
 /usr/bin/plutil -replace CFBundleName -string "$name" "$plist"
 /usr/bin/plutil -replace CFBundleDisplayName -string "$name" "$plist"

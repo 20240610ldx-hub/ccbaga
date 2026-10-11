@@ -65,11 +65,11 @@ python3 scripts/release-macos.py
 The release script performs this sequence:
 
 1. Generate both app icons from the compressed brand assets.
-2. Sign browser Mach-O files and nested bundles from the inside out with Hardened Runtime and secure timestamps. Only Renderer/GPU helpers receive `com.apple.security.cs.allow-jit`.
+2. Set the browser bundle identifier to `ai.local.requirement-french.browser` explicitly, even on a fresh upstream engine. Sign browser Mach-O files and nested bundles from the inside out with Hardened Runtime and secure timestamps. Only Renderer/GPU helpers receive `com.apple.security.cs.allow-jit`.
 3. Submit the browser archive to Apple, require `Accepted`, staple and validate its ticket.
 4. Embed the stapled browser archive, build and sign the cleaner with the embedded frontend (`custom-protocol`).
 5. Notarize and staple the cleaner, then require Gatekeeper acceptance for both apps.
-6. Stage the engine's `Browser.app` as the distribution name `CCBaga-B.app`. Use `dmgbuild` to package both apps and the Applications shortcut in an 800 × 500 pixel-art Finder window, with fixed icon positions and a drag arrow. Notices remain included as hidden files. No Finder UI automation is needed. Read-only mount the result and verify both embedded app signatures, Gatekeeper acceptance, shortcut and background before signing, notarizing, stapling and assessing the DMG.
+6. Stage the engine's `Browser.app` as the distribution name `CCBaga-B.app`. Use `dmgbuild` to package both apps and the Applications shortcut in an 800 × 500 pixel-art Finder window, with fixed icon positions and a drag arrow. Notices remain included as hidden files. No Finder UI automation is needed. Read-only mount the result and verify both app names, bundle identifiers and entry points, then embedded app signatures, Gatekeeper acceptance, shortcut and background before signing, notarizing, stapling and assessing the DMG.
 7. Archive the final stapled A bundle as `.app.tar.gz`, verify the unpacked app’s signature, ticket and Gatekeeper acceptance, then sign those exact bytes with `tauri signer sign --app-version`. Automatic pre-staple updater artifacts stay disabled so the published signature covers the final bundle. The signing secrets are excluded from Cargo/frontend build environments and DMG tool subprocesses.
 8. Write standard `latest.json` for `darwin-aarch64`, pointing to this version’s public GitHub Release. Run the official updater against the actual archive on a test-only loopback server; reject tampered bytes and forged versions without installing it. Write checksums for all downloadable installer/update files and the public notarization records.
 
