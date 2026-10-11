@@ -12,12 +12,14 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-process": "2.4.0",
+    "@tauri-apps/plugin-updater": "2.13.3",
+    "clsx": "2.1.1",
+    "cromma-ui": "file:./vendor/cromma-ui",
+    "motion": "14.0.0",
+    "radix-ui": "1.6.7",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "cromma-ui": "file:./vendor/cromma-ui",
-    "radix-ui": "1.6.7",
-    "motion": "14.0.0",
-    "clsx": "2.1.1",
     "tailwind-merge": "3.6.0"
   },
   "devDependencies": {

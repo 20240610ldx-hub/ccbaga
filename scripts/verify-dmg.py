@@ -32,7 +32,7 @@ def main():
             with DSStore.open(str(mount / '.DS_Store'), 'r') as store:
                 if store['.']['icvp']['backgroundType'] != 2:
                     raise SystemExit('Finder image background is not configured')
-            for name in ['CC清理器.app', 'CC浏览器.app']:
+            for name in ['CCBaga-A.app', 'CCBaga-B.app']:
                 app = mount / name
                 run('codesign', '--verify', '--deep', '--strict', app)
                 run('spctl', '--assess', '--type', 'execute', app)

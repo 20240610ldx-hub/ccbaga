@@ -59,9 +59,9 @@ pub fn menu(
         app,
         "open",
         if language == "en" {
-            "Open CC Cleaner"
+            "Open CCBaga-A"
         } else {
-            "打开 CC清理器"
+            "打开 CCBaga-A"
         },
         true,
         None::<&str>,

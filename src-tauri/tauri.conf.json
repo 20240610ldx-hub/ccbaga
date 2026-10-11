@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CC清理器",
+  "productName": "CCBaga-A",
   "version": "0.2.0",
   "identifier": "ai.local.requirement-french",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "CC清理器",
+        "title": "CCBaga-A",
         "width": 1040,
         "height": 820,
         "minWidth": 760,
@@ -45,6 +45,15 @@
       "../browser-runtime/Browser.zip": "browser-runtime/Browser.zip",
       "../browser-runtime/version.txt": "browser-runtime/version.txt",
       "../browser-runtime/LICENSE.fingerprint-chromium": "browser-runtime/LICENSE.fingerprint-chromium"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/liseami/CCBaga/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJEQjVDMDk0RkU1ODBCQzUKUldURkMxaitsTUMxTFlYajNuTFBvK3EzeG5ubGpFK1VyZmZ6QnVJYnhERi9ta05sV0pRc2E3TXIK",
+      "requireSignedVersion": true
     }
   }
 }

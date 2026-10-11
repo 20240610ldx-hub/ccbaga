@@ -3,7 +3,7 @@
 <!-- [OUTPUT]: README 极客像素风架构图，硬边方格和阶梯边角表达不同执行边界。 -->
 <!-- [POS]: 可导出的自包含工程图；所有连线对应现有接口，不是应用截图。 -->
 <!-- [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md -->
-<title id="title">CCTool architecture</title><desc id="desc">React talks to the native Rust core. Rust invokes macOS APIs, launches a dedicated browser with token-scoped local reports, and connects to a user-provided VPS over explicit SSH for a residential SOCKS5 exit.</desc>
+<title id="title">CCBaga architecture</title><desc id="desc">React talks to the native Rust core. Rust invokes macOS APIs, launches a dedicated browser with token-scoped local reports, and connects to a user-provided VPS over explicit SSH for a residential SOCKS5 exit.</desc>
 <defs><pattern id="grid" width="16" height="16" patternUnits="userSpaceOnUse"><rect width="2" height="2" fill="#222a2c"/></pattern></defs>
 <rect width="1120" height="624" fill="#101518"/><rect width="1120" height="624" fill="url(#grid)"/>
 <g fill="#fff4df" font-family="ui-monospace,SFMono-Regular,Consolas,monospace"><text x="40" y="44" font-size="18" font-weight="bold">$ cat architecture.map</text></g>

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # [INPUT]: SSH 标准输入注入的家宽 SOCKS5 与 VPS 参数；Debian 12/13 root 环境。
 # [OUTPUT]: Xray/Reality、家宽出口、防火墙、SSH 加固与通过自检的 Clash 订阅。
-# [POS]: 随 CC清理器编译的部署脚本，源自用户 Downloads/setup-vps.sh；身份保存在远端 root 状态文件。
+# [POS]: 随 CCBaga-A编译的部署脚本，源自用户 Downloads/setup-vps.sh；身份保存在远端 root 状态文件。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 # =============================================================================
 # setup-vps.sh — Reproduce the "DMIT LAX" proxy node build on a fresh Debian 12/13

@@ -1,6 +1,6 @@
 #!/bin/sh
 # [INPUT]: 已迁入的 Chromium 引擎、brand-browser.sh 与 macOS ditto。
-# [OUTPUT]: 品牌化为 CC浏览器 并签名后，保留链接和权限的 Browser.zip 及实际版本元数据。
+# [OUTPUT]: 品牌化为 CCBaga-B 并签名后，保留链接和权限的 Browser.zip 及实际版本元数据。
 # [POS]: 构建资源入口；避免 Tauri 逐文件复制丢失 Framework 目录链接。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 set -eu

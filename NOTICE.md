@@ -6,7 +6,7 @@
 -->
 # Third-party notices
 
-The top-level MIT license covers CCTool's original project work. It does not replace third-party copyright notices or license terms.
+The top-level MIT license covers CCBaga's original project work. It does not replace third-party copyright notices or license terms.
 
 ## Fingerprint Chromium and Chromium
 

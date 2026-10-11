@@ -351,7 +351,7 @@ pub async fn vps_setup(
         let output = execute(command, payload(&connection, &home), Duration::from_secs(1800), log.clone())?;
         let subscription = subscription(&output, &connection.host)?;
         log.log("vps", "ok", "远端自检已通过，订阅地址已返回。", 1, Some(1));
-        Ok(SetupResult { subscription, message: "导入订阅后，只打开 TUN 模式，关闭系统代理；CC浏览器代理留空，跟随 TUN。".into() })
+        Ok(SetupResult { subscription, message: "导入订阅后，只打开 TUN 模式，关闭系统代理；CCBaga-B代理留空，跟随 TUN。".into() })
     }).await
 }
 #[cfg(test)]

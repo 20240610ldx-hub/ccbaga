@@ -1,6 +1,6 @@
 /**
  * [INPUT]: Cromma UI、原生浏览器命令、带回报时间的真实观测事件、共用地区契约与共享活动日志和 YAML 文案。
- * [OUTPUT]: 指纹配置、独立浏览器启动、缓存/站点数据清理、目标地区与机器一致性核验、任务锁状态与 CC浏览器 一键设为默认浏览器（系统确认）。
+ * [OUTPUT]: 指纹配置、独立浏览器启动、缓存/站点数据清理、目标地区与机器一致性核验、任务锁状态与 CCBaga-B 一键设为默认浏览器（系统确认）。
  * [POS]: 浏览器交互边界；只展示配置、操作与真实观测，页面加载只读，系统对齐和登录删除必须由用户选择。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -36,12 +36,12 @@ export function BrowserPanel({ onBusy }: {
     async function makeDefault() { setAsking(true); setDefaultNote(''); try {
         const next = await invoke<DefaultBrowser>('browser_set_default');
         setPreferred(next);
-        setDefaultNote(next.is_default ? "CC浏览器已是默认浏览器。" : "已向 macOS 发出请求，请在系统弹窗中选择「使用“CC浏览器”」。");
+        setDefaultNote(next.is_default ? "CCBaga-B已是默认浏览器。" : "已向 macOS 发出请求，请在系统弹窗中选择「使用“CCBaga-B”」。");
         for (let i = 0; i < 20 && live.current; i++) {
             await new Promise(r => setTimeout(r, 1500));
             const fresh = await readDefault();
             if (fresh?.is_default) {
-                setDefaultNote("CC浏览器已设为默认浏览器。");
+                setDefaultNote("CCBaga-B已设为默认浏览器。");
                 break;
             }
         }

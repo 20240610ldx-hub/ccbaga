@@ -38,7 +38,7 @@ export function useQuickActions(onStart: () => void, onChanged: () => void) {
         const onProgress = activity.start(kind === 'system' ? 'system' : kind === 'claude' ? 'scan' : 'browser');
         try {
             if (kind === 'cache') {
-                activity.log('browser', 'running', "先正常退出 CC浏览器；退出失败时停止清理。");
+                activity.log('browser', 'running', "先正常退出 CCBaga-B；退出失败时停止清理。");
                 const before = await invoke<BrowserState>('browser_read');
                 await invoke('browser_quit');
                 await invoke('browser_clear', { includeSiteData: false, onProgress });
@@ -50,7 +50,7 @@ export function useQuickActions(onStart: () => void, onChanged: () => void) {
                 await invoke('browser_rotate', { region });
                 activity.log('browser', 'ok', "新指纹与目标地区已保存，正在重新启动浏览器。");
                 await invoke('browser_launch', { onProgress });
-                activity.finish(true, "CC浏览器已使用新指纹、地区语言与时区启动，网络跟随 TUN。");
+                activity.finish(true, "CCBaga-B已使用新指纹、地区语言与时区启动，网络跟随 TUN。");
             }
             else if (kind === 'system') {
                 activity.log('system', 'running', "请完成 macOS 管理员授权；时区先应用，再保存语言与地区格式。");

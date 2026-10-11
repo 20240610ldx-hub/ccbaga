@@ -1,6 +1,6 @@
 /**
  * [INPUT]: index.css 的系统字体、Cromma UI 控件和共享面板令牌。
- * [OUTPUT]: 极简侧栏、统一内容网格、紧凑执行结果、清理预览、CLI 管理、三文件密钥导入和供应商入口/按需帮助布局，实测通过页面的整页绿色背景和大对勾。
+ * [OUTPUT]: 极简侧栏、统一内容网格、紧凑执行结果、清理预览、CLI 管理、三文件密钥导入和供应商入口/按需帮助和主程序更新布局，实测通过页面的整页绿色背景和大对勾。
  * [POS]: 应用布局层；信息只分标题、操作和结果，删除装饰文案与重复说明区；按钮边缘、内高光、阴影和悬停效果沿用 Cromma UI。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -226,3 +226,14 @@ h3 { margin: 0; font-size: 13px; font-weight: 500; }
 .vps-file-state, .vps-key-drop { font-size: 12px; color: var(--muted-foreground); }
 .vps-key-drop { display: block; margin-top: 16px; text-align: center; }
 @media (max-width: 600px) { .vps-key-grid { gap: 6px; } .vps-key-file { padding-inline: 4px; } .vps-file-name { font-size: 11px; } }
+
+/* ----- 主程序更新：复用侧栏与模态，只展示实际阶段 ----- */
+.update-nav { width: 100%; margin-bottom: 4px; }
+.app-version { display: block; padding: 0 12px 16px; font-size: 11px; color: var(--muted-foreground); }
+.update-versions { display: flex; gap: 40px; margin: 0 0 18px; }
+.update-versions dt { font-size: 12px; color: var(--muted-foreground); }
+.update-versions dd { margin: 6px 0 0; font: 16px ui-monospace, monospace; }
+.update-progress { display: grid; gap: 8px; font-size: 12px; }
+.update-progress progress { width: 100%; accent-color: #21865c; }
+.update-notes { margin-top: 18px; font-size: 12px; }
+.update-notes p { margin-top: 12px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; line-height: 1.7; }

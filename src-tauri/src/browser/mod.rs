@@ -1,4 +1,4 @@
-// [INPUT]: 本机指纹引擎（优先 /Applications/CC浏览器.app，回退 ~/Applications）、配置/资料边界、真实浏览器观测、宿主界面语言与共享操作日志。
+// [INPUT]: 本机指纹引擎（优先 /Applications/CCBaga-B.app，回退 ~/Applications）、配置/资料边界、真实浏览器观测、宿主界面语言与共享操作日志。
 // [OUTPUT]: 浏览器设置/启动/清理与环境核验；宿主重启重新连接现有浏览器，回报时间明确标识通讯状态；上下文提供当前界面语言；launch.args 共用资料与指纹参数。
 // [POS]: 独立浏览器模块的唯一编排入口；改变资料前必须退出浏览器；不自行改系统默认浏览器，只发起系统确认。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -78,9 +78,9 @@ fn root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .join("browser"))
 }
 pub const BROWSER_ID: &str = "ai.local.requirement-french.browser";
-const BROWSER_APP: &str = "CC浏览器.app";
+const BROWSER_APP: &str = "CCBaga-B.app";
 const LSREGISTER: &str = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
-/// install-apps.sh 安装的 CC浏览器：优先 /Applications，回退 ~/Applications；存在时作为唯一引擎，避免同一包标识出现两份注册。
+/// install-apps.sh 安装的 CCBaga-B：优先 /Applications，回退 ~/Applications；存在时作为唯一引擎，避免同一包标识出现两份注册。
 fn installed() -> Option<PathBuf> {
     let mut places = vec![PathBuf::from("/Applications")];
     if let Some(home) = std::env::var_os("HOME") {
@@ -104,7 +104,7 @@ fn app_running() -> Result<bool, String> {
     let state: serde_json::Value = decode(unsafe { rf_browser_app_running(id.as_ptr()) })?;
     Ok(state["running"].as_bool().unwrap_or(false))
 }
-/// CC浏览器 入口（launcher/CCBrowser.c）读取的参数：与实测启动相同，只去掉起始页。
+/// CCBaga-B 入口（launcher/CCBrowser.c）读取的参数：与实测启动相同，只去掉起始页。
 fn write_launch_args(
     root: &Path,
     config: &Config,
@@ -215,16 +215,16 @@ pub fn forget_start_url(app: &tauri::AppHandle) {
         let _ = fs::remove_file(root.join("start.url"));
     }
 }
-/// 宿主启动时建立起始页会话并带起 CC浏览器（已在运行则不动），不抢焦点。
+/// 宿主启动时建立起始页会话并带起 CCBaga-B（已在运行则不动），不抢焦点。
 pub fn companion(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         if let Err(error) = start_companion(&app) {
-            eprintln!("CC浏览器未随宿主启动：{error}");
+            eprintln!("CCBaga-B未随宿主启动：{error}");
         }
     });
 }
 fn start_companion(app: &tauri::AppHandle) -> Result<(), String> {
-    let browser = installed().ok_or("未安装 /Applications/CC浏览器.app。")?;
+    let browser = installed().ok_or("未安装 /Applications/CCBaga-B.app。")?;
     let state = app.state::<Browser>();
     let _guard = state.gate.lock().unwrap();
     let root = root(app)?;
@@ -233,7 +233,7 @@ fn start_companion(app: &tauri::AppHandle) -> Result<(), String> {
     let config = config::load(&root)?;
     let machine = config::machine()?;
     config.validate(&machine)?;
-    // 先刷新参数：浏览器已由 CC浏览器 入口先行启动时，下一次启动也能沿用指纹参数。
+    // 先刷新参数：浏览器已由 CCBaga-B 入口先行启动时，下一次启动也能沿用指纹参数。
     write_launch_args(&root, &config, &machine, &profile, &version(&browser))?;
     let page = open_session(app, &config, &machine, version(&browser))?;
     if app_running()? || profile::running(&profile)? {
@@ -245,7 +245,7 @@ fn start_companion(app: &tauri::AppHandle) -> Result<(), String> {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|_| "无法重新连接运行中的 CC浏览器。")?;
+            .map_err(|_| "无法重新连接运行中的 CCBaga-B。")?;
         std::thread::spawn(move || {
             let _ = child.wait();
         });
@@ -257,9 +257,9 @@ fn start_companion(app: &tauri::AppHandle) -> Result<(), String> {
         .args(["-g", "-a"])
         .arg(&browser)
         .status()
-        .map_err(|_| "无法打开 CC浏览器。")?;
+        .map_err(|_| "无法打开 CCBaga-B。")?;
     if !status.success() {
-        return Err("LaunchServices 拒绝打开 CC浏览器。".into());
+        return Err("LaunchServices 拒绝打开 CCBaga-B。".into());
     }
     Ok(())
 }
@@ -287,12 +287,12 @@ fn default_read() -> Result<DefaultBrowser, String> {
 pub async fn browser_default_read() -> Result<DefaultBrowser, String> {
     run(default_read).await
 }
-/// 一键设为默认浏览器：重新注册已安装的 CC浏览器，注销应用数据中的旧引擎副本，再请求系统切换；macOS 会弹出确认框。
+/// 一键设为默认浏览器：重新注册已安装的 CCBaga-B，注销应用数据中的旧引擎副本，再请求系统切换；macOS 会弹出确认框。
 #[tauri::command]
 pub async fn browser_set_default(app: tauri::AppHandle) -> Result<DefaultBrowser, String> {
     run(move || {
         let browser = installed()
-            .ok_or("未找到 /Applications/CC浏览器.app，请先运行 bun run install:apps。")?;
+            .ok_or("未找到 /Applications/CCBaga-B.app，请先运行 bun run install:apps。")?;
         let copy = root(&app)?.join("engine/Browser.app");
         if copy.exists() {
             let _ = Command::new(LSREGISTER).arg("-u").arg(&copy).status();

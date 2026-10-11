@@ -5,8 +5,8 @@
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 -->
 <div align="center">
-  <img src="docs/brand-logos.svg" width="320" height="149" alt="CC Cleaner and CC Browser logos, side by side" />
-  <h1>CCTool</h1>
+  <img src="docs/brand-logos.svg" width="320" height="149" alt="CCBaga-A and CCBaga-B logos, side by side" />
+  <h1>CCBaga</h1>
   <p><strong>A native macOS toolkit for a cleaner workspace and an environment you can verify.</strong></p>
   <p>Claude cleanup · Browser fingerprints · System settings · Network setup</p>
   <p>
@@ -18,6 +18,7 @@
   <p>
     <a href="#features">Features</a> ·
     <a href="#installation">Installation</a> ·
+    <a href="#updates">Updates</a> ·
     <a href="#quick-start">Quick start</a> ·
     <a href="#architecture">Architecture</a> ·
     <a href="#development">Development</a> ·
@@ -25,11 +26,11 @@
   </p>
 </div>
 
-![CCTool: native control, observable environments](docs/readme-hero.png)
+![CCBaga: native control, observable environments](docs/readme-hero.png)
 
-CCTool brings local maintenance and environment setup into one focused desktop workflow. Inspect Claude data before removing it, rotate your companion browser's fingerprint and restart it, align system settings with a selected region, and compare real browser readings with the machine and network exit.
+CCBaga brings local maintenance and environment setup into one focused desktop workflow. Inspect Claude data before removing it, rotate your companion browser's fingerprint and restart it, align system settings with a selected region, and compare real browser readings with the machine and network exit.
 
-Two applications work together: **CC Cleaner** owns native operations; **CC Browser** runs an isolated Fingerprint Chromium profile. Browser measurements return to the cleaner through a local session. Changing a setting and verifying its effect are separate steps.
+Two applications work together: **CCBaga-A** owns native operations; **CCBaga-B** runs an isolated Fingerprint Chromium profile. Browser measurements return to the cleaner through a local session. Changing a setting and verifying its effect are separate steps.
 
 ## Features
 
@@ -54,28 +55,34 @@ The interface supports **English and Chinese**, with shared YAML catalogs. Switc
 
 **Platform:** macOS 12 or later, Apple Silicon. Intel, Windows and Linux application builds are not currently supported.
 
-Download the signed installer from [GitHub Releases](https://github.com/liseami/CCFUCKER/releases/latest). The distribution package is named `CCTool-<version>-macos-arm64.dmg`. It contains both applications:
+Download the signed installer from [GitHub Releases](https://github.com/liseami/CCBaga/releases/latest). The distribution package is named `CCBaga-<version>-macos-arm64.dmg`. It contains both applications:
 
 | Application | Installed bundle | Role |
 | --- | --- | --- |
-| CC Cleaner | `CC清理器.app` | Cleanup, system settings, SSH tasks and verification |
-| CC Browser | `CC浏览器.app` | Companion browser with a dedicated profile |
+| CCBaga-A | `CCBaga-A.app` | Cleanup, system settings, SSH tasks and verification |
+| CCBaga-B | `CCBaga-B.app` | Companion browser with a dedicated profile |
 
 Download **one DMG**; it contains both applications. There is no separate browser download. The installer uses the same pixel-art style as this README.
 
 1. Open the release disk image and drag **both applications** into Applications.
-2. Launch CC Cleaner. It starts the companion browser automatically.
+2. Launch CCBaga-A. It starts the companion browser automatically.
 3. Choose English at the bottom of the sidebar if needed.
 
 Public release packages must pass Developer ID signing, Apple notarization, ticket stapling and Gatekeeper assessment. See the [release procedure](docs/releasing.md) for the exact checks. macOS may still display its normal first-launch confirmation and ask for permissions when you use privileged features.
 
 Source builds are available through the [development guide](#development). Every successful push to `release` produces a new version, tag and notarized installer.
 
+## Updates
+
+Use **Check for updates** at the bottom of CCBaga-A’s sidebar. Startup checks quietly; installation only starts when you choose **Update and restart**. Downloads show actual progress and are verified against the embedded public key, including the signed version, before installation. Failed downloads can be retried; a failed restart does not download the update again.
+
+In-app updates replace **CCBaga-A**. To update **both A and B**, download the latest DMG and drag both apps into Applications. No GitHub token or signing private key is included in either app.
+
 ## Quick start
 
 ### Everyday setup
 
-Open **Easy setup**, select a country or region, then choose an action. Browser fingerprint rotation closes and restarts CC Browser, so save unfinished browser work first. Selecting a region changes language, timezone and regional settings; it does **not** change your public IP.
+Open **Easy setup**, select a country or region, then choose an action. Browser fingerprint rotation closes and restarts CCBaga-B, so save unfinished browser work first. Selecting a region changes language, timezone and regional settings; it does **not** change your public IP.
 
 ### Claude cleanup
 
@@ -108,7 +115,7 @@ For DMIT, choose **Generate SSH Key after order**, download and extract the key 
 Check the SSH connection, review the server changes, then run setup. The script updates the Debian system, configures Xray/Reality, SSH and the firewall, and verifies the SOCKS5 exit before returning a subscription. It blocks forwarded UDP and retains a Stripe direct-route exception.
 
 > [!IMPORTANT]
-> Import the subscription into a compatible client, enable **TUN mode**, and leave **system proxy disabled**. Leave CC Browser's explicit proxy empty to follow TUN. The subscription uses HTTP and contains connection credentials; keep its URL private. Verify the client-side exit after importing it.
+> Import the subscription into a compatible client, enable **TUN mode**, and leave **system proxy disabled**. Leave CCBaga-B's explicit proxy empty to follow TUN. The subscription uses HTTP and contains connection credentials; keep its URL private. Verify the client-side exit after importing it.
 
 Provider buttons link to [DMIT](https://www.dmit.io/aff.php?aff=28800) and [Webshare](https://www.webshare.io/?referral_code=qlm1mt9xibc9). These URLs contain affiliate/referral codes. Network setup is optional; local cleanup does not require a VPS or a proxy subscription.
 
@@ -167,7 +174,7 @@ Local builds use ad-hoc signing by default, so another developer does not need t
 
 ### Automated releases
 
-Push to `release` to run the complete macOS pipeline: frontend and native tests, pinned engine verification, Developer ID signing, Apple notarization and offline ticket stapling. A successful run creates an increasing `v<major>.<minor>.<patch>` tag and uploads the DMG and SHA-256 manifest. Public repositories also receive GitHub build provenance attestations. Apple credentials stay in GitHub Secrets and a disposable runner keychain. See [release setup](docs/releasing.md#github-actions).
+Push to `release` to run the complete macOS pipeline: frontend and native tests, pinned engine verification, Developer ID signing, Apple notarization and offline ticket stapling. A successful run creates an increasing `v<major>.<minor>.<patch>` tag and uploads the dual-app DMG, signed A update archive, public `latest.json` and SHA-256 manifest. Public repositories also receive GitHub build provenance attestations. Rust dependency caching reduces repeat compilation. Apple and updater signing credentials stay in GitHub Secrets and a disposable runner keychain. See [release setup](docs/releasing.md#github-actions).
 
 ### Build
 
@@ -176,7 +183,7 @@ MACOSX_DEPLOYMENT_TARGET=12.0 \
   bun run tauri build --bundles app --features custom-protocol
 ```
 
-The cleaner bundle is written to `src-tauri/target/release/bundle/macos/CC清理器.app`. The companion bundle remains at `browser-runtime/Browser.app` until copied to Applications as `CC浏览器.app`.
+The cleaner bundle is written to `src-tauri/target/release/bundle/macos/CCBaga-A.app`. The companion bundle remains at `browser-runtime/Browser.app` until copied to Applications as `CCBaga-B.app`.
 
 Release builds require `custom-protocol` to load the embedded UI. A release compilation without it fails explicitly, preventing an installed app from depending on the development server.
 
@@ -209,7 +216,7 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md). Small, focused changes with clear
 
 ## License & credits
 
-CCTool's original project code is released under the **[MIT License](LICENSE)**. Third-party code and binaries retain their own terms; see [NOTICE.md](NOTICE.md).
+CCBaga's original project code is released under the **[MIT License](LICENSE)**. Third-party code and binaries retain their own terms; see [NOTICE.md](NOTICE.md).
 
 Built with [Tauri](https://tauri.app/), [React](https://react.dev/) and [Fingerprint Chromium](https://github.com/adryfish/fingerprint-chromium), with a native macOS implementation of Claude maintenance workflows. Cleanup discovery was informed by the [claude-cleanup skill](https://github.com/suyuan2022/suyuan-skill/tree/main/claude-cleanup).
 

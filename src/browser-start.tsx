@@ -13,7 +13,7 @@ import { probeBrowserExit } from './browser-network';
 import './index.css';
 import './style.css';
 async function api<T>(route: string, body?: unknown): Promise<T> { const response = await fetch(new URL(route, location.href), { signal: AbortSignal.timeout(3000), ...(body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) }); if (!response.ok)
-    throw new Error("本地核验连接失败，请从CC清理器重新打开浏览器。"); return response.json(); }
+    throw new Error("本地核验连接失败，请从CCBaga-A重新打开浏览器。"); return response.json(); }
 function Start() {
     const {t,locale}=useI18n();
     const [context, setContext] = useState<BrowserContext | null>(null), [report, setReport] = useState<Report | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [linked, setLinked] = useState(false), [reportedAt, setReportedAt] = useState(0);
@@ -66,7 +66,7 @@ function Start() {
     {passed && <div className="browser-verification-success" role="status"><svg viewBox="0 0 96 96" aria-hidden="true"><circle cx="48" cy="48" r="46" fill="currentColor"/><path d="m27 49 14 14 28-31" fill="none" stroke="white" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/></svg><strong>{t("检测通过")}</strong></div>}
     <Panel><PanelHeader title={busy ? t("正在读取浏览器与网络…") : passed ? t("已测项目与目标地区一致") : t("请核对环境差异")} actions={<span className="local-badge">Chromium {context?.engine_version || '…'}</span>}/><div className="browser-observations">{[[t("出口 IP"), report?.exit?.ip], [t("国家 / 城市"), report?.exit ? `${report.exit.country} / ${report.exit.city}` : null], [t("出口时区"), report?.exit?.timezone], [t("网页时区"), report?.timezone], [t("网页语言"), report?.languages.join(' → ')], [t("设备平台 / 版本"), report ? `${report.platform} / ${report.platform_version || t("不可读取")}` : null], [t("逻辑 CPU"), report?.cores.toString()], [t("浏览器实际版本"), report?.browser_version], [t("网页定位权限"), report?.geolocation], [t("本机时区"), context?.machine.timezone], [t("本机语言 / 区域"), context ? `${context.machine.languages.join(' → ')} / ${context.machine.locale}` : null], [t("本机系统 / CPU"), context ? t("macOS {v0} / {v1} 核", { v0: context.machine.version, v1: context.machine.cores }) : null]].map(([label, value]) => <div key={label}><span>{t(label || '')}</span><strong>{value || t("尚未核验")}</strong></div>)}</div></Panel>
     {(error || report?.error) && <p className="system-feedback error" role="alert">{t(error || report?.error || '')}</p>}
-    <p className="system-hint" role="status">{linked ? t("已连接 CC清理器{v0}", { v0: reportedAt ? t(" · 结果回传成功 {v0}", { v0: new Date(reportedAt).toLocaleTimeString(locale==='zh'?'zh-CN':'en-US') }) : t(" · 等待本次实测回传") }) : t("与 CC清理器的连接已断开，请在清理器内重新打开实测页。")}</p>
+    <p className="system-hint" role="status">{linked ? t("已连接 CCBaga-A{v0}", { v0: reportedAt ? t(" · 结果回传成功 {v0}", { v0: new Date(reportedAt).toLocaleTimeString(locale==='zh'?'zh-CN':'en-US') }) : t(" · 等待本次实测回传") }) : t("与 CCBaga-A的连接已断开，请在清理器内重新打开实测页。")}</p>
   </main></div>;
 }
 createRoot(document.getElementById('app')!).render(<MotionRoot><TooltipProvider><Start /></TooltipProvider></MotionRoot>);

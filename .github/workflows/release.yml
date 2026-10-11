@@ -1,5 +1,5 @@
-# [INPUT]: release 分支 commit、锁定依赖与 GitHub Secrets 中的 Apple 签名凭据。
-# [OUTPUT]: 已公证装订的双应用 DMG、SHA-256、递增版本 tag 和 GitHub Release。
+# [INPUT]: release 分支 commit、锁定依赖与 GitHub Secrets 中的 Apple 与更新签名凭据。
+# [OUTPUT]: 已公证装订的双应用 DMG、带版本签名的主程序更新与公开清单、SHA-256、递增版本 tag 和 GitHub Release。
 # [POS]: 自动发布入口；签名和发布权限分离，不对 PR 或外部分支开放私钥。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 name: Release
@@ -9,6 +9,8 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+env:
+  MACOSX_DEPLOYMENT_TARGET: "12.0"
 jobs:
   build:
     if: github.ref == 'refs/heads/release'
@@ -46,6 +48,11 @@ jobs:
           bun install --frozen-lockfile
           python3 -m pip install --require-hashes --only-binary=:all: -r scripts/release-requirements.txt
           python3 scripts/fetch-browser.py
+      - name: Restore Rust dependency cache
+        uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+        with:
+          workspaces: src-tauri -> target
+          cache-on-failure: true
       - name: Run checks
         run: |
           bun test
@@ -62,11 +69,13 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           CC_SIGN_IDENTITY: ${{ secrets.CC_SIGN_IDENTITY }}
           CC_RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          for variable in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_API_PRIVATE_KEY APPLE_API_KEY APPLE_API_ISSUER CC_SIGN_IDENTITY; do
+          for variable in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_API_PRIVATE_KEY APPLE_API_KEY APPLE_API_ISSUER CC_SIGN_IDENTITY TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
             test -n "${!variable}" || { echo "Missing GitHub Secret: $variable" >&2; exit 1; }
           done
           certificate="$RUNNER_TEMP/cctool-signing.p12"
@@ -95,6 +104,9 @@ jobs:
           name: macos-${{ github.run_id }}
           path: |
             releases/*.dmg
+            releases/*.app.tar.gz
+            releases/*.sig
+            releases/latest.json
             releases/SHA256SUMS
             releases/notarization.json
           if-no-files-found: error
@@ -119,7 +131,9 @@ jobs:
         if: github.event.repository.private == false
         uses: actions/attest-build-provenance@8beda2b7ed98355c0e97c0a63bec38ae472e66c4 # v4
         with:
-          subject-path: releases/*.dmg
+          subject-path: |
+            releases/*.dmg
+            releases/*.app.tar.gz
       - name: Create tag and publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -130,6 +144,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "$RELEASE_TAG" releases/*.dmg releases/SHA256SUMS releases/notarization.json \
-            --target "$RELEASE_COMMIT" --title "CCTool $RELEASE_VERSION" --generate-notes --draft
+          gh release create "$RELEASE_TAG" releases/*.dmg releases/*.app.tar.gz releases/*.sig releases/latest.json releases/SHA256SUMS releases/notarization.json \
+            --target "$RELEASE_COMMIT" --title "CCBaga $RELEASE_VERSION" --generate-notes --draft
           gh release edit "$RELEASE_TAG" --draft=false

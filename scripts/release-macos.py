@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-# [INPUT]: 双应用源代码、外部 Developer ID 与 Apple API 凭据、哈希锁定的 dmgbuild 与 macOS 发布工具。
-# [OUTPUT]: 公证并装订票据的双应用 DMG、SHA256SUMS 和实际签名/公证记录。
-# [POS]: 发布唯一顺序入口；浏览器票据先进入宿主资源，Browser.app 暂存为 CC浏览器.app，签名后不改包内容。
+# [INPUT]: 双应用源代码、外部 Developer ID、Apple API 与更新签名凭据、哈希锁定的 dmgbuild 与 macOS 发布工具。
+# [OUTPUT]: 公证并装订票据的双应用 DMG、带版本签名的主程序更新归档/清单、SHA256SUMS 和实际签名/公证记录。
+# [POS]: 发布唯一顺序入口；浏览器票据先进入宿主资源，Browser.app 暂存为 CCBaga-B.app，签名后不改包内容。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+from datetime import datetime, timezone
+import tarfile
 import hashlib
 import json
 import os
@@ -15,11 +17,13 @@ import dmgbuild
 
 ROOT = Path(__file__).resolve().parent.parent
 BROWSER = ROOT / 'browser-runtime/Browser.app'
-HOST = ROOT / 'src-tauri/target/release/bundle/macos/CC清理器.app'
+HOST = ROOT / 'src-tauri/target/release/bundle/macos/CCBaga-A.app'
+SIGNING_KEYS = ['TAURI_SIGNING_PRIVATE_KEY', 'TAURI_SIGNING_PRIVATE_KEY_PATH', 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD']
+BUILD_ENV = {key: value for key, value in os.environ.items() if key not in SIGNING_KEYS}
 
 
 def run(*args, env=None):
-    subprocess.run([str(x) for x in args], cwd=ROOT, env=env, check=True)
+    subprocess.run([str(x) for x in args], cwd=ROOT, env=env if env is not None else BUILD_ENV, check=True)
 
 
 def main():
@@ -27,6 +31,8 @@ def main():
     for key in required:
         if not os.environ.get(key):
             raise SystemExit(f'Missing environment variable: {key}')
+    if not any(os.environ.get(key) for key in SIGNING_KEYS[:2]):
+        raise SystemExit('Missing updater signing private key (external path or secret content)')
     identity = os.environ['CC_SIGN_IDENTITY']
     if identity == '-':
         raise SystemExit('Public releases require a Developer ID Application identity')
@@ -42,7 +48,7 @@ def main():
 
     def notarize(archive, ticket_target):
         print(f'Notarizing {archive.name}', flush=True)
-        result = subprocess.run(['xcrun', 'notarytool', 'submit', str(archive), *auth, '--no-s3-acceleration', '--wait', '--output-format', 'json'], cwd=ROOT, check=True, capture_output=True, text=True)
+        result = subprocess.run(['xcrun', 'notarytool', 'submit', str(archive), *auth, '--no-s3-acceleration', '--wait', '--output-format', 'json'], cwd=ROOT, check=True, capture_output=True, text=True, env=BUILD_ENV)
         record = json.loads(result.stdout)
         records.append({'artifact': archive.name, 'id': record['id'], 'status': record.get('status')})
         (output / 'notarization.json').write_text(json.dumps(records, indent=2) + '\n')
@@ -60,7 +66,7 @@ def main():
     # ----- 先嵌入浏览器票据，再封住宿主资源；禁止再次品牌化或重签浏览器 -----
     (ROOT / 'browser-runtime/Browser.zip').unlink()
     run('ditto', '-c', '-k', '--keepParent', BROWSER, ROOT / 'browser-runtime/Browser.zip')
-    build_env = os.environ.copy()
+    build_env = BUILD_ENV.copy()
     for key in required[1:]:
         build_env.pop(key, None)
     build_env['MACOSX_DEPLOYMENT_TARGET'] = '12.0'
@@ -71,24 +77,55 @@ def main():
         archive = work / 'CCCleaner.zip'
         run('ditto', '-c', '-k', '--keepParent', HOST, archive)
         notarize(archive, HOST)
-        stage = work / 'CCTool'
+        # ----- 更新只签最终装订后的宿主字节；公钥留在应用，私钥不进入构建 -----
+        update_archive = output / f'CCBaga-{version}-macos-arm64.app.tar.gz'
+        with tarfile.open(update_archive, 'w:gz', dereference=False) as bundle:
+            bundle.add(HOST, arcname=HOST.name)
+        unpacked = work / 'updater-verification'
+        unpacked.mkdir()
+        with tarfile.open(update_archive, 'r:gz') as bundle:
+            bundle.extractall(unpacked, filter='tar')
+        run('codesign', '--verify', '--deep', '--strict', unpacked / HOST.name)
+        run('xcrun', 'stapler', 'validate', unpacked / HOST.name)
+        run('spctl', '--assess', '--type', 'execute', unpacked / HOST.name)
+        subprocess.run(['bun', 'run', 'tauri', 'signer', 'sign', '--app-version', version, str(update_archive)], cwd=ROOT, check=True, capture_output=True)
+        signature = Path(str(update_archive) + '.sig')
+        endpoint = json.loads((ROOT / 'src-tauri/tauri.conf.json').read_text())['plugins']['updater']['endpoints'][0]
+        repository = endpoint.split('/releases/')[0]
+        manifest = output / 'latest.json'
+        manifest.write_text(json.dumps({
+            'version': version,
+            'notes': 'CCBaga-A update. For both applications, download the DMG from GitHub Releases.',
+            'pub_date': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+            'platforms': {'darwin-aarch64': {
+                'url': f'{repository}/releases/download/v{version}/{update_archive.name}',
+                'signature': signature.read_text().strip()
+            }}
+        }, indent=2) + '\n')
+        verify_env = build_env | {'CC_UPDATE_MANIFEST': str(manifest), 'CC_UPDATE_ARCHIVE': str(update_archive)}
+        run('cargo', 'test', '--locked', '--manifest-path', 'src-tauri/Cargo.toml', '--features', 'custom-protocol',
+            'updater_tests::published_archive_matches_embedded_key_and_signed_version', '--', '--ignored', env=verify_env)
+        stage = work / 'CCBaga'
         stage.mkdir()
-        for app, name in [(HOST, 'CC清理器.app'), (BROWSER, 'CC浏览器.app')]:
+        for app, name in [(HOST, 'CCBaga-A.app'), (BROWSER, 'CCBaga-B.app')]:
             run('codesign', '--verify', '--deep', '--strict', app)
             run('spctl', '--assess', '--type', 'execute', '--verbose=2', app)
             run('ditto', app, stage / name)
         for name in ['LICENSE', 'NOTICE.md']:
             run('ditto', ROOT / name, stage / name)
         (stage / 'Install.txt').write_text('Drag both apps into Applications. Requires Apple Silicon and macOS 12 or later.\n')
-        dmg = output / f'CCTool-{version}-macos-arm64.dmg'
-        dmgbuild.build_dmg(str(dmg), 'CCTool', settings_file=str(ROOT / 'scripts/dmg-settings.py'), defines={'stage': str(stage), 'root': str(ROOT)})
+        dmg = output / f'CCBaga-{version}-macos-arm64.dmg'
+        dmgbuild.build_dmg(str(dmg), 'CCBaga', settings_file=str(ROOT / 'scripts/dmg-settings.py'), defines={'stage': str(stage), 'root': str(ROOT)})
         run(sys.executable, 'scripts/verify-dmg.py', dmg)
         run('codesign', '--force', '--sign', identity, '--timestamp', dmg)
         notarize(dmg, dmg)
         run('spctl', '--assess', '--type', 'open', '--context', 'context:primary-signature', '--verbose=2', dmg)
-    with dmg.open('rb') as stream:
-        digest = hashlib.file_digest(stream, 'sha256').hexdigest()
-    (output / 'SHA256SUMS').write_text(f'{digest}  {dmg.name}\n')
+    digests = []
+    for artifact in [dmg, update_archive, signature, manifest]:
+        with artifact.open('rb') as stream:
+            digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+        digests.append(f'{digest}  {artifact.name}\n')
+    (output / 'SHA256SUMS').write_text(''.join(digests))
     print(f'Release verified: {dmg}', flush=True)
 
 

@@ -20,6 +20,11 @@ serde_json = "1"
 sha2 = "0.10"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "socks"] }
 tokio = { version = "1", features = ["sync"] }
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }
 
 [profile.release]
 opt-level = "s"

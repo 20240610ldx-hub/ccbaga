@@ -4,7 +4,7 @@
 [POS]: README 的贡献入口；不假设已存在公共仓库、CI 或发布账号。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 -->
-# Contributing to CCTool
+# Contributing to CCBaga
 
 Thank you for helping make native maintenance predictable and understandable.
 

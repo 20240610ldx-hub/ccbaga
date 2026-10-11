@@ -2,13 +2,13 @@
 <!-- [OUTPUT]: Maintainer instructions for a notarized Apple Silicon distribution. -->
 <!-- [POS]: Public release contract referenced by the README; excludes private keys and local account paths. -->
 <!-- [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md -->
-# Releasing CCTool for macOS
+# Releasing CCBaga for macOS
 
-Public downloads contain **CC清理器.app** and **CC浏览器.app** in one DMG. The current target is Apple Silicon, macOS 12 or later. Intel builds are not provided.
+Public downloads contain **CCBaga-A.app** and **CCBaga-B.app** in one DMG. The current target is Apple Silicon, macOS 12 or later. Intel builds are not provided.
 
 ## Prerequisites
 
-Follow the [development setup](../README.md#development), including the upstream Fingerprint Chromium engine. Install a valid **Developer ID Application** certificate in your keychain and provide an Apple API key with notarization access. Keep the `.p8` key outside the repository.
+Follow the [development setup](../README.md#development), including the upstream Fingerprint Chromium engine. Install a valid **Developer ID Application** certificate in your keychain and provide an Apple API key with notarization access. Keep the `.p8` and encrypted updater signing key outside the repository. Preserve the updater key across repository renames; existing clients trust its public key.
 
 Set these environment variables in your shell or CI secret store:
 
@@ -18,6 +18,8 @@ Set these environment variables in your shell or CI secret store:
 | `APPLE_API_KEY` | Apple API key ID |
 | `APPLE_API_ISSUER` | Apple API issuer UUID |
 | `APPLE_API_KEY_PATH` | Absolute path to the external `.p8` file |
+| `TAURI_SIGNING_PRIVATE_KEY_PATH` | Absolute path to the encrypted Tauri updater key |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password for that updater key |
 
 The development configuration uses ad hoc signing (`-`). It is not a public distribution signature.
 
@@ -35,8 +37,10 @@ Configure these **repository Secrets** once:
 | `APPLE_API_KEY` | Apple API key ID |
 | `APPLE_API_ISSUER` | Apple API issuer UUID |
 | `CC_SIGN_IDENTITY` | Matching Developer ID certificate name or SHA-1 fingerprint |
+| `TAURI_SIGNING_PRIVATE_KEY` | Encrypted Tauri updater signing key contents |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Updater key password |
 
-Import only the intended signing identity, not every identity in a personal keychain. Never commit key files or paste secret values into issues, logs or workflow YAML. The workflow writes credentials under `RUNNER_TEMP`, removes them in an `always()` cleanup step, and uploads only the DMG, checksum manifest and public notarization results.
+Import only the intended signing identity, not every identity in a personal keychain. Never commit key files or paste secret values into issues, logs or workflow YAML. The workflow writes credentials under `RUNNER_TEMP`, removes them in an `always()` cleanup step, and uploads only the DMG, signed update archive, public signature/update manifest, checksums and notarization results.
 
 The base major/minor/patch comes from `package.json`. The workflow adds `github.run_number` to its base patch, sets the app version, and creates the corresponding `v` tag only after all checks succeed. For a base `0.2.0`, runs 1 and 2 release `v0.2.1` and `v0.2.2`. Failed runs can leave gaps. Existing releases are not overwritten; use a new push or manual dispatch to produce a new version.
 
@@ -65,8 +69,11 @@ The release script performs this sequence:
 3. Submit the browser archive to Apple, require `Accepted`, staple and validate its ticket.
 4. Embed the stapled browser archive, build and sign the cleaner with the embedded frontend (`custom-protocol`).
 5. Notarize and staple the cleaner, then require Gatekeeper acceptance for both apps.
-6. Stage the engine's `Browser.app` as the distribution name `CC浏览器.app`. Use `dmgbuild` to package both apps and the Applications shortcut in an 800 × 500 pixel-art Finder window, with fixed icon positions and a drag arrow. Notices remain included as hidden files. No Finder UI automation is needed. Read-only mount the result and verify both embedded app signatures, Gatekeeper acceptance, shortcut and background before signing, notarizing, stapling and assessing the DMG.
-7. Write `releases/SHA256SUMS` and `releases/notarization.json`.
+6. Stage the engine's `Browser.app` as the distribution name `CCBaga-B.app`. Use `dmgbuild` to package both apps and the Applications shortcut in an 800 × 500 pixel-art Finder window, with fixed icon positions and a drag arrow. Notices remain included as hidden files. No Finder UI automation is needed. Read-only mount the result and verify both embedded app signatures, Gatekeeper acceptance, shortcut and background before signing, notarizing, stapling and assessing the DMG.
+7. Archive the final stapled A bundle as `.app.tar.gz`, verify the unpacked app’s signature, ticket and Gatekeeper acceptance, then sign those exact bytes with `tauri signer sign --app-version`. Automatic pre-staple updater artifacts stay disabled so the published signature covers the final bundle. The signing secrets are excluded from Cargo/frontend build environments.
+8. Write standard `latest.json` for `darwin-aarch64`, pointing to this version’s public GitHub Release. Run the official updater against the actual archive on a test-only loopback server; reject tampered bytes and forged versions without installing it. Write checksums for all downloadable installer/update files and the public notarization records.
+
+CCBaga-A uses Tauri’s official updater with HTTPS, an embedded public key and `requireSignedVersion`. The sidebar never installs automatically. A updates in place and restarts; B is updated using the complete dual-app DMG. No authentication token is needed for this public repository. GitHub’s pinned Rust cache stores dependency builds, not signing keychains or release artifacts.
 
 Apple may take several minutes to process each submission. A submission ID alone is not acceptance. The script stops on any failed build, signature, notarization, ticket or Gatekeeper check. Rebuilding or modifying a signed bundle requires a new signature and notarization.
 

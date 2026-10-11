@@ -40,7 +40,7 @@ export function setLocale(next:unknown){
   if(next!=='zh'&&next!=='en')return;
   if(typeof document!=='undefined'){
     document.documentElement.lang=next==='zh'?'zh-CN':'en';
-    document.title=translate(document.body.classList.contains('browser-surface')?'CC浏览器 · 环境核验':'CC清理器',{},next);
+    document.title=translate(document.body.classList.contains('browser-surface')?'CCBaga-B · 环境核验':'CCBaga-A',{},next);
   }
   if(locale===next)return;
   locale=next;listeners.forEach(listener=>listener());

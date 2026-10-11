@@ -52,7 +52,7 @@ pub fn start(
     context: Context,
 ) {
     std::thread::spawn(move || {
-        // 生命周期跟随会话令牌：令牌被替换或清空即退出；宿主运行期间保持可用，供 CC浏览器 每次全新启动打开。
+        // 生命周期跟随会话令牌：令牌被替换或清空即退出；宿主运行期间保持可用，供 CCBaga-B 每次全新启动打开。
         loop {
             if app
                 .state::<Browser>()

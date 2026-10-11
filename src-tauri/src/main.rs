@@ -1,5 +1,5 @@
-// [INPUT]: Tauri 生命周期、发布构建 custom-protocol 与清理、CLI 安装管理、浏览器、地区、系统、VPS 三文件密钥选择与独立界面语言命令。
-// [OUTPUT]: CC清理器窗口、托盘、本地清理和 CLI 卸载/重装、SSH 远程设置入口与随界面语言切换的托盘菜单。
+// [INPUT]: Tauri 生命周期、发布构建 custom-protocol 与清理、CLI 安装管理、浏览器、地区、系统、VPS 三文件密钥选择与独立界面语言命令及官方签名更新/重启插件。
+// [OUTPUT]: CCBaga-A窗口、托盘、本地清理和 CLI 卸载/重装、SSH 远程设置入口与随界面语言切换的托盘菜单。
 // [POS]: 应用编排层；不注册翻译快捷键，不读取翻译设置或 API 密钥。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 // ----- 发布包必须内嵌前端资源，禁止依赖开发服务 -----
@@ -13,6 +13,8 @@ mod progress;
 mod regions;
 mod system;
 mod ui_language;
+#[cfg(test)]
+mod updater_tests;
 mod vps;
 mod vps_keys;
 use tauri::{tray::TrayIconBuilder, Manager};
@@ -44,6 +46,8 @@ async fn copy_result(app: tauri::AppHandle, text: String) -> Result<(), String> 
 }
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)))
         .setup(|app| {
             app.manage(ui_language::UiLanguage::load(app.handle()));
@@ -108,7 +112,7 @@ fn main() {
             vps::vps_open_provider
         ])
         .build(tauri::generate_context!())
-        .expect("无法启动 CC清理器")
+        .expect("无法启动 CCBaga-A")
         .run(|app, event| match event {
             tauri::RunEvent::Reopen { .. } => show(app),
             tauri::RunEvent::Exit => browser::forget_start_url(app),
