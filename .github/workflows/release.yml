@@ -144,6 +144,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # ----- 先固定已验收构建的 tag，分支被后续 push 推进也不改变发布来源 -----
+          if existing_sha="$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null)"; then
+            test "$existing_sha" = "$RELEASE_COMMIT" || { echo "Release tag belongs to another commit" >&2; exit 1; }
+          else
+            gh api --method POST "repos/$GH_REPO/git/refs" \
+              -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$RELEASE_COMMIT" >/dev/null
+          fi
           gh release create "$RELEASE_TAG" releases/*.dmg releases/*.app.tar.gz releases/*.sig releases/latest.json releases/SHA256SUMS releases/notarization.json \
-            --target "$RELEASE_COMMIT" --title "CCBaga $RELEASE_VERSION" --generate-notes --draft
+            --verify-tag --title "CCBaga $RELEASE_VERSION" --generate-notes --draft
           gh release edit "$RELEASE_TAG" --draft=false
