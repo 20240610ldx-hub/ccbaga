@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # [INPUT]: 双应用源代码、外部 Developer ID、Apple API 与更新签名凭据、哈希锁定的 dmgbuild 与 macOS 发布工具。
 # [OUTPUT]: 公证并装订票据的双应用 DMG、带版本签名的主程序更新归档/清单、SHA256SUMS 和实际签名/公证记录。
-# [POS]: 发布唯一顺序入口；浏览器票据先进入宿主资源，Browser.app 暂存为 CCBaga-B.app，签名后不改包内容。
+# [POS]: 发布唯一顺序入口；浏览器票据先进入宿主资源，Browser.app 暂存为 CCBaga-B.app，签名后不改包内容；更新私钥只传给签名子进程。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 from datetime import datetime, timezone
 import tarfile
@@ -31,8 +31,12 @@ def main():
     for key in required:
         if not os.environ.get(key):
             raise SystemExit(f'Missing environment variable: {key}')
-    if not any(os.environ.get(key) for key in SIGNING_KEYS[:2]):
+    signing_env = os.environ.copy()
+    if not any(signing_env.get(key) for key in SIGNING_KEYS[:2]):
         raise SystemExit('Missing updater signing private key (external path or secret content)')
+    # ----- 第三方 DMG 工具的子进程也不继承更新私钥 -----
+    for key in SIGNING_KEYS:
+        os.environ.pop(key, None)
     identity = os.environ['CC_SIGN_IDENTITY']
     if identity == '-':
         raise SystemExit('Public releases require a Developer ID Application identity')
@@ -88,7 +92,7 @@ def main():
         run('codesign', '--verify', '--deep', '--strict', unpacked / HOST.name)
         run('xcrun', 'stapler', 'validate', unpacked / HOST.name)
         run('spctl', '--assess', '--type', 'execute', unpacked / HOST.name)
-        subprocess.run(['bun', 'run', 'tauri', 'signer', 'sign', '--app-version', version, str(update_archive)], cwd=ROOT, check=True, capture_output=True)
+        subprocess.run(['bun', 'run', 'tauri', 'signer', 'sign', '--app-version', version, str(update_archive)], cwd=ROOT, check=True, capture_output=True, env=signing_env)
         signature = Path(str(update_archive) + '.sig')
         endpoint = json.loads((ROOT / 'src-tauri/tauri.conf.json').read_text())['plugins']['updater']['endpoints'][0]
         repository = endpoint.split('/releases/')[0]
