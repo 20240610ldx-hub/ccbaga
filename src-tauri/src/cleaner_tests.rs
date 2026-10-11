@@ -1,6 +1,6 @@
 // [INPUT]: 隔离临时目录、脱敏配置、清理事务与当前用户官方原生 CLI 版本路径。
 // [OUTPUT]: 白名单、文件夹范围、配置保留、组织检索、直接删除、快照保护、真实日志次序与原生版本/可丢弃 Node CLI 进程的识别/终止/隔离验证。
-// [POS]: 仅操作测试数据，进程样本以本机临时签名避免 AMFI 误终止，不访问现有 Claude 数据。
+// [POS]: 仅操作测试数据，进程样本由本机编译并握手确认启动，避免重用 Apple 平台二进制，不访问现有 Claude 数据。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
 #[test]
@@ -199,19 +199,33 @@ fn matches_only_current_user_and_exact_claude_processes() {
 fn ends_only_the_captured_disposable_process() {
     let f = Fixture::new();
     let executable = f.0.join("claude");
-    fs::copy("/bin/sleep", &executable).unwrap();
-    // 复制的 Apple 平台二进制可能被 AMFI 直接终止；测试样本使用本机临时签名。
-    assert!(std::process::Command::new("/usr/bin/codesign")
-        .args(["--force", "--sign", "-"])
+    f.file(
+        "process.c",
+        "#include <stdio.h>\n#include <unistd.h>\nint main(void) { puts(\"READY\"); fflush(stdout); sleep(30); return 0; }\n",
+    );
+    // ----- 自编译样本并等待启动握手；不复制带有平台身份的系统二进制 -----
+    let compilation = std::process::Command::new("/usr/bin/clang")
+        .arg(f.0.join("process.c"))
+        .arg("-o")
         .arg(&executable)
         .output()
-        .unwrap()
-        .status
-        .success());
+        .unwrap();
+    assert!(
+        compilation.status.success(),
+        "临时进程编译失败：{}",
+        String::from_utf8_lossy(&compilation.stderr)
+    );
     let mut child = std::process::Command::new(&executable)
-        .arg("30")
+        .stdout(std::process::Stdio::piped())
         .spawn()
         .unwrap();
+    let mut ready = String::new();
+    std::io::BufRead::read_line(
+        &mut std::io::BufReader::new(child.stdout.take().unwrap()),
+        &mut ready,
+    )
+    .unwrap();
+    assert_eq!(ready, "READY\n", "测试样本必须完成启动后再验证进程边界");
     let target = ClaudeProcess {
         pid: child.id() as i32,
         name: "claude".into(),
