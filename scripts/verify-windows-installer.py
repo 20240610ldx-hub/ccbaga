@@ -83,7 +83,7 @@ def main():
                 subprocess.run(['taskkill','/F','/T','/PID',str(child.pid)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
             if child:child.wait(timeout=20);child=None
             # 仅回收本次唯一安装目录内的 CI 程序，处理浏览器自己的独立生命周期。
-            command='$p=@(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($env:CC_INSTALL_DIR+"\\",[StringComparison]::OrdinalIgnoreCase) }); $p | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; if($p.Count){exit 1}'
+            command="function N([string]$s){ $s=$s.Replace('/','\\'); if($s.StartsWith('\\\\?\\')){return $s.Substring(4)};return $s }; "+'$p=@(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and (N $_.ExecutablePath).StartsWith((N $env:CC_INSTALL_DIR)+"\\",[StringComparison]::OrdinalIgnoreCase) }); $p | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; if($p.Count){exit 1}'
             wait_for(lambda:powershell(command,{'CC_INSTALL_DIR':str(folder)})==0)
         def ready():
             if child.poll() is not None:
@@ -116,7 +116,7 @@ def main():
             wait_for(measured)
             assert child.poll() is None,'Installed host exited before verification'
             # ----- 实际同资料浏览器进程：仅查询 CI 样本路径，不打印命令行 -----
-            query='$p=@(Get-CimInstance Win32_Process -Filter "Name = \'chrome.exe\'" | Where-Object { $_.ExecutablePath -like ($env:CC_INSTALL_DIR+"*") -and $_.CommandLine -like ("*"+$env:CC_PROFILE+"*") }); if($p.Count -eq 0){exit 1}'
+            query="function N([string]$s){ $s=$s.Replace('/','\\'); if($s.StartsWith('\\\\?\\')){return $s.Substring(4)};return $s }; "+'$p=@(Get-CimInstance Win32_Process -Filter "Name = \'chrome.exe\'" | Where-Object { (N $_.ExecutablePath) -like ((N $env:CC_INSTALL_DIR)+"*") -and (N $_.CommandLine) -like ("*"+(N $env:CC_PROFILE)+"*") }); if($p.Count -eq 0){exit 1}'
             wait_for(lambda:powershell(query,{'CC_INSTALL_DIR':str(folder),'CC_PROFILE':str(profile.parent.parent)})==0)
             stop()
             install();payload();assets()
@@ -129,6 +129,8 @@ def main():
         except Exception:
             print('CI startup diagnostic:',runtime_log.read_text(encoding='utf-8',errors='replace')[-8192:].replace('secret-marker','[test-marker]'))
             print('CI start file exists:',(data/'browser/start.url').exists())
+            diagnostic='$p=@(Get-CimInstance Win32_Process -Filter "Name = \'chrome.exe\'"); @($p | ForEach-Object { [pscustomobject]@{image_available=[bool]$_.ExecutablePath;command_available=[bool]$_.CommandLine;image_match=[bool]($_.ExecutablePath -like ($env:CC_INSTALL_DIR+"*"));profile_match=[bool]($_.CommandLine -like ("*"+$env:CC_PROFILE+"*"))} }) | ConvertTo-Json -Compress'
+            powershell(diagnostic,{'CC_INSTALL_DIR':str(folder),'CC_PROFILE':str(profile.parent.parent)},quiet=False)
             print('CI fixed startup stages:',trace.read_text(encoding='utf-8',errors='replace')[-4096:] if trace.exists() else 'no host entry')
             powershell('$p=Get-Process -Id $env:CC_TEST_PID -ErrorAction SilentlyContinue; $p | Select-Object ProcessName,Id,Responding,MainWindowTitle; $p.Modules | ForEach-Object { $_.ModuleName }',{'CC_TEST_PID':str(child.pid if child else 0)},quiet=False)
             raise

@@ -7,6 +7,12 @@ on:
   push:
     branches: [release, review/windows-ready]
   workflow_dispatch:
+    inputs:
+      installer_run:
+        description: 'Owner-only Windows verification: prior installer run ID (review branch only)'
+        type: string
+        required: false
+        default: ''
 permissions:
   contents: read
 env:
@@ -24,10 +30,15 @@ jobs:
           persist-credentials: false
       - name: Compute release version
         id: version
+        env:
+          INSTALLER_RUN: ${{ inputs.installer_run }}
         shell: bash
         run: |
           python3 - <<'PY'
           import json, os
+          replay = os.environ.get('INSTALLER_RUN', '')
+          if replay and (os.environ['GITHUB_REF'] != 'refs/heads/review/windows-ready' or not replay.isdigit()):
+            raise SystemExit('Installer replay is restricted to the owner-only review branch')
           major, minor, patch = map(int, json.load(open('package.json'))['version'].split('.'))
           version = f'{major}.{minor}.{patch + int(os.environ["GITHUB_RUN_NUMBER"])}'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
@@ -207,8 +218,11 @@ jobs:
           retention-days: 14
   windows:
     needs: version
+    permissions:
+      contents: read
+      actions: read
     outputs:
-      installer_ready: ${{ steps.windows_build.outcome == 'success' }}
+      installer_ready: ${{ steps.windows_build.outcome == 'success' || steps.reuse_installer.outcome == 'success' }}
     runs-on: windows-2025
     timeout-minutes: 90
     steps:
@@ -226,6 +240,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Prepare MSVC and native Windows engine
+        if: inputs.installer_run == ''
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -239,24 +254,40 @@ jobs:
           }
           python scripts/fetch-browser.py
           if($LASTEXITCODE){exit $LASTEXITCODE}
-      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c
+      - if: inputs.installer_run == ''
+        uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c
         with:
           workspaces: src-tauri -> target
           shared-key: windows-msvc
           cache-on-failure: true
       - name: Run Windows native, CLI, frontend and Skill checks
+        if: inputs.installer_run == ''
         env:
           CC_RELEASE_VERSION: ${{ needs.version.outputs.version }}
         run: python scripts/release-windows.py check
       - name: Build current-user Windows installer
         id: windows_build
+        if: inputs.installer_run == ''
         env:
           CC_RELEASE_VERSION: ${{ needs.version.outputs.version }}
         run: python scripts/release-windows.py build
+      - name: Load the prior unsigned verification installer
+        id: reuse_installer
+        if: inputs.installer_run != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: windows-${{ inputs.installer_run }}
+          run-id: ${{ inputs.installer_run }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          path: releases
       - name: Verify real installation and browser observations
-        env:
-          CC_RELEASE_VERSION: ${{ needs.version.outputs.version }}
-        run: python scripts/release-windows.py verify
+        shell: pwsh
+        run: |
+          $files=@(Get-ChildItem releases/*-setup.exe)
+          if($files.Count -ne 1){throw 'Expected exactly one verification installer'}
+          python scripts/verify-windows-installer.py $files[0].FullName releases/Windows-engine-manifest.json
+          if($LASTEXITCODE){exit $LASTEXITCODE}
       - name: Sign and verify updater installer
         if: github.ref == 'refs/heads/release'
         env:
@@ -265,7 +296,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: python scripts/sign-windows-update.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        if: always() && steps.windows_build.outcome == 'success'
+        if: always() && (steps.windows_build.outcome == 'success' || steps.reuse_installer.outcome == 'success')
         with:
           name: windows-${{ github.run_id }}
           path: |
