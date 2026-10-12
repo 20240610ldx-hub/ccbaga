@@ -93,7 +93,7 @@ impl Keys {
         #[cfg(windows)]
         {
             if let Ok(user) = std::env::var("USERNAME") {
-                let grant_arg = format!("{user}:(R)");
+                let grant_arg = format!("{user}:(F)");
                 let _ = Command::new("icacls")
                     .arg(&key.0)
                     .args(["/inheritance:r", "/grant:r", &grant_arg])

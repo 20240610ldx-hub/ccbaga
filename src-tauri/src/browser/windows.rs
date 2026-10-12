@@ -3,6 +3,16 @@
 // [POS]: browser 编排的 Windows 平台实现；只接收 URL/文件入口，不执行用户提供的 shell。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 fn register(_: &Path) -> Result<(), String> {
+    if let Ok(app_path) = std::env::current_exe() {
+        let escaped = app_path.to_string_lossy().replace('\'', "''");
+        let script = format!(
+            r#"$k = 'HKCU:\Software\Clients\StartMenuInternet\CCBaga-B'; New-Item -Path $k -Force | Out-Null; Set-ItemProperty -Path $k -Name '(default)' -Value 'CCBaga-B' -Force; New-Item -Path "$k\shell\open\command" -Force | Out-Null; Set-ItemProperty -Path "$k\shell\open\command" -Name '(default)' -Value '"{}" --browser "%1"' -Force; New-Item -Path 'HKCU:\Software\RegisteredApplications' -Force | Out-Null; Set-ItemProperty -Path 'HKCU:\Software\RegisteredApplications' -Name 'CCBaga-B' -Value 'Software\Clients\StartMenuInternet\CCBaga-B\Capabilities' -Force"#,
+            escaped
+        );
+        let _ = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .output();
+    }
     Ok(())
 }
 
@@ -129,9 +139,7 @@ fn default_read() -> Result<DefaultBrowser, String> {
 pub async fn browser_set_default(app: tauri::AppHandle) -> Result<DefaultBrowser, String> {
     run(move || {
         prepare_engine(&app)?;
-        let _ = Command::new("cmd")
-            .args(["/c", "start", "", "ms-settings:defaultapps"])
-            .spawn();
+        let _ = crate::windows::open_external_url("ms-settings:defaultapps");
         default_read()
     })
     .await

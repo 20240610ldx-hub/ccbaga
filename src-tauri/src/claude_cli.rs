@@ -139,13 +139,18 @@ fn command(action: &str) -> Result<Command, String> {
         let user_dir = std::env::var_os("USERPROFILE")
             .or_else(|| std::env::var_os("HOME"))
             .ok_or("无法定位用户目录。")?;
-        let root = std::fs::canonicalize(PathBuf::from(user_dir))
+        let root = dunce::canonicalize(PathBuf::from(user_dir))
             .map_err(|_| "无法读取用户目录。")?;
         let mut script_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../scripts/claude-cli.ps1");
         if !script_path.is_file() {
             script_path = PathBuf::from("scripts/claude-cli.ps1");
         }
-        let mut command = Command::new("pwsh");
+        let shell = if Command::new("pwsh").arg("-v").output().is_ok() {
+            "pwsh"
+        } else {
+            "powershell"
+        };
+        let mut command = Command::new(shell);
         command
             .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
             .arg(script_path)

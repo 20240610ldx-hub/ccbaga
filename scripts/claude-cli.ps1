@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$action = "read"
 )
 $ErrorActionPreference = "Stop"

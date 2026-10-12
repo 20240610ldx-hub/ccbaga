@@ -446,8 +446,13 @@ pub(super) fn org_files(root: &Path, org: &str) -> Result<(Vec<PathBuf>, bool), 
         ".claude/sessions",
         "Library/Application Support/Claude/local_sessions",
         "Library/Application Support/Claude/conversations",
+        "AppData/Roaming/Claude/local_sessions",
+        "AppData/Roaming/Claude/conversations",
     ] {
         if (cfg!(target_os = "linux") || cfg!(target_os = "windows")) && relative.starts_with("Library/") {
+            continue;
+        }
+        if !cfg!(target_os = "windows") && relative.starts_with("AppData/") {
             continue;
         }
         let p = root.join(relative);

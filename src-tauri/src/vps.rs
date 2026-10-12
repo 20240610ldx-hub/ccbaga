@@ -61,11 +61,9 @@ pub async fn vps_open_provider(provider: String) -> Result<(), String> {
     let url = provider_url(&provider)?;
     tauri::async_runtime::spawn_blocking(move || {
         #[cfg(target_os = "windows")]
-        let status = Command::new("cmd")
-            .args(["/c", "start", "", &url])
-            .status()
-            .map_err(|_| "无法打开供应商网站。")?;
+        return crate::windows::open_external_url(&url);
         #[cfg(not(target_os = "windows"))]
+        {
         let status = Command::new(if cfg!(target_os = "linux") {
             "xdg-open"
         } else {
@@ -78,6 +76,7 @@ pub async fn vps_open_provider(provider: String) -> Result<(), String> {
             Ok(())
         } else {
             Err("无法打开供应商网站。".into())
+        }
         }
     })
     .await

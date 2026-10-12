@@ -1,5 +1,5 @@
-// [INPUT]: Windows 原生凭据、时区、注册表系统设置、Toolhelp32 进程与系统工具。
-// [OUTPUT]: Windows 平台 JSON 桥；支持时区/语言/区域/定位状态查询与修改、SSH 密钥对话框、剪贴板及 Claude 进程收敛。
+// [INPUT]: Windows 原生凭据、时区、注册表系统设置、Toolhelp32/PEB 进程与系统工具。
+// [OUTPUT]: 零子进程开销的 Windows 平台 JSON 桥；支持时区/语言/区域/定位状态查询与修改、SSH 密钥对话框、Win32 剪贴板及 Claude 进程精准收敛。
 // [POS]: 仅原生识别与用户触发的系统操作；不含网络客户端，不向 UI 输出进程参数或代理秘密。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use serde_json::{json, Value};
@@ -7,6 +7,71 @@ use std::{
     ffi::{c_char, CStr, CString},
     process::{Command, Stdio},
 };
+use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+use windows_sys::Win32::Security::Credentials::{
+    CredDeleteW, CredEnumerateW, CredFree, CREDENTIALW, CRED_TYPE_GENERIC,
+};
+use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+};
+use windows_sys::Win32::System::Threading::{
+    OpenProcess, TerminateProcess, PROCESS_QUERY_INFORMATION, PROCESS_TERMINATE, PROCESS_VM_READ,
+};
+use windows_sys::Win32::UI::Shell::ShellExecuteW;
+use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+#[repr(C)]
+struct ProcessBasicInformation {
+    exit_status: i32,
+    peb_base_address: usize,
+    affinity_mask: usize,
+    base_priority: i32,
+    unique_process_id: usize,
+    inherited_from_unique_process_id: usize,
+}
+
+#[repr(C)]
+struct UnicodeString {
+    length: u16,
+    maximum_length: u16,
+    buffer: *mut u16,
+}
+
+#[link(name = "ntdll")]
+extern "system" {
+    fn NtQueryInformationProcess(
+        process_handle: HANDLE,
+        process_information_class: u32,
+        process_information: *mut std::ffi::c_void,
+        process_information_length: u32,
+        return_length: *mut u32,
+    ) -> i32;
+}
+
+#[link(name = "kernel32")]
+extern "system" {
+    fn ReadProcessMemory(
+        hProcess: HANDLE,
+        lpBaseAddress: *const std::ffi::c_void,
+        lpBuffer: *mut std::ffi::c_void,
+        nSize: usize,
+        lpNumberOfBytesRead: *mut usize,
+    ) -> i32;
+    fn GlobalAlloc(uFlags: u32, dwBytes: usize) -> HANDLE;
+    fn GlobalLock(hMem: HANDLE) -> *mut std::ffi::c_void;
+    fn GlobalUnlock(hMem: HANDLE) -> i32;
+}
+
+#[link(name = "user32")]
+extern "system" {
+    fn OpenClipboard(hWndNewOwner: HANDLE) -> i32;
+    fn CloseClipboard() -> i32;
+    fn EmptyClipboard() -> i32;
+    fn SetClipboardData(uFormat: u32, hMem: HANDLE) -> HANDLE;
+}
+
+const CF_UNICODETEXT: u32 = 13;
+const GMEM_MOVEABLE: u32 = 0x0002;
 
 fn response(value: Result<Value, String>) -> *mut c_char {
     let value = value.unwrap_or_else(|error| json!({"error": error}));
@@ -38,24 +103,53 @@ fn output(program: &str, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_owned())
 }
 
+pub fn open_external_url(url: &str) -> Result<(), String> {
+    let verb: Vec<u16> = "open".encode_utf16().chain(Some(0)).collect();
+    let file: Vec<u16> = url.encode_utf16().chain(Some(0)).collect();
+    unsafe {
+        let inst = ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            file.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        );
+        if (inst as usize) > 32 {
+            Ok(())
+        } else {
+            Err("无法打开目标地址。".into())
+        }
+    }
+}
+
 pub unsafe fn rf_copy(text: *const c_char) -> Result<(), String> {
     let val = input(text);
-    let mut child = Command::new("powershell")
-        .args(["-NoProfile", "-Command", "$input | Set-Clipboard"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|_| "无法启动剪贴板工具。")?;
-    if let Some(mut stdin) = child.stdin.take() {
-        use std::io::Write;
-        let _ = stdin.write_all(val.as_bytes());
+    let wide: Vec<u16> = val.encode_utf16().chain(Some(0)).collect();
+    let bytes = wide.len() * std::mem::size_of::<u16>();
+
+    let h_mem = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if h_mem.is_null() {
+        return Err("无法分配剪贴板内存。".into());
     }
-    let status = child.wait().map_err(|_| "剪贴板写入失败。")?;
-    if status.success() {
-        Ok(())
-    } else {
+    let ptr = GlobalLock(h_mem);
+    if ptr.is_null() {
+        return Err("无法锁定剪贴板内存。".into());
+    }
+    std::ptr::copy_nonoverlapping(wide.as_ptr() as *const u8, ptr as *mut u8, bytes);
+    GlobalUnlock(h_mem);
+
+    if OpenClipboard(std::ptr::null_mut()) == 0 {
+        return Err("无法打开系统剪贴板。".into());
+    }
+    EmptyClipboard();
+    let res = SetClipboardData(CF_UNICODETEXT, h_mem);
+    CloseClipboard();
+
+    if res.is_null() {
         Err("剪贴板写入失败。".into())
+    } else {
+        Ok(())
     }
 }
 
@@ -73,8 +167,13 @@ pub unsafe fn rf_choose_ssh_keys(extension: *const c_char) -> *mut c_char {
     let script = format!(
         "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.OpenFileDialog; $d.Multiselect = $true; $d.Filter = '{filter}'; if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.FileNames | ForEach-Object {{ Write-Output $_ }} }}"
     );
-    let out = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &script])
+    let shell = if Command::new("pwsh").arg("-v").output().is_ok() {
+        "pwsh"
+    } else {
+        "powershell"
+    };
+    let out = Command::new(shell)
+        .args(["-NoProfile", "-Sta", "-Command", &script])
         .output();
     response(match out {
         Ok(out) if out.status.success() => {
@@ -90,24 +189,34 @@ pub unsafe fn rf_choose_ssh_keys(extension: *const c_char) -> *mut c_char {
 }
 
 pub unsafe fn rf_credentials_list() -> *mut c_char {
-    // 检查 Windows 凭据管理器中与 Claude 相关的凭据
-    let out = Command::new("cmdkey").arg("/list").output();
+    let mut count: u32 = 0;
+    let mut creds: *mut *mut CREDENTIALW = std::ptr::null_mut();
     let mut items = Vec::new();
-    if let Ok(out) = out {
-        let text = String::from_utf8_lossy(&out.stdout);
-        for line in text.lines() {
-            let line = line.trim();
-            if let Some(target) = line.strip_prefix("Target:") {
-                let target = target.trim();
-                let lower = target.to_lowercase();
-                if lower.contains("claude") || lower.contains("anthropic") {
-                    items.push(json!({
-                        "service": target,
-                        "reference": target,
-                    }));
-                }
+
+    if CredEnumerateW(std::ptr::null(), 0, &mut count, &mut creds) != 0 && !creds.is_null() {
+        let slice = std::slice::from_raw_parts(creds, count as usize);
+        for &cred_ptr in slice {
+            if cred_ptr.is_null() {
+                continue;
+            }
+            let target_w = (*cred_ptr).TargetName;
+            if target_w.is_null() {
+                continue;
+            }
+            let mut len = 0;
+            while *target_w.add(len) != 0 {
+                len += 1;
+            }
+            let target = String::from_utf16_lossy(std::slice::from_raw_parts(target_w, len));
+            let lower = target.to_lowercase();
+            if lower.contains("claude") || lower.contains("anthropic") {
+                items.push(json!({
+                    "service": target,
+                    "reference": target,
+                }));
             }
         }
+        CredFree(creds as *mut std::ffi::c_void);
     }
     response(Ok(json!({"items": items})))
 }
@@ -117,12 +226,12 @@ pub unsafe fn rf_credentials_remove(reference: *const c_char) -> *mut c_char {
     if target.is_empty() {
         return response(Err("无效的凭据目标。".into()));
     }
-    let status = Command::new("cmdkey")
-        .arg(format!("/delete:{target}"))
-        .status();
-    match status {
-        Ok(s) if s.success() => response(Ok(json!({"ok": true}))),
-        _ => response(Err("凭据删除失败或不存在。".into())),
+    let target_w: Vec<u16> = target.encode_utf16().chain(Some(0)).collect();
+    let success = CredDeleteW(target_w.as_ptr(), CRED_TYPE_GENERIC, 0);
+    if success != 0 {
+        response(Ok(json!({"ok": true})))
+    } else {
+        response(Err("凭据删除失败或不存在。".into()))
     }
 }
 
@@ -137,53 +246,62 @@ pub fn open_settings(pane: &str) -> Result<Value, String> {
         "location" => "ms-settings:privacy-location",
         _ => return Err("无效的系统设置入口。".into()),
     };
-    Command::new("cmd")
-        .args(["/c", "start", "", uri])
-        .spawn()
-        .map_err(|_| "无法打开 Windows 设置。")?;
+    open_external_url(uri)?;
     Ok(json!({"ok": true}))
 }
 
-// Windows 时区转换表与标准时区目录
+// 详尽的 Windows IANA 双向全量时区映射表
+static TZ_MAP: &[(&str, &str)] = &[
+    ("America/Los_Angeles", "Pacific Standard Time"),
+    ("America/Vancouver", "Pacific Standard Time"),
+    ("America/Denver", "Mountain Standard Time"),
+    ("America/Phoenix", "US Mountain Standard Time"),
+    ("America/Chicago", "Central Standard Time"),
+    ("America/New_York", "Eastern Standard Time"),
+    ("America/Toronto", "Eastern Standard Time"),
+    ("America/Anchorage", "Alaskan Standard Time"),
+    ("Pacific/Honolulu", "Hawaiian Standard Time"),
+    ("America/Sao_Paulo", "E. South America Standard Time"),
+    ("America/Buenos_Aires", "Argentina Standard Time"),
+    ("Europe/London", "GMT Standard Time"),
+    ("Europe/Dublin", "GMT Standard Time"),
+    ("Europe/Paris", "Romance Standard Time"),
+    ("Europe/Berlin", "W. Europe Standard Time"),
+    ("Europe/Rome", "W. Europe Standard Time"),
+    ("Europe/Madrid", "Romance Standard Time"),
+    ("Europe/Amsterdam", "W. Europe Standard Time"),
+    ("Europe/Athens", "GTB Standard Time"),
+    ("Europe/Helsinki", "FLE Standard Time"),
+    ("Europe/Moscow", "Russian Standard Time"),
+    ("Asia/Tokyo", "Tokyo Standard Time"),
+    ("Asia/Seoul", "Korea Standard Time"),
+    ("Asia/Singapore", "Singapore Standard Time"),
+    ("Asia/Taipei", "Taipei Standard Time"),
+    ("Asia/Hong_Kong", "China Standard Time"),
+    ("Asia/Shanghai", "China Standard Time"),
+    ("Asia/Bangkok", "SE Asia Standard Time"),
+    ("Asia/Jakarta", "SE Asia Standard Time"),
+    ("Asia/Kolkata", "India Standard Time"),
+    ("Asia/Dubai", "Arabian Standard Time"),
+    ("Australia/Sydney", "AUS Eastern Standard Time"),
+    ("Australia/Melbourne", "AUS Eastern Standard Time"),
+    ("Pacific/Auckland", "New Zealand Standard Time"),
+    ("UTC", "UTC"),
+    ("Etc/UTC", "UTC"),
+];
+
 pub fn iana_to_windows_tz(iana: &str) -> Option<&'static str> {
-    match iana {
-        "America/Los_Angeles" => Some("Pacific Standard Time"),
-        "America/New_York" | "America/Toronto" => Some("Eastern Standard Time"),
-        "Europe/London" => Some("GMT Standard Time"),
-        "Europe/Paris" => Some("Romance Standard Time"),
-        "Europe/Berlin" => Some("W. Europe Standard Time"),
-        "Asia/Tokyo" => Some("Tokyo Standard Time"),
-        "Asia/Seoul" => Some("Korea Standard Time"),
-        "Asia/Singapore" => Some("Singapore Standard Time"),
-        "Asia/Taipei" => Some("Taipei Standard Time"),
-        "Asia/Hong_Kong" | "Asia/Shanghai" => Some("China Standard Time"),
-        "Australia/Sydney" => Some("AUS Eastern Standard Time"),
-        "UTC" | "Etc/UTC" => Some("UTC"),
-        _ => None,
-    }
+    TZ_MAP.iter().find(|(i, _)| *i == iana).map(|(_, w)| *w)
 }
 
-pub fn windows_to_iana_tz(win: &str) -> &'static str {
-    match win.trim() {
-        "Pacific Standard Time" => "America/Los_Angeles",
-        "Eastern Standard Time" => "America/New_York",
-        "GMT Standard Time" => "Europe/London",
-        "Romance Standard Time" => "Europe/Paris",
-        "W. Europe Standard Time" => "Europe/Berlin",
-        "Tokyo Standard Time" => "Asia/Tokyo",
-        "Korea Standard Time" => "Asia/Seoul",
-        "Singapore Standard Time" => "Asia/Singapore",
-        "Taipei Standard Time" => "Asia/Taipei",
-        "China Standard Time" => "Asia/Shanghai",
-        "AUS Eastern Standard Time" => "Australia/Sydney",
-        "UTC" => "UTC",
-        _ => "Asia/Shanghai",
-    }
+pub fn windows_to_iana_tz(win: &str) -> Option<&'static str> {
+    let win_clean = win.trim();
+    TZ_MAP.iter().find(|(_, w)| w.eq_ignore_ascii_case(win_clean)).map(|(i, _)| *i)
 }
 
 pub fn timezone() -> String {
     let out = output("tzutil", &["/g"]).unwrap_or_else(|_| "China Standard Time".into());
-    windows_to_iana_tz(&out).to_string()
+    windows_to_iana_tz(&out).unwrap_or("Asia/Shanghai").to_string()
 }
 
 pub fn raw_windows_timezone() -> String {
@@ -191,23 +309,10 @@ pub fn raw_windows_timezone() -> String {
 }
 
 pub fn timezones() -> Vec<String> {
-    let mut list = vec![
-        "America/Los_Angeles".into(),
-        "America/New_York".into(),
-        "America/Toronto".into(),
-        "Europe/London".into(),
-        "Europe/Paris".into(),
-        "Europe/Berlin".into(),
-        "Asia/Tokyo".into(),
-        "Asia/Seoul".into(),
-        "Asia/Singapore".into(),
-        "Asia/Taipei".into(),
-        "Asia/Hong_Kong".into(),
-        "Asia/Shanghai".into(),
-        "Australia/Sydney".into(),
-        "UTC".into(),
-        "Etc/UTC".into(),
-    ];
+    let mut list = Vec::new();
+    for (iana, _) in TZ_MAP {
+        list.push((*iana).to_string());
+    }
     if let Ok(out) = output("tzutil", &["/l"]) {
         for line in out.lines() {
             let line = line.trim();
@@ -250,7 +355,7 @@ fn location_enabled() -> Option<bool> {
         &[
             "-NoProfile",
             "-Command",
-            r"(Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location' -Name Value -ErrorAction SilentlyContinue).Value",
+            r"(Get-ItemProperty -Path 'HKCU:SoftwareMicrosoftWindowsCurrentVersionCapabilityAccessManagerConsentStorelocation' -Name Value -ErrorAction SilentlyContinue).Value",
         ],
     ).ok()?;
     match out.trim() {
@@ -367,7 +472,7 @@ pub unsafe fn rf_system_location() -> *mut c_char {
             .args([
                 "-NoProfile",
                 "-Command",
-                r"Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location' -Name Value -Value Deny -ErrorAction SilentlyContinue",
+                r"Set-ItemProperty -Path 'HKCU:SoftwareMicrosoftWindowsCurrentVersionCapabilityAccessManagerConsentStorelocation' -Name Value -Value Deny -ErrorAction SilentlyContinue",
             ])
             .output();
         if location_enabled() == Some(false) {
@@ -382,47 +487,135 @@ pub unsafe fn rf_system_location() -> *mut c_char {
     })())
 }
 
+// 轻量级命令行读取（通过 PEB 结构）
+fn read_process_command_line(handle: HANDLE) -> Option<String> {
+    unsafe {
+        let mut pbi = std::mem::zeroed::<ProcessBasicInformation>();
+        let mut ret_len = 0;
+        if NtQueryInformationProcess(
+            handle,
+            0,
+            &mut pbi as *mut _ as *mut _,
+            std::mem::size_of::<ProcessBasicInformation>() as u32,
+            &mut ret_len,
+        ) != 0 {
+            return None;
+        }
+        if pbi.peb_base_address == 0 {
+            return None;
+        }
+        // 64 位 Windows 上，PEB + 0x20 为 ProcessParameters 指针
+        let mut params_ptr: usize = 0;
+        let mut read = 0;
+        if ReadProcessMemory(
+            handle,
+            (pbi.peb_base_address + 0x20) as *const _,
+            &mut params_ptr as *mut _ as *mut _,
+            std::mem::size_of::<usize>(),
+            &mut read,
+        ) == 0
+            || params_ptr == 0
+        {
+            return None;
+        }
+        // RTL_USER_PROCESS_PARAMETERS 中，CommandLine (UNICODE_STRING) 偏移为 0x70
+        let mut ustr = std::mem::zeroed::<UnicodeString>();
+        if ReadProcessMemory(
+            handle,
+            (params_ptr + 0x70) as *const _,
+            &mut ustr as *mut _ as *mut _,
+            std::mem::size_of::<UnicodeString>(),
+            &mut read,
+        ) == 0 {
+            return None;
+        }
+        if ustr.length == 0 || ustr.buffer.is_null() {
+            return None;
+        }
+        let len = (ustr.length / 2) as usize;
+        let mut buf = vec![0u16; len];
+        if ReadProcessMemory(
+            handle,
+            ustr.buffer as *const _,
+            buf.as_mut_ptr() as *mut _,
+            ustr.length as usize,
+            &mut read,
+        ) == 0 {
+            return None;
+        }
+        Some(String::from_utf16_lossy(&buf))
+    }
+}
+
 pub fn claude_processes() -> Result<Vec<crate::cleaner::ClaudeProcess>, String> {
     let mut result = Vec::new();
-    let script = r#"Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'Claude.exe' -or $_.Name -eq 'claude.exe' -or (($_.Name -eq 'node.exe' -or $_.Name -eq 'bun.exe') -and $_.CommandLine -like '*@anthropic-ai*claude-code*') } | Select-Object ProcessId, Name, ExecutablePath"#;
-    let out = Command::new("powershell")
-        .args(["-NoProfile", "-Command", script])
-        .output();
-    if let Ok(out) = out {
-        let text = String::from_utf8_lossy(&out.stdout);
-        for line in text.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with("ProcessId") || line.starts_with("---") {
-                continue;
-            }
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.is_empty() {
-                continue;
-            }
-            if let Ok(pid) = parts[0].parse::<i32>() {
-                let name = if parts.len() > 1 { parts[1] } else { "claude.exe" };
-                let display_name = if name.eq_ignore_ascii_case("Claude.exe") {
-                    "Claude Desktop".to_string()
-                } else {
-                    "Claude Code".to_string()
-                };
-                let exe_path = if parts.len() > 2 {
-                    parts[2..].join(" ")
-                } else {
-                    name.to_string()
-                };
-                result.push(crate::cleaner::ClaudeProcess {
-                    pid,
-                    name: display_name,
-                    executable: exe_path,
-                });
+    unsafe {
+        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snap == INVALID_HANDLE_VALUE {
+            return Ok(result);
+        }
+        let mut entry = std::mem::zeroed::<PROCESSENTRY32W>();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        if Process32FirstW(snap, &mut entry) != 0 {
+            loop {
+                let name = String::from_utf16_lossy(&entry.szExeFile);
+                let name = name.trim_matches(|c: char| c as u32 == 0).trim();
+                let lower = name.to_lowercase();
+                let pid = entry.th32ProcessID as i32;
+
+                if lower == "claude.exe" {
+                    result.push(crate::cleaner::ClaudeProcess {
+                        pid,
+                        name: if name == "Claude.exe" {
+                            "Claude Desktop".into()
+                        } else {
+                            "Claude Code".into()
+                        },
+                        executable: name.to_string(),
+                    });
+                } else if lower == "node.exe" || lower == "bun.exe" {
+                    let h_proc = OpenProcess(
+                        PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+                        0,
+                        entry.th32ProcessID,
+                    );
+                    if !h_proc.is_null() {
+                        if let Some(cmd) = read_process_command_line(h_proc) {
+                            if cmd.contains("@anthropic-ai/claude-code")
+                                || cmd.contains(r"@anthropic-ai\claude-code")
+                            {
+                                result.push(crate::cleaner::ClaudeProcess {
+                                    pid,
+                                    name: "Claude Code".into(),
+                                    executable: name.to_string(),
+                                });
+                            }
+                        }
+                        CloseHandle(h_proc);
+                    }
+                }
+
+                if Process32NextW(snap, &mut entry) == 0 {
+                    break;
+                }
             }
         }
+        CloseHandle(snap);
     }
     Ok(result)
 }
 
 pub fn kill_process(pid: i32) -> Result<(), String> {
+    unsafe {
+        let handle = OpenProcess(PROCESS_TERMINATE, 0, pid as u32);
+        if !handle.is_null() {
+            let res = TerminateProcess(handle, 1);
+            CloseHandle(handle);
+            if res != 0 {
+                return Ok(());
+            }
+        }
+    }
     let status = Command::new("taskkill")
         .args(["/F", "/T", "/PID", &pid.to_string()])
         .status();
@@ -435,26 +628,75 @@ pub fn kill_process(pid: i32) -> Result<(), String> {
 pub unsafe fn rf_browser_running(profile: *const c_char) -> *mut c_char {
     let profile_str = input(profile);
     let target = format!("--user-data-dir={profile_str}");
-    let script = format!(
-        r#"Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" | Where-Object {{ $_.CommandLine -like '*{target}*' }} | Measure-Object | Select-Object -ExpandProperty Count"#
-    );
-    let count: i32 = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &script])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse().ok())
-        .unwrap_or(0);
-    response(Ok(json!({"running": count > 0})))
+    let mut is_running = false;
+    let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if snap != INVALID_HANDLE_VALUE {
+        let mut entry = std::mem::zeroed::<PROCESSENTRY32W>();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        if Process32FirstW(snap, &mut entry) != 0 {
+            loop {
+                let name = String::from_utf16_lossy(&entry.szExeFile);
+                let name = name.trim_matches(|c: char| c as u32 == 0).trim().to_lowercase();
+                if name == "chrome.exe" {
+                    let h_proc = OpenProcess(
+                        PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+                        0,
+                        entry.th32ProcessID,
+                    );
+                    if !h_proc.is_null() {
+                        if let Some(cmd) = read_process_command_line(h_proc) {
+                            if cmd.contains(&target) {
+                                is_running = true;
+                                CloseHandle(h_proc);
+                                break;
+                            }
+                        }
+                        CloseHandle(h_proc);
+                    }
+                }
+                if Process32NextW(snap, &mut entry) == 0 {
+                    break;
+                }
+            }
+        }
+        CloseHandle(snap);
+    }
+    response(Ok(json!({"running": is_running})))
 }
 
 pub unsafe fn rf_browser_quit(profile: *const c_char) -> *mut c_char {
     let profile_str = input(profile);
     let target = format!("--user-data-dir={profile_str}");
-    let script = format!(
-        r#"Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" | Where-Object {{ $_.CommandLine -like '*{target}*' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}"#
-    );
-    let _ = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &script])
-        .output();
+    let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if snap != INVALID_HANDLE_VALUE {
+        let mut entry = std::mem::zeroed::<PROCESSENTRY32W>();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        if Process32FirstW(snap, &mut entry) != 0 {
+            loop {
+                let name = String::from_utf16_lossy(&entry.szExeFile);
+                let name = name.trim_matches(|c: char| c as u32 == 0).trim().to_lowercase();
+                if name == "chrome.exe" {
+                    let h_proc = OpenProcess(
+                        PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE,
+                        0,
+                        entry.th32ProcessID,
+                    );
+                    if !h_proc.is_null() {
+                        if let Some(cmd) = read_process_command_line(h_proc) {
+                            if cmd.contains(&target) {
+                                let _ = TerminateProcess(h_proc, 1);
+                            }
+                        }
+                        CloseHandle(h_proc);
+                    }
+                }
+                if Process32NextW(snap, &mut entry) == 0 {
+                    break;
+                }
+            }
+        }
+        CloseHandle(snap);
+    }
     response(Ok(json!({"ok": true})))
 }
+
