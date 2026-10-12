@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # [INPUT]: SSH 标准输入注入的家宽 SOCKS5 与 VPS 参数；Debian 12/13 root 环境。
 # [OUTPUT]: Xray/Reality、家宽出口、防火墙、SSH 加固与通过自检的 Clash 订阅。
-# [POS]: 随 CCBaga-A编译的部署脚本，源自用户 Downloads/setup-vps.sh；身份保存在远端 root 状态文件。
+# [POS]: 仓库 Skill 的远端部署层；仅通过已授权 SSH 使用，身份保存在远端 root 状态文件。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 # =============================================================================
 # setup-vps.sh — Reproduce the "DMIT LAX" proxy node build on a fresh Debian 12/13
@@ -115,7 +115,7 @@ retry() {
 # shellcheck disable=SC1091
 [[ -r /etc/os-release ]] && . /etc/os-release
 [[ "${ID:-}" == "debian" && ( "${VERSION_ID:-}" == "12" || "${VERSION_ID:-}" == "13" ) ]] \
-  || warn "Tested on Debian 12/13 only (detected: ${PRETTY_NAME:-unknown}). Continuing."
+  || die "Debian 12/13 required (detected: ${PRETTY_NAME:-unknown})."
 
 for v in HOME_HOST HOME_PORT HOME_USER HOME_PASS; do
   [[ -n "${!v}" ]] || die "Required variable $v is not set. See header of this script."
@@ -448,7 +448,7 @@ ipv6: false
 tun: {enable: true, stack: mixed, auto-route: true, auto-detect-interface: true, dns-hijack: [any:53]}
 dns: {enable: true, ipv6: false, enhanced-mode: fake-ip, fake-ip-range: 198.18.0.1/16, respect-rules: true, default-nameserver: [223.5.5.5, 223.6.6.6], proxy-server-nameserver: [223.5.5.5, 223.6.6.6], nameserver: ["https://1.1.1.1/dns-query#PROXY", "https://8.8.8.8/dns-query#PROXY"], nameserver-policy: {"+.anthropic.com,+.claude.ai,+.claude.com,+.openai.com,+.chatgpt.com": ["https://1.1.1.1/dns-query#AI"], "${CN_DNS_POLICY}": ["https://223.5.5.5/dns-query", 223.6.6.6]}}
 proxies:
-  - {name: ${NODE_NAME}, type: vless, server: "${SERVER_ADDR}", port: ${XRAY_PORT}, uuid: ${XRAY_UUID}, network: tcp, udp: true, tls: true, flow: xtls-rprx-vision, servername: ${REALITY_DEST}, client-fingerprint: chrome, reality-opts: {public-key: ${XRAY_PUBLIC_KEY}, short-id: ${XRAY_SHORT_ID}}}
+  - {name: ${NODE_NAME}, type: vless, server: "${SERVER_ADDR}", port: ${XRAY_PORT}, uuid: ${XRAY_UUID}, network: tcp, udp: false, tls: true, flow: xtls-rprx-vision, servername: ${REALITY_DEST}, client-fingerprint: chrome, reality-opts: {public-key: ${XRAY_PUBLIC_KEY}, short-id: ${XRAY_SHORT_ID}}}
 proxy-groups:
   # AI traffic: node or REJECT only - never DIRECT
   - {name: AI, type: select, proxies: [${NODE_NAME}, REJECT]}

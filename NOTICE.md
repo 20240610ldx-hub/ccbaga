@@ -1,5 +1,5 @@
 <!--
-[INPUT]: 原创项目 MIT 授权、现有 Chromium 许可与本地 UI 来源记录。
+[INPUT]: 原创项目 MIT 授权、现有 Chromium 许可与本地 UI 与 AI SVG 来源记录。
 [OUTPUT]: 英文第三方归属和分发边界；未发现的许可不推断为 MIT。
 [POS]: LICENSE 的第三方补充说明，供 README 和发布包引用。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -17,6 +17,10 @@ The browser bundle contains Chromium and additional dependencies with their own 
 ## Vendored interface
 
 `vendor/cromma-ui` is a local copy of Cromma UI, including its Pika icon subset. The copied tree does not currently contain an independent upstream license notice. Confirm its redistribution terms and restore any required notices before publishing these components. The top-level MIT declaration is not evidence of permission from other copyright holders.
+
+## AI tool icons
+
+The small Claude, OpenAI and Cursor SVG icons in `assets/ai-icons` come from [SVGL](https://github.com/pheralb/svgl). Its MIT copyright and permission notice are retained in [LICENSE.svgl.txt](assets/ai-icons/LICENSE.svgl.txt). Brand names and marks belong to their respective owners; these icons identify supported coding tools and do not imply endorsement.
 
 ## Application dependencies
 

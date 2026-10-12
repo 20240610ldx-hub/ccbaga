@@ -111,42 +111,6 @@ pub unsafe fn rf_copy(text: *const c_char) -> Result<(), String> {
     }
     Ok(())
 }
-pub unsafe fn rf_choose_ssh_keys(extension: *const c_char) -> *mut c_char {
-    let extension = input(extension);
-    if !["all", "pem", "ppk", "pub"].contains(&extension) {
-        return response(Err("Invalid key type.".into()));
-    }
-    let result = if exists("zenity") {
-        Command::new("zenity")
-            .args([
-                "--file-selection",
-                "--multiple",
-                "--separator=\n",
-                "--title=Select SSH key files",
-            ])
-            .output()
-    } else {
-        Command::new("kdialog")
-            .args([
-                "--getopenfilename",
-                ".",
-                "*.pem *.ppk *.pub",
-                "--multiple",
-                "--separate-output",
-            ])
-            .output()
-    };
-    response(match result {
-        Ok(out) if out.status.success() => Ok(json!(String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .filter(|p| !p.is_empty())
-            .collect::<Vec<_>>())),
-        Ok(out) if out.status.code() == Some(1) => Ok(json!([])),
-        _ => Err(
-            "Install zenity or kdialog to select SSH keys, or drag the files into the app.".into(),
-        ),
-    })
-}
 pub unsafe fn rf_credentials_list() -> *mut c_char {
     response(Err("Linux keyring cleanup is unavailable; file credentials are scanned, but Secret Service/KWallet entries must be managed separately.".into()))
 }

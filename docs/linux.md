@@ -16,14 +16,14 @@ Ubuntu packages and AppImages are built on Ubuntu 24.04; older glibc distributio
 
 ## Dependencies
 
-Use stable Rust, Bun, Python 3.12+ (safe tar extraction), a C compiler, pkg-config, and the [Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux). Runtime operations also use zsh, OpenSSH, curl, and xdg-utils. File selection uses zenity or kdialog; dragging key files works without either dialog utility. Clipboard copying uses wl-clipboard on Wayland and xclip on X11. A tray indicator requires desktop AppIndicator support; closing the window hides it, and launching A again restores it.
+Use stable Rust, Bun, Python 3.12+ (safe tar extraction), a C compiler, pkg-config, and the [Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux). Runtime operations use zsh, curl and xdg-utils. OpenSSH is needed for the separately installed Network Skill and its offline tests; the app has no SSH file chooser or deployment command. Clipboard copying uses wl-clipboard on Wayland and xclip on X11. A tray indicator requires desktop AppIndicator support; closing the window hides it, and launching A again restores it.
 
 Ubuntu 24.04 / Debian 13:
 
 ```sh
 sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev \
   libayatana-appindicator3-dev librsvg2-dev patchelf python3 curl zsh \
-  openssh-client xdg-utils zenity wl-clipboard xclip libnss3 libnspr4 \
+  openssh-client xdg-utils wl-clipboard xclip libnss3 libnspr4 \
   libgbm1 libasound2t64 libxss1
 ```
 
@@ -31,7 +31,7 @@ Arch Linux:
 
 ```sh
 sudo pacman -S --needed base-devel webkit2gtk-4.1 gtk3 libayatana-appindicator \
-  librsvg patchelf python curl zsh openssh xdg-utils zenity wl-clipboard xclip \
+  librsvg patchelf python curl zsh openssh xdg-utils wl-clipboard xclip \
   nss nspr mesa alsa-lib libxss
 ```
 
@@ -39,7 +39,7 @@ Chromium uses its normal Linux sandbox. Run as a regular user with working user 
 
 ## Local Arch Linux build
 
-Arch Linux and Arch-based desktops such as Omarchy are supported on x86_64. A native pacman package recipe is included; it is not an AUR publication. Install `base-devel`, `bun`, `nodejs`, `rust` (or `rustup` with a stable toolchain), `git`, `pkgconf`, `python` and `cmake`, plus the runtime dependencies above, then:
+Arch Linux and Arch-based desktops such as Omarchy are supported on x86_64. A native pacman package recipe is included; it is not an AUR publication. Install `base-devel`, `bun`, `nodejs`, `rust` (or `rustup` with a stable toolchain), `git`, `pkgconf`, `python`, `cmake` and `openssh` (Skill tests), plus the runtime dependencies above, then:
 
 ```sh
 cd packaging/arch
@@ -65,6 +65,7 @@ bun run build
 bun test
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 python3 scripts/test-linux.py
+python3 skills/ccbaga-network/scripts/test_network.py
 bun run tauri build --features custom-protocol
 ```
 
@@ -93,7 +94,7 @@ This installs application files under `~/.local/share/ccbaga-install`, creates A
 | CLI install management | Existing native and npm flows, including nvm. Requires zsh; Homebrew cask detection runs only on macOS. |
 | Browser | Pinned Linux fingerprint engine, isolated Default profile, cache/site-data separation, rotation and real observations. Linux platform is checked; Chromium does not expose the kernel release through UA client hints, so that field is not compared with `uname`. |
 | Network route | Use TUN or the explicit browser proxy. Native exit probes can use proxy environment variables; GNOME/KDE desktop proxy settings and PAC are not independently discovered. Proxy credentials stay in native code. |
-| VPS | Same explicit OpenSSH and three-key validation; provider links open through xdg-open. |
+| Network | Fixed provider/Skill links open through xdg-open; the selected coding agent handles the separate Skill, files and authorized deployment. |
 | Time zone | Reads zoneinfo; `timedatectl set-timezone` uses systemd/polkit authorization and verifies the result. Desktop automatic time-zone policies remain separate. Non-systemd systems return an actionable error. |
 | Language/region | Reads login-session language (`LC_MESSAGES`) and regional time formats (`LC_TIME`), respecting `LC_ALL`. Open GNOME/KDE settings, change language/formats, then sign out and back in. Existing matching session settings are verified. A differing language/region returns a manual-action error before the region action changes the time zone. |
 | Location | GNOME's location preference can be read, disabled and reread. Other desktops return unknown, never disabled. Full machine alignment stops before modifying settings on desktops with unknown location state. Portal/other location services are not independently verified; do not treat this preference as a global privacy guarantee. |

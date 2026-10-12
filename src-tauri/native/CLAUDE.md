@@ -7,5 +7,4 @@ Cleanup.m: libproc 按外层 Claude 应用标识识别全部辅助进程；sysct
 System.m: Foundation 首选语言、地区格式和时区、CoreLocation 状态、系统授权及稳定标识/语义标签定位开关；定位关闭结果必须经系统读取确认。
 Browser.m: 真实机器状态与代理；LaunchServices 注册独立浏览器、按包标识查询运行、读取 http/https 默认处理程序并以 LSSetDefaultHandlerForURLScheme/LSSetDefaultRoleHandlerForContentType 请求设为默认（系统弹窗确认）；进程身份核验（Chromium 或 CCBrowser 可执行名）。
 Clipboard.m: 主线程文本复制、辅助功能设置入口与共享响应释放；不捕获选区、不模拟键盘。
-SshKeys.m: 主线程 NSOpenPanel / UTType 仅选 pem/ppk/pub 文件；可一次选三项或逐项补选，取消返回空路径数组，不读取密钥正文。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

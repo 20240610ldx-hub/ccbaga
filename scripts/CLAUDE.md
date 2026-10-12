@@ -14,13 +14,12 @@ release-requirements.txt: dmgbuild、ds-store 与 mac-alias 的完整版本及 w
 package-browser.sh: 先品牌化签名，再打包引擎，ditto 保留 Framework 链接与可执行权限；归档进入应用资源；Linux 将源引擎复制到 CARGO_TARGET_DIR 的 release 资源树，保持源码/Arch 安装契约，系统包另走 libexec。
 install-apps.sh: bun install:apps 兼容入口，只转交统一安装层。
 install-apps.py: 严格签名与 Gatekeeper 验收后的事务替换、同标识旧名迁移与失败回滚；保留隔离和资料，正常退出后安装、只刷新相关 Dock 项并启动宿主。
-setup-vps.sh: 从用户 Downloads 脚本纳入应用的 Debian 12/13 root 设置；Xray Reality 经家宽 SOCKS5 出口、Stripe 直连例外、阻断 UDP、SSH/防火墙加固与自检；仅全部通过输出 CC_SUB_URL，支持 IPv6 订阅地址，失败不打印完整配置，Xray 凭据配置限 root/实际服务组可读。
 claude-cli.sh: 原生宿主内嵌的只读安装检查与官方 CLI 卸载/重装，使用登录终端 PATH，发现 nvm/全局 npm、Homebrew 双通道与原生版本；只卸载程序，保护自定义启动器与配置资产，重装沿用已识别包管理器并核验版本。
 install-linux.py: Linux 用户前缀安装并保留资料；拒绝自定义启动器、链接父目录与整个安装目录下仍运行的 A/B，失败回滚。
 test-linux.py: 临时构建验证安装隔离、B 运行保护、桌面写入回滚、Exec 引用与载荷缺失/引擎篡改拒绝；不访问用户资料。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
-release-linux.py: 无 Apple/更新凭据的 x86_64 三格式构建；Tauri 以完整工具日志交付 DEB/AppImage，标准 rpmbuild 从相同 /usr 文件树生成 RPM，避免上游 RPM 打包停滞且禁止剥离厂商引擎；引擎位于 libexec，避免 Qt 可选适配库被宿主 linuxdeploy 错当必备依赖；真实解包核对宿主、UI、B 入口、图标与引擎字节，生成独立校验清单。
+release-linux.py: 无 Apple/更新凭据的 x86_64 三格式构建，先运行 Skill 离线回归与脚本语法检查；Tauri 以完整工具日志交付 DEB/AppImage，标准 rpmbuild 从相同 /usr 文件树生成 RPM，避免上游 RPM 打包停滞且禁止剥离厂商引擎；引擎位于 libexec，避免 Qt 可选适配库被宿主 linuxdeploy 错当必备依赖；真实解包核对宿主、UI、B 入口、图标与引擎字节，生成独立校验清单。
 test-rpm.py: 临时 DEB 文件树经真实 rpmbuild 转换，回归 RPM 版本/架构、桌面入口与引擎字节，不执行样本程序。
 verify-linux-package.py: Linux 安装包只读载荷契约，供 Ubuntu/Arch 共用，拒绝缺失 UI、入口或被改写的引擎文件/链接。
 build-arch.sh: 固定摘要容器准备 Node.js 等构建/测试依赖，以非 root makepkg、原生回归与解包验收，公开源码与 Cargo 缓存挂载；不接触 macOS 凭据。

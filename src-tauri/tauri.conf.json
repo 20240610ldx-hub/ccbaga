@@ -36,7 +36,8 @@
     "resources": {
       "../dist/": "browser-ui/",
       "../browser-runtime/version.txt": "browser-runtime/version.txt",
-      "../browser-runtime/LICENSE.fingerprint-chromium": "browser-runtime/LICENSE.fingerprint-chromium"
+      "../browser-runtime/LICENSE.fingerprint-chromium": "browser-runtime/LICENSE.fingerprint-chromium",
+      "../assets/ai-icons/LICENSE.svgl.txt": "licenses/LICENSE.svgl.txt"
     }
   },
   "plugins": {

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: index.css 的系统字体、Cromma UI 控件、Laper VerticalNavbar 几何/配色与共享面板令牌。
- * [OUTPUT]: 极简侧栏、统一内容网格、紧凑执行结果、清理预览、CLI 管理、三文件密钥导入和供应商入口/按需帮助和主程序更新布局，实测通过页面的整页绿色背景和大对勾。
+ * [OUTPUT]: 极简侧栏、统一内容网格、紧凑执行结果、清理预览、CLI 管理、三步网络入口、AI 分段/安装提示词与主程序更新布局，实测通过页面的整页绿色背景和大对勾。
  * [POS]: 应用布局层；信息只分标题、操作和结果，删除装饰文案与重复说明区；按钮边缘、内高光、阴影和悬停效果沿用 Cromma UI。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -187,13 +187,6 @@ h3 { margin: 0; font-size: 13px; font-weight: 500; }
 .quick-review > div { padding: 14px 0; border-bottom: 1px solid var(--border); }
 .quick-review strong, .quick-review small, .quick-review code { display: block; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
 .quick-review code { color: var(--muted-foreground); margin: 5px 0; }
-.vps-impact { margin: 20px 0; }
-.provider-actions { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
-.purchase-guide section + section { margin-top: 20px; }
-.purchase-guide h3 { font-weight: 600; }
-.purchase-guide p { margin-top: 8px; font-size: 13px; line-height: 1.8; color: var(--muted-foreground); }
-.vps-result { margin: 24px 0; box-shadow: none; }
-.vps-result strong { font-size: 14px; }
 @media(max-width:900px) {
   .system-page, .cleanup-scroll { padding: 22px; }
   .quick-page { padding-top: 42px; }
@@ -214,23 +207,6 @@ h3 { margin: 0; font-size: 13px; font-weight: 500; }
 }
 @media(prefers-reduced-motion:reduce) { .spin, .activity-progress.indeterminate > span, .app-dialog-overlay { animation: none; } }
 
-/* ----- VPS 三文件密钥导入 ----- */
-.vps-keys { margin-top: 28px; border-radius: 12px; transition: background .15s, outline-color .15s; }
-.vps-keys.is-dragging { background: #e8f1ff; outline: 2px solid #5486cf; outline-offset: 10px; }
-.vps-key-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.vps-key-instruction { margin: 14px 0 20px; color: var(--muted-foreground); font-size: 13px; line-height: 1.7; }
-.vps-key-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.vps-key-file { display: flex; min-width: 0; flex-direction: column; align-items: center; gap: 12px; padding: 22px 8px 16px; border: 1px dashed var(--border); border-radius: 12px; background: transparent; color: var(--muted-foreground); cursor: pointer; transition: background .15s, border-color .15s; }
-.vps-key-file:hover { background: var(--panel); border-color: #5486cf; }
-.vps-key-file:focus-visible { outline: 2px solid #5486cf; outline-offset: 3px; }
-.vps-key-file.is-selected { border-style: solid; border-color: #86b694; background: #edf6ef; color: #28643a; }
-.vps-key-file:disabled { cursor: default; opacity: .65; }
-.vps-file-icon { width: 48px; height: 58px; }
-.vps-file-name { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font-size: 13px; color: var(--foreground); }
-.vps-file-state, .vps-key-drop { font-size: 12px; color: var(--muted-foreground); }
-.vps-key-drop { display: block; margin-top: 16px; text-align: center; }
-@media (max-width: 600px) { .vps-key-grid { gap: 6px; } .vps-key-file { padding-inline: 4px; } .vps-file-name { font-size: 11px; } }
-
 /* ----- 主程序更新：复用侧栏与模态，只展示实际阶段 ----- */
 .update-nav { width: 100%; margin-bottom: 4px; }
 .app-version { display: block; padding: 0 12px 16px; font-size: 11px; color: var(--muted-foreground); }
@@ -241,3 +217,16 @@ h3 { margin: 0; font-size: 13px; font-weight: 500; }
 .update-progress progress { width: 100%; accent-color: #21865c; }
 .update-notes { margin-top: 18px; font-size: 12px; }
 .update-notes p { margin-top: 12px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; line-height: 1.7; }
+
+/* ----- 网络 Skill：三步入口与 AI 安装提示词 ----- */
+.network-page { max-width: 980px; }
+.network-steps { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; margin-bottom: 40px; }
+.network-step { display: flex; flex-direction: column; align-items: flex-start; gap: 24px; padding: 28px; border: 1px solid var(--border); border-radius: 18px; background: var(--panel); }
+.network-step button { max-width: 100%; white-space: normal; text-align: center; }
+.network-step-number { font-size: 44px; font-weight: 650; line-height: 1; color: var(--muted-foreground); }
+.skill-install { display: grid; justify-items: start; gap: 18px; }
+.coding-agent { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.coding-agent img { object-fit: contain; }
+.skill-prompt-label { font-size: 13px; font-weight: 600; }
+.skill-install textarea { min-height: 180px; line-height: 1.8; }
+@media(max-width:800px) { .network-steps { gap: 12px; } .network-step { padding: 20px 14px; } }

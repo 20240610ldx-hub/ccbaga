@@ -1,5 +1,5 @@
 <!--
-[INPUT]: PR #6 的 Linux 原生边界、共用清理/浏览器/SSH/CLI 实现和回归测试。
+[INPUT]: PR #6 的 Linux 原生边界、共用清理/浏览器/CLI 实现与独立网络 Skill和回归测试。
 [OUTPUT]: 数据读写、外部连接与危险操作边界的可追踪审核记录。
 [POS]: 原生模块的安全地图；与 src/CLAUDE.md 的事务边界共同维护。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -17,7 +17,8 @@
 | `src/browser/config.rs` | 本机环境与用于出口探测的系统代理 | `Machine.system_proxy` 使用 `skip_serializing`，代理凭据不进入 WebView、浏览器回环 JSON 或 UI 日志；对应回归验证。 |
 | `src/browser/server.rs` | 匿名环境观测在 A/B 之间交换 | 仅随机令牌 `127.0.0.1` 会话，限制请求大小与资源根目录；不提供文件写入、命令执行或远程监听。 |
 | `src/browser/network.rs` / 前端出口探测 | 向 `ipwho.is`、`ipapi.co` 请求出口信息 | 外部服务会看到请求出口 IP；不发送本地文件、账号、密钥或浏览记录。服务失败使用同一路由备用服务，不伪造成功。 |
-| `src/vps*.rs` | 用户选定的三文件 SSH 密钥与家宽连接资料 | 文件正文留在原生层，PEM/PPK/PUB 配对验证；0600 临时私钥事务结束移除。仅用户指定 VPS 经 SSH 接收所需家宽配置，秘密走加密标准输入，不写本机日志；订阅私密。 |
+| `src/network_links.rs` | 固定 VPS/家宽/Skill 公开入口 | 仅白名单地址与供应商配置编译内嵌；应用不选择密钥、不收集家宽资料、不注册 SSH/部署命令。 |
+| `skills/ccbaga-network/scripts/network.py` | 用户主动提供的附件、VPS 地址与家宽连接资料 | AI 经标准输入提交配置，验证后保存 Git/Skill 外的 0600 文件；拒绝覆盖和链接路径。配对后临时 PEM 0600，事务结束移除；仅所选 VPS 经 SSH 接收家宽配置，秘密不进入 argv/公开日志。用户交给 AI 的资料可能由其服务提供商处理，不能声称完全不进入模型。 |
 | `scripts/claude-cli.sh` | 用户选择的 CLI 卸载/重装 | 明确确认后只修改已识别 CLI 程序；保留配置、会话、技能和项目。重装使用官方安装地址或既有包管理器，并核验实际版本。 |
 | `scripts/install-linux.py` | 用户选择的本地构建产物 | 拒绝外部启动器、链接安装父目录和仍运行的 A/B；替换失败回滚，不迁移或读取用户资料。 |
 
@@ -29,10 +30,10 @@
 
 ## 发布与入口边界
 
-- `providers.json` 只由原生编译内嵌，WebView 传供应商编号，不传可任意改写的 URL；现有回归锁住两条原始完整目标地址。
+- `skills/ccbaga-network/providers.json` 由固定导航编译内嵌，也供独立 Skill 消费，WebView 传供应商编号，不传可任意改写的 URL；现有回归锁住两条原始完整目标地址。
 - Linux/Arch 构建任务没有 Apple 或更新私钥；macOS 临时钥匙串只授权 codesign。构建、DMG 工具和更新签名子进程不继承 Apple 凭据，公证工具只接收明确的认证参数。
 - RPM 使用标准 rpmbuild 从已构建的非 AppImage /usr 文件树生成，禁用安装钩子和引擎剥离；Linux 内置更新仍禁用，RPM 当前沿用非 AppImage 宿主的 DEB 类型提示；后续启用 Linux 更新必须先补齐 RPM 类型标注。DEB/RPM/AppImage 将浏览器隔离在 libexec，避免 linuxdeploy 将可选 Qt 库当作宿主必需依赖或改写厂商 ELF；解包后仍严格比对引擎字节。所有平台产物验收完成后才创建正式版本。公开产物清单不包含密钥、钥匙串或完整私有配置。
 
 ## 验证边界
 
-本机前端 10 项、macOS 原生 35 项、临时 Linux 安装器/载荷 6 项和签名顺序回归通过；平台 JSON 合并核对确认 macOS 配置与原版一致；安装后真实 A/B 会话返回 HTTP 200，其 context 明确不包含 system_proxy。Linux 原生桥与共用 JSON 解码器在隔离的 Linux arm64 容器编译并通过 4 项原生测试；这不等同 Linux x86_64 全应用/引擎验收。Linux 桌面、polkit、真实 VPS、TUN 与第三方浏览器行为须在目标环境验证；未执行的操作不记为通过。视觉验收由项目所有者完成。
+本次本机前端 11 项、macOS 原生 34 项（另 1 项实际公开更新向量需发布产物）、独立 Skill 7 项离线回归通过；Skill 回归使用临时生成密钥和伪配置，不使用用户凭据，不连接 VPS。配置非交互验证、拒绝 Git/Skill 写入与覆盖、秘密标准输入传输、完整目标链接、配对/权限/清理与失败/超时均有可运行回归。各发布平台继续运行 Skill 与原生验收，Linux 安装包按真实引擎字节检查后才发布。真实 VPS、家宽账号、TUN、桌面权限和第三方浏览器行为须在目标环境验证；未执行的操作不记为通过。视觉验收由项目所有者完成。

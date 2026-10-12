@@ -8,7 +8,7 @@
   <img src="docs/brand-logos.svg" width="320" height="149" alt="CCBaga-A and CCBaga-B logos, side by side" />
   <h1>CCBaga</h1>
   <p><strong>A native macOS and Linux toolkit for a cleaner workspace and an environment you can verify.</strong></p>
-  <p>Claude cleanup · Browser fingerprints · System settings · Network setup</p>
+  <p>Claude cleanup · Browser fingerprints · System settings · Network Skill</p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-e8a181?style=flat-square" alt="MIT license" /></a>
     <img src="https://img.shields.io/badge/macOS-12%2B-111827?style=flat-square&amp;logo=apple&amp;logoColor=white" alt="macOS 12 and later" />
@@ -42,7 +42,7 @@ Two applications work together: **CCBaga-A** owns native operations; **CCBaga-B*
   </tr>
   <tr>
     <td><strong>Native system settings</strong><br /><br />Apply timezone, preferred language and region settings. Open desktop controls for location and permissions; see Linux feature limits.</td>
-    <td><strong>SSH network setup</strong><br /><br />Provide a VPS address, three key files and a residential SOCKS5 exit. Receive a subscription after server self-checks pass.</td>
+    <td><strong>AI-guided network setup</strong><br /><br />Three simple steps, a coding-agent selector and a copyable Skill installation prompt. Give the AI your files and connection details; it handles the commands.</td>
     <td><strong>Claude Code CLI tools</strong><br /><br />Detect the installation method and version. Uninstall or reinstall through native, npm or Homebrew workflows.</td>
   </tr>
 </table>
@@ -63,7 +63,7 @@ Download the official installer from [GitHub Releases](https://github.com/liseam
 
 | Application | Installed bundle | Role |
 | --- | --- | --- |
-| CCBaga-A | `CCBaga-A.app` | Cleanup, system settings, SSH tasks and verification |
+| CCBaga-A | `CCBaga-A.app` | Cleanup, system settings and environment verification |
 | CCBaga-B | `CCBaga-B.app` | Companion browser with a dedicated profile |
 
 Download **one DMG**; it contains both applications. There is no separate browser download. The installer uses the same pixel-art style as this README.
@@ -105,27 +105,17 @@ The success page appears only when the measured checks match, the report reaches
 
 ### Network setup
 
-The optional network workflow expects:
+Open **Network** for three steps: **Get VPS → Get residential proxy → Install Skill**. Select **Claude Code**, **Codex** or **Cursor**, then copy the installation prompt into your local coding agent. The prompt follows the app's English/Chinese setting.
 
-| Input | Requirement |
-| --- | --- |
-| VPS | Public IP or hostname; Debian 12/13; SSH as `root` on port `22` |
-| SSH keys | A matching `.pem`, `.ppk` and `.pub` bundle; an unencrypted PEM private key |
-| Residential exit | SOCKS5 host, port, username and password |
-| Expected exit IP | Required when the SOCKS5 host is a domain |
+The [Network Skill](skills/ccbaga-network/README.md#installation) installs separately from the apps. Give the AI your VPS address, the three matching PEM/PPK/PUB files or downloaded key bundle, and your residential SOCKS5 connection details. It handles file paths, private configuration, commands and checks; you do not need to open a terminal or edit JSON. Missing resources are purchased by you with the AI's guidance. Remote setup runs only after approval of the actual server changes.
 
-For DMIT, choose **Generate SSH Key after order**, download and extract the key bundle, then select or drop all three files. Key files identify you; the VPS address identifies the server. Password and SSH Agent authentication are not supported.
+The Skill supports authorized Debian 12/13 servers using root key login on port 22. It checks the SSH identity and fixed SOCKS5 exit, configures Xray/Reality and delivers a private local import file after server self-checks pass. Client setup uses **TUN ON**, **System Proxy OFF** and an empty explicit browser proxy; actual TUN/browser verification remains a separate step. The legacy subscription URL uses HTTP and contains credentials; prefer the file retrieved over SSH.
 
-Check the SSH connection, review the server changes, then run setup. The script updates the Debian system, configures Xray/Reality, SSH and the firewall, and verifies the SOCKS5 exit before returning a subscription. It blocks forwarded UDP and retains a Stripe direct-route exception.
-
-> [!IMPORTANT]
-> Import the subscription into a compatible client, enable **TUN mode**, and leave **system proxy disabled**. Leave CCBaga-B's explicit proxy empty to follow TUN. The subscription uses HTTP and contains connection credentials; keep its URL private. Verify the client-side exit after importing it.
-
-Provider buttons link to [DMIT](https://www.dmit.io/aff.php?aff=28800) and [Webshare](https://www.webshare.io/?referral_code=qlm1mt9xibc9). Network setup is optional; local cleanup does not require a VPS or a proxy subscription.
+Provider buttons link to [DMIT](https://www.dmit.io/aff.php?aff=28800) and [Webshare](https://www.webshare.io/?referral_code=qlm1mt9xibc9). Network setup is optional; local cleanup does not require a VPS or a proxy subscription. **The app does not collect SSH keys or proxy credentials and does not deploy to servers.**
 
 ## Architecture
 
-![Pixel architecture map: native core, companion browser and explicit SSH](docs/architecture.svg)
+![Pixel architecture map: native core, companion browser and a separate AI Network Skill](docs/architecture.svg)
 
 The UI owns inputs and presentation. Rust owns validation, task locks, process identity checks and execution. Small Objective-C bridges call macOS APIs; a Rust Linux boundary uses procfs and desktop/session utilities. The browser test page has no Tauri command access; it exchanges context and measurements through a random-token loopback session.
 
@@ -135,7 +125,7 @@ The UI owns inputs and presentation. Rust owns validation, task locks, process i
 | Interface | React 19 · TypeScript · Cromma UI | Forms, previews and execution results |
 | Platform bridges | AppKit · Security · CoreLocation · Linux Rust | Platform permissions and system integration |
 | Companion browser | Fingerprint Chromium | Dedicated profile and real browser measurements |
-| Network setup | OpenSSH · Bash · Xray | Explicit remote setup and server self-checks |
+| Separate Network Skill | Python standard library · OpenSSH · Bash · Xray | AI-managed private configuration, approved remote setup and server/client verification |
 | Localization | YAML · Vite | Build-time English/Chinese catalogs |
 
 <details>
@@ -147,7 +137,8 @@ src/                Desktop UI, browser test page and localization
 src-tauri/src/      Rust commands and transaction boundaries
 src-tauri/native/   Small macOS API bridges
 browser-runtime/    Engine metadata, launcher, entitlements and licenses
-scripts/            Icons, local builds and setup helpers
+scripts/            Icons, local builds and installation helpers
+skills/             Installable AI Network Skill and its execution scripts
 packaging/arch/     Native Arch Linux PKGBUILD and desktop entry
 docs/               README artwork and Linux development guide
 vendor/cromma-ui/   Vendored interface components
@@ -196,7 +187,8 @@ bun test
 MACOSX_DEPLOYMENT_TARGET=12.0 \
   cargo test --manifest-path src-tauri/Cargo.toml
 python3 scripts/test-sign-browser.py
-bash -n scripts/setup-vps.sh
+python3 skills/ccbaga-network/scripts/test_network.py
+bash -n skills/ccbaga-network/scripts/setup-vps.sh
 ```
 
 Automated tests exercise disposable fixtures and local test servers. They do not deploy a real VPS, delete your Claude account data or perform administrator-authorized system changes. Real SSH connectivity, client-side TUN routing and permission-dependent operations require validation in the target environment.
@@ -204,9 +196,9 @@ Automated tests exercise disposable fixtures and local test servers. They do not
 ## Data & permissions
 
 - **Cleanup is local.** It targets recognized Claude data; project source, skills, plugins, hooks, commands and MCP settings are preserved. Cloud-side account records are outside its scope.
-- **Secrets stay out of UI logs.** SSH private-key contents remain in native code. A temporary PEM copy has `0600` permissions and is removed when the transaction ends. Keychain cleanup reads item attributes, not password contents.
+- **Secrets stay out of UI logs.** The apps have no SSH key picker or server deployment command. Keychain cleanup reads item attributes, not password contents. The separate Skill uses private local files and temporary `0600` PEM copies; data supplied to your coding agent is subject to that agent provider’s handling.
 - **Network checks make real requests.** Exit detection uses `ipwho.is` with `ipapi.co` as a fallback on the same route. IP location is a service estimate.
-- **Remote changes are explicit.** Only the VPS you provide is contacted for SSH setup. Server credentials remain in the server configuration required to run its services.
+- **Remote changes are explicit.** The separate Skill contacts only the VPS you provide after server-change approval. Required credentials remain in private local/server configuration, outside Git and public logs.
 - **Permissions are feature-specific.** Timezone changes require macOS administrator authorization. Keychain access follows system prompts. Location controls may require Accessibility permission or a manual action in System Settings.
 
 Custom `CLAUDE_CONFIG_DIR` locations are not automatically included in the default cleanup scan. The app reports this limitation rather than silently claiming they were cleaned.

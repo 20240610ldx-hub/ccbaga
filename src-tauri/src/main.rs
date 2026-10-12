@@ -1,5 +1,5 @@
-// [INPUT]: macOS/Linux 平台边界、Tauri 生命周期、发布构建 custom-protocol 与清理、CLI 安装管理、浏览器、地区、系统、VPS 三文件密钥选择与独立界面语言命令及官方签名更新/重启插件。
-// [OUTPUT]: CCBaga-A窗口、托盘、本地清理和 CLI 卸载/重装、SSH 远程设置入口与随界面语言切换的托盘菜单。
+// [INPUT]: macOS/Linux 平台边界、Tauri 生命周期、发布构建 custom-protocol 与清理、CLI 安装管理、浏览器、地区、系统、固定网络资源导航与独立界面语言命令及官方签名更新/重启插件。
+// [OUTPUT]: CCBaga-A窗口、托盘、本地清理和 CLI 卸载/重装、固定网络资源入口与随界面语言切换的托盘菜单。
 // [POS]: 应用编排层；不注册翻译快捷键，不读取翻译设置或 API 密钥。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 // ----- 发布包必须内嵌前端资源，禁止依赖开发服务 -----
@@ -17,8 +17,7 @@ mod system;
 mod ui_language;
 #[cfg(test)]
 mod updater_tests;
-mod vps;
-mod vps_keys;
+mod network_links;
 use tauri::{tray::TrayIconBuilder, Manager};
 fn show(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -71,7 +70,6 @@ fn main() {
             app.manage(ui_language::UiLanguage::load(app.handle()));
             app.manage(cleaner::Cleaner::default());
             app.manage(browser::Browser::default());
-            app.manage(vps::Vps::default());
             #[cfg(target_os = "macos")]
             browser::companion(app.handle().clone());
             #[cfg(target_os = "linux")]
@@ -128,10 +126,7 @@ fn main() {
             browser::browser_default_read,
             browser::browser_set_default,
             browser::browser_rotate,
-            vps::vps_connect,
-            vps::vps_setup,
-            vps::vps_choose_keys,
-            vps::vps_open_provider
+            network_links::network_open_resource
         ])
         .build(tauri::generate_context!())
         .expect("无法启动 CCBaga-A")

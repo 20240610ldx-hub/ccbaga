@@ -19,6 +19,7 @@ pressable.tsx: 可点击原语，统一按压与无障碍行为。
 select.tsx: 原版 Select 与可搜索选项；增加 id、aria-label 透传，保持原版外观。
 sidebar-button.tsx: 侧栏选中皮肤，NavButton 依赖其 raised 样式。
 surface.tsx: 浮层表面令牌，供菜单与提示复用。
+tabs.tsx: 原版 Radix 分段/下划线页签，键盘方向键与选中状态由原语维护。
 textarea.tsx: 多行输入原语，尺寸由内容区布局决定。
 tooltip.tsx: Radix 提示与单一 portal，供面板动作和 Select 使用。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
