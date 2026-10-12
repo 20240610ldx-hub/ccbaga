@@ -28,7 +28,7 @@ test-linux.py: 临时构建验证安装隔离、B 运行保护、桌面写入回
 assemble-release.py: 逐平台校验后合并更新平台清单，以明确白名单交付九个公开文件；内部签名、公证和引擎地图只留 CI，下载表独立展示安装器。
 sign-windows-update.py: 已验收安装器的独立版本绑定更新签名和官方更新器核验；更新私钥不进入构建或测试。
 release-windows.py: Windows x64 MSVC 无凭据构建，check/build/verify 阶段在 CI 分开呈现，原生/CLI/Skill 回归与真实 NSIS 安装、启动、升级、卸载验证，交付单安装器与内部引擎哈希清单。
-verify-windows-installer.py: 使用原生 Known Folder 定位隔离 CI 数据，仅回收本次唯一安装目录程序，严格核对安装后引擎/图标/UI、实际浏览器 JS 回报的平台/CPU/版本与 A/B 回环、升级和卸载资产保留。
+verify-windows-installer.py: 使用原生 Known Folder 定位隔离 CI 数据，通过已持有句柄的宿主树/本次唯一安装目录回收 CI 程序，不给 GUI 沙箱套额外 Job，严格核对安装后引擎/图标/UI、实际浏览器 JS 回报的平台/CPU/版本与 A/B 回环、升级和卸载资产保留。
 release-linux.py: 无 Apple/更新凭据的 x86_64 三格式构建，先运行 Skill 离线回归与脚本语法检查；Tauri 以完整工具日志交付 DEB/AppImage，标准 rpmbuild 从相同 /usr 文件树生成 RPM，避免上游 RPM 打包停滞且禁止剥离厂商引擎；引擎位于 libexec，避免 Qt 可选适配库被宿主 linuxdeploy 错当必备依赖；真实解包核对宿主、UI、B 入口、图标与引擎字节，生成独立校验清单。
 test-rpm.py: 临时 DEB 文件树经真实 rpmbuild 转换，回归 RPM 版本/架构、桌面入口与引擎字节，不执行样本程序。
 verify-linux-package.py: Linux 安装包只读载荷契约，供 Ubuntu/Arch 共用，拒绝缺失 UI、入口或被改写的引擎文件/链接。

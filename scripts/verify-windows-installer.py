@@ -43,8 +43,6 @@ def main():
     try:data=Path(ctypes.wstring_at(address))/'ai.local.requirement-french'
     finally:ole.CoTaskMemFree(address)
     if data.exists():raise SystemExit('Refusing to touch pre-existing CCBaga application data')
-    sys.path.insert(0,str(ROOT/'skills/ccbaga-network/scripts'))
-    import windows
     with tempfile.TemporaryDirectory(prefix='ccbaga-installer-') as temporary:
         folder=Path(temporary)/'应用 with spaces'
         home=Path(temporary)/'fixture-home';home.mkdir()
@@ -69,13 +67,15 @@ def main():
             assert profile.read_bytes()==b'keep-profile'
             assert skill.read_text(encoding='utf-8')=='keep-skill'
             assert json.loads(settings.read_text(encoding='utf-8'))=={'keep':True}
-        child=None;job=None
+        child=None
         runtime_log=Path(temporary)/'runtime.log'
         def stop():
-            nonlocal child,job
-            if job:job.stop();job.close();job=None
+            nonlocal child
+            # GUI 引擎管理自己的沙箱 Job；不额外将宿主放入测试 Job。
+            if child and child.poll() is None:
+                subprocess.run(['taskkill','/F','/T','/PID',str(child.pid)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
             if child:child.wait(timeout=20);child=None
-            # Chromium 可能在 Job 绑定前启动；仅回收本次唯一安装目录内的 CI 程序。
+            # 仅回收本次唯一安装目录内的 CI 程序，处理浏览器自己的独立生命周期。
             command='$p=@(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($env:CC_INSTALL_DIR+"\\",[StringComparison]::OrdinalIgnoreCase) }); $p | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; if($p.Count){exit 1}'
             wait_for(lambda:subprocess.run(['powershell','-NoProfile','-Command',command],env=env|{'CC_INSTALL_DIR':str(folder)},stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0)
         def ready():
@@ -86,7 +86,6 @@ def main():
             install();engine=payload();assets()
             with runtime_log.open('wb') as output:
                 child=subprocess.Popen([str(folder/'requirement-french.exe')],env=env,stdout=output,stderr=output)
-            job=windows.Job(child)
             start=data/'browser/start.url'
             wait_for(ready)
             page=start.read_text(encoding='utf-8').strip()
