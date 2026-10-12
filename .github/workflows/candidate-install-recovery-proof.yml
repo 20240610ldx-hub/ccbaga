@@ -1,0 +1,104 @@
+name: Fork-only installer recovery proof
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    if: github.repository == 'rudycelekli/CCBaga'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+          ref: e2ff76b6db7bd49bc74da2af4afb2d91ae53560e
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Actual Linux immutable original, baseline and fixed comparisons
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir proof
+          test "$(uname -s)" = Linux
+          test "$(git rev-parse HEAD)" = e2ff76b6db7bd49bc74da2af4afb2d91ae53560e
+          git rev-parse HEAD > proof/head.txt
+          uname -a > proof/uname.txt
+          python --version > proof/python.txt
+          cat > "$RUNNER_TEMP/installer-proof.py" <<'PYSCRIPT'
+          #!/usr/bin/env python3
+          """Read-only immutable Git-blob proof; no application or user data writes."""
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import platform
+          import re
+          import subprocess
+          import sys
+          import tempfile
+          
+          repository, candidate, expected_platform, output = sys.argv[1:]
+          repository, output = Path(repository).resolve(), Path(output).resolve()
+          assert re.fullmatch('[0-9a-f]{40}', candidate)
+          assert platform.system() == expected_platform
+          assert sys.version_info[:2] == (3, 13)
+          BASE = '612ddd9f11a3cf2ecd64c41dc53c481cfd862679'
+          def git(*args):
+              return subprocess.check_output(['git', '-C', str(repository), *args])
+          assert git('rev-parse', candidate + '^{commit}').decode().strip() == candidate
+          assert git('merge-base', BASE, candidate).decode().strip() == BASE
+          output.mkdir(parents=True, exist_ok=True)
+          receipt = {'base': BASE, 'candidate': candidate, 'platform': platform.platform(), 'python': sys.version, 'runs': [], 'files': {}, 'success': False}
+          original_outcomes = {}
+          dependencies = ['install-linux.py', 'install-apps.py', 'dev-install.py', 'verify-linux-package.py']
+          tests = [('test-linux.py', 6, 7, 'test_failed_install_and_rollback_retain_previous_application'), ('test-install-apps.py', 3, 6, 'test_failed_install_and_rollback_keep_all_previous_apps')]
+          try:
+              with tempfile.TemporaryDirectory(prefix='ccbaga-proof-') as temporary:
+                  root = Path(temporary).resolve()
+                  for phase in ['original', 'baseline', 'fixed']:
+                      directory = root / phase
+                      directory.mkdir()
+                      for filename in dependencies + [row[0] for row in tests]:
+                          revision = candidate if phase == 'fixed' or phase == 'baseline' and filename.startswith('test-') else BASE
+                          content = git('show', revision + ':scripts/' + filename)
+                          (directory / filename).write_bytes(content)
+                          receipt['files'][phase + '/' + filename] = hashlib.sha256(content).hexdigest()
+                      for filename, original_count, fixed_count, failure in tests:
+                          run = subprocess.run([sys.executable, str(directory / filename), '-v'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env={**os.environ, 'TMPDIR': str(root)})
+                          log = run.stdout.decode()
+                          (output / (phase + '-' + filename + '.log')).write_text(log)
+                          outcomes = dict(re.findall(r'^test_\w+ \(([^)]+)\) \.\.\. (ok|FAIL|ERROR|skipped[^\n]*)$', log, re.M))
+                          assert len(outcomes) == (original_count if phase == 'original' else fixed_count), log
+                          if phase == 'original':
+                              assert set(outcomes.values()) == {'ok'}, log
+                              original_outcomes[filename] = outcomes
+                          else:
+                              assert all(outcomes.get(name) == outcome for name, outcome in original_outcomes[filename].items()), log
+                              expected_failures = 1 if phase == 'baseline' else 0
+                              assert list(outcomes.values()).count('FAIL') == expected_failures, log
+                              assert set(outcomes.values()) <= {'ok', 'FAIL'}, log
+                          count = original_count if phase == 'original' else fixed_count
+                          assert re.search(r'Ran ' + str(count) + r' tests? in ', log), log
+                          if phase == 'baseline':
+                              assert run.returncode == 1 and 'FAILED (failures=1)' in log and 'ERROR:' not in log, log
+                              assert re.findall(r'^FAIL: (\w+)', log, re.M) == [failure], log
+                              assert 'AssertionError: 0 != 1' in log, log
+                          else:
+                              assert run.returncode == 0 and '\nOK\n' in log, log
+                          receipt['runs'].append({'phase': phase, 'test': filename, 'count': count, 'exit': run.returncode, 'outcomes': outcomes})
+              receipt['success'] = True
+          finally:
+              (output / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          PYSCRIPT
+          python "$RUNNER_TEMP/installer-proof.py" . e2ff76b6db7bd49bc74da2af4afb2d91ae53560e Linux proof
+          git diff --check
+          git diff --exit-code
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: installer-recovery-proof-ubuntu-24.04
+          path: proof/
+          if-no-files-found: error
