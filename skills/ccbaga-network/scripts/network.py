@@ -190,9 +190,9 @@ def execute(command, payload='', timeout=30):
             child.wait()
         raise RuntimeError('Task timed out; remote changes may be partial. Do not blindly rerun.')
     finally:
+        if job: job.close()
         reader.join(timeout=2); writer.join(timeout=2)
         child.stdout.close()
-        if job: job.close()
     if code:
         raise RuntimeError('SSH/task failed; raw output suppressed to protect credentials. Check connectivity and server state before retrying.')
     return tail.decode(errors='replace')

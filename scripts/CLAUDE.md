@@ -6,7 +6,7 @@ brand-browser.sh: 编译 CCBrowser 入口、写入 CCBaga-B 名称/图标/各语
 sign-browser.py: 内层 Mach-O → Helper 应用 → Framework → 浏览器外壳顺序签名；Developer ID 使用可信时间戳、Hardened Runtime，仅 Renderer/GPU 使用 JIT entitlement；本机临时签名清除 runtime，防止缺 Team ID 的 Framework 被库验证拒绝。
 test-release-env.py: 伪造凭据环境导入真实发布入口，断言 Apple/更新私钥不进入构建子进程环境，不加载真实密钥。
 test-sign-browser.py: 临时伪引擎树验证叶子到容器的签名顺序、最小 JIT 授权与符号链接不重复遍历。
-windows-region.ps1: 当前用户 International 首选语言/显示语言偏好与区域格式设置；保留其他语言、复核持久化，当前会话未生效时明确报告需重新登录。
+windows-region.ps1: 当前用户 International 首选语言/显示语言偏好与区域格式设置；PowerShell 5.1 泛型列表保留其他语言/输入法、复核持久化，当前会话未生效时明确报告需重新登录。
 claude-cli.ps1: Windows 官方 CLI 程序管理与真实完成协议，保留配置和项目，不执行 VPS 配置。
 package-browser.ps1: Windows 固定引擎前置核验，不打包用户资料或私钥。
 test-windows.py: Windows 原生/npm/WinGet 程序隔离样本的真实卸载重装、失败和自定义启动器拒绝；CI 实际语言/区域写入、输入法保留和完整还原。

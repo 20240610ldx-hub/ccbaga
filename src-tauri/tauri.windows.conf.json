@@ -29,7 +29,8 @@
       "../browser-runtime/version.txt": "browser-runtime/version.txt",
       "../browser-runtime/LICENSE.fingerprint-chromium": "browser-runtime/LICENSE.fingerprint-chromium",
       "../browser-runtime/WindowsBrowser/": "browser-runtime/WindowsBrowser/",
-      "../browser-runtime/icons/browser.ico": "browser-runtime/icons/browser.ico"
+      "../browser-runtime/icons/browser.ico": "browser-runtime/icons/browser.ico",
+      "windows/LICENSE.unicode.txt": "licenses/LICENSE.unicode.txt"
     },
     "windows": {
       "nsis": {

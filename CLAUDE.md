@@ -37,4 +37,5 @@ CLI 管理：Claude 清理页提供一键卸载/重装，确认后结束全部�
 Linux x86_64 适配：见 docs/linux.md；平台配置拆分为 tauri.macos.conf.json / tauri.linux.conf.json。Linux 原生边界位于 src-tauri/src/linux.rs，浏览器使用带哈希固定的 LinuxBrowser 与 XDG 启动项；版本任务后并行构建 macOS/Ubuntu/Arch；DEB/RPM/AppImage 引擎隔离在 libexec，避免宿主打包工具改写；Linux 实际安装包均解包核验，四格式与 macOS 同批验收后由所有者统一发布，Linux 不接触 Apple/更新私钥。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
+首页国家地区目录固定为截图的 13 项，顺序不扩展。Windows 完整时区映射只服务实际系统读回与核验。
 Windows x64：平台桥使用当前用户 SID、文件所有权和 reparse-point 检查；进程核验精确入口、创建时间和 live handle。凭据管理器不读取或自动删除。当前用户 International cmdlets 保留其他语言并核验实际生效；时区 tzutil 写入后读回，不用默认值伪装状态。默认浏览器只注册自身 HKCU 能力并引导系统确认，独立读取 HTTP/HTTPS。CLI 由内嵌 PowerShell 按原生/npm/bun/WinGet 来源管理，Job Object 限定子进程树；个人资产保留。单 NSIS 同时安装 A/B；Windows 自动更新使用同一安装器且先关闭 B。网络仍只用独立 Skill；Windows 私密文件采用用户 SID 独占 NTFS ACL，原生 OpenSSH/curl，无 WSL 或 VPS UI。无凭据 Windows 预检分支不得发布；正式发布需全部平台验收，Windows 更新私钥仅在测试后的独立签名步骤注入。

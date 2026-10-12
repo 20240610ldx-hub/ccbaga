@@ -7,16 +7,16 @@ $env:PSModulePath=(Join-Path $PSHOME 'Modules')+';'+$env:PSModulePath
 [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding
 $tag=$env:CC_REGION_LANGUAGE
 $format=$env:CC_REGION_LOCALE
-$before=@(Get-WinUserLanguageList)
+$before=Get-WinUserLanguageList
 $target=New-WinUserLanguageList $tag
 foreach($language in $before) {
-    if($language.LanguageTag -ieq $tag) { $target[0]=$language }
+    if($language.LanguageTag -ieq $tag) { $target.RemoveAt(0); $target.Insert(0,$language) }
     else { $target.Add($language) }
 }
 Set-WinUserLanguageList $target -Force
 Set-WinUILanguageOverride -Language $tag
 if($format) { Set-Culture -CultureInfo $format }
-$actual=@(Get-WinUserLanguageList)
+$actual=Get-WinUserLanguageList
 if($actual[0].LanguageTag -ine $tag) { throw 'Windows 首选语言修改未通过核验。' }
 if((Get-WinUILanguageOverride).Name -ine $tag) { throw 'Windows 显示语言偏好修改未通过核验。' }
 # 新 PowerShell 会话才能观察 Set-Culture 的持久化结果；原生调用方另行复核。

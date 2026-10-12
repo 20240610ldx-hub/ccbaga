@@ -5,7 +5,7 @@
 use super::*;
 #[cfg(windows)]
 fn junction(source: &Path, target: &Path) {
-    assert!(std::process::Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(target).arg(source).output().unwrap().status.success());
+    assert!(std::process::Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(target.to_string_lossy().replace('/', "\\")).arg(source.to_string_lossy().replace('/', "\\")).output().unwrap().status.success());
 }
 
 #[test]
@@ -89,12 +89,16 @@ impl Fixture {
         let pid = std::process::id();
         let p = std::env::temp_dir().join(format!("rf-cleaner-test-{pid}-{id}-{unique}"));
         fs::create_dir(&p).unwrap();
+        #[cfg(windows)]
+        crate::windows::fixture_owner(&p);
         Self(canonicalize(p).unwrap())
     }
     fn file(&self, name: &str, value: &str) {
         let p = self.0.join(name);
         fs::create_dir_all(p.parent().unwrap()).unwrap();
-        fs::write(p, value).unwrap();
+        fs::write(&p, value).unwrap();
+        #[cfg(windows)]
+        for path in p.ancestors().take_while(|path| path.starts_with(&self.0)) { crate::windows::fixture_owner(path); }
     }
 }
 impl Drop for Fixture {
@@ -518,6 +522,13 @@ fn node_claude_entry_is_identified_and_unrelated_node_is_preserved() {
     }
     let target = target.expect("必须识别 Node 启动的官方 CLI 入口");
     assert_eq!(target.name, "Claude Code");
+    #[cfg(windows)] {
+        let mut stale = target.clone(); stale.created ^= 1;
+        signal_same_process(&stale, 9).unwrap();
+        assert!(children.0[0].try_wait().unwrap().is_none());
+        let serialized = serde_json::to_string(&target).unwrap();
+        assert!(!serialized.contains("created") && !serialized.contains("executable"));
+    }
     signal_same_process(&target, 9).unwrap();
     assert!(!children.0[0].wait().unwrap().success());
     assert!(children.0[1].try_wait().unwrap().is_none());

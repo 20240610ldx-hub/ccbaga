@@ -100,6 +100,8 @@ fn execute(mut command: Command, log: Arc<Reporter>, seconds: u64) -> Result<Cli
             }
         }
     };
+    #[cfg(windows)]
+    job.stop();
     let _ = writer.join();
     let result = output.join().map_err(|_| "Claude Code 安装任务被中断。")?;
     let errors = errors.join().map_err(|_| "Claude Code 安装任务被中断。")?;

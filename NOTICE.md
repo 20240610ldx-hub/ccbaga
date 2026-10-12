@@ -31,3 +31,7 @@ Tauri, React, Radix UI, Motion, Tailwind CSS, Vite, YAML and the Rust dependenci
 Claude cleanup discovery was informed by the [claude-cleanup skill](https://github.com/suyuan2022/suyuan-skill/tree/main/claude-cleanup). Its upstream license and attribution must be reviewed for any redistributed material.
 
 The cleaner and browser artwork was supplied for use with this project. Anthropic, Claude, Apple, Chromium and other third-party names remain the property of their respective owners. Their mention does not imply sponsorship or endorsement.
+
+## Windows timezone data
+
+Windows/IANA mappings derive from [Unicode CLDR 48](https://github.com/unicode-org/cldr/blob/release-48/common/supplemental/windowsZones.xml) under the [Unicode License](src-tauri/windows/LICENSE.unicode.txt). The license is included with Windows packages.

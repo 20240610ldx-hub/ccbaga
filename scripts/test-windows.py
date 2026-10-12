@@ -110,12 +110,13 @@ $env:PSModulePath=(Join-Path $PSHOME 'Modules')+';'+$env:PSModulePath
 $before=Get-WinUserLanguageList
 $override=Get-WinUILanguageOverride
 $format=Get-Culture
-$original=@($before | ForEach-Object { $_.LanguageTag+':'+($_.InputMethodTips -join ',') })
+$original=@(foreach($item in $before){$item.LanguageTag+':'+($item.InputMethodTips -join ',')})
 try {
   $env:CC_REGION_LANGUAGE=$before[0].LanguageTag
   $env:CC_REGION_LOCALE='en-CA'
   & $env:CC_SYSTEM_SCRIPT | Out-Null
-  $after=@(Get-WinUserLanguageList | ForEach-Object { $_.LanguageTag+':'+($_.InputMethodTips -join ',') })
+  $saved=Get-WinUserLanguageList
+  $after=@(foreach($item in $saved){$item.LanguageTag+':'+($item.InputMethodTips -join ',')})
   if(Compare-Object $original $after){throw 'Existing languages/input methods changed'}
   $actual=(& $env:CC_POWERSHELL -NoProfile -NonInteractive -Command '(Get-Culture).Name').Trim()
   if($actual -ne 'en-CA'){throw 'Regional format was not persisted'}

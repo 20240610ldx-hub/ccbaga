@@ -3,6 +3,7 @@
 // [POS]: 仅原生识别与用户触发的系统操作；不含网络客户端，不向 UI 输出进程参数或代理秘密。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use serde_json::{json, Value};
+use std::os::windows::process::CommandExt;
 use std::{
     ffi::{c_char, CStr, CString},
     process::{Command, Stdio},
@@ -60,6 +61,7 @@ pub unsafe fn rf_free(value: *mut c_char) {
 
 fn output(program: &str, args: &[&str]) -> Result<String, String> {
     let out = Command::new(program)
+        .creation_flags(0x08000000)
         .args(args)
         .stdin(Stdio::null())
         .output()
@@ -203,6 +205,81 @@ pub fn owned(path: &std::path::Path) -> bool {
         matches
     }
 }
+#[cfg(test)]
+pub(crate) fn fixture_owner(path: &std::path::Path) {
+    use std::os::windows::ffi::OsStrExt;
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut owner = current_sid().expect("test user SID").clone();
+    assert_eq!(
+        unsafe {
+            windows_sys::Win32::Security::Authorization::SetNamedSecurityInfoW(
+                wide.as_ptr(),
+                SE_FILE_OBJECT,
+                OWNER_SECURITY_INFORMATION,
+                owner.as_mut_ptr().cast(),
+                std::ptr::null_mut(),
+                std::ptr::null(),
+                std::ptr::null(),
+            )
+        },
+        0
+    );
+}
+pub fn preserve_file_permissions(
+    source: &std::path::Path,
+    target: &std::path::Path,
+) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Security::Authorization::SetNamedSecurityInfoW;
+    use windows_sys::Win32::Security::{
+        DACL_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
+    };
+    let wide = |path: &std::path::Path| {
+        path.as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect::<Vec<u16>>()
+    };
+    let source = wide(source);
+    let target = wide(target);
+    unsafe {
+        let mut owner = std::ptr::null_mut();
+        let mut acl = std::ptr::null_mut();
+        let mut descriptor = std::ptr::null_mut();
+        let read = GetNamedSecurityInfoW(
+            source.as_ptr(),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+            &mut owner,
+            std::ptr::null_mut(),
+            &mut acl,
+            std::ptr::null_mut(),
+            &mut descriptor,
+        );
+        let status = if read == 0 && !owner.is_null() && !acl.is_null() {
+            SetNamedSecurityInfoW(
+                target.as_ptr(),
+                SE_FILE_OBJECT,
+                OWNER_SECURITY_INFORMATION
+                    | DACL_SECURITY_INFORMATION
+                    | PROTECTED_DACL_SECURITY_INFORMATION,
+                owner,
+                std::ptr::null_mut(),
+                acl,
+                std::ptr::null(),
+            )
+        } else {
+            1
+        };
+        if !descriptor.is_null() {
+            LocalFree(descriptor.cast());
+        }
+        if status != 0 {
+            return Err("无法保留 Windows 配置权限，未写入内容。".into());
+        }
+    }
+    Ok(())
+}
 pub fn linked(meta: &std::fs::Metadata) -> bool {
     use std::os::windows::fs::MetadataExt;
     meta.file_attributes() & 0x400 != 0
@@ -223,45 +300,9 @@ pub fn open_settings(pane: &str) -> Result<Value, String> {
     Ok(json!({"ok": true}))
 }
 
-// ----- 共用地区目录所需的 IANA 与 Windows 时区映射 -----
-static TZ_MAP: &[(&str, &str)] = &[
-    ("America/Los_Angeles", "Pacific Standard Time"),
-    ("America/Vancouver", "Pacific Standard Time"),
-    ("America/Denver", "Mountain Standard Time"),
-    ("America/Phoenix", "US Mountain Standard Time"),
-    ("America/Chicago", "Central Standard Time"),
-    ("America/New_York", "Eastern Standard Time"),
-    ("America/Toronto", "Eastern Standard Time"),
-    ("America/Anchorage", "Alaskan Standard Time"),
-    ("Pacific/Honolulu", "Hawaiian Standard Time"),
-    ("America/Sao_Paulo", "E. South America Standard Time"),
-    ("America/Buenos_Aires", "Argentina Standard Time"),
-    ("Europe/London", "GMT Standard Time"),
-    ("Europe/Dublin", "GMT Standard Time"),
-    ("Europe/Paris", "Romance Standard Time"),
-    ("Europe/Berlin", "W. Europe Standard Time"),
-    ("Europe/Rome", "W. Europe Standard Time"),
-    ("Europe/Madrid", "Romance Standard Time"),
-    ("Europe/Amsterdam", "W. Europe Standard Time"),
-    ("Europe/Athens", "GTB Standard Time"),
-    ("Europe/Helsinki", "FLE Standard Time"),
-    ("Europe/Moscow", "Russian Standard Time"),
-    ("Asia/Tokyo", "Tokyo Standard Time"),
-    ("Asia/Seoul", "Korea Standard Time"),
-    ("Asia/Singapore", "Singapore Standard Time"),
-    ("Asia/Taipei", "Taipei Standard Time"),
-    ("Asia/Hong_Kong", "China Standard Time"),
-    ("Asia/Shanghai", "China Standard Time"),
-    ("Asia/Bangkok", "SE Asia Standard Time"),
-    ("Asia/Jakarta", "SE Asia Standard Time"),
-    ("Asia/Kolkata", "India Standard Time"),
-    ("Asia/Dubai", "Arabian Standard Time"),
-    ("Australia/Sydney", "AUS Eastern Standard Time"),
-    ("Australia/Melbourne", "AUS Eastern Standard Time"),
-    ("Pacific/Auckland", "New Zealand Standard Time"),
-    ("UTC", "UTC"),
-    ("Etc/UTC", "UTC"),
-];
+#[path = "windows_timezones.rs"]
+mod zones;
+use zones::TZ_MAP;
 
 pub fn iana_to_windows_tz(iana: &str) -> Option<&'static str> {
     TZ_MAP.iter().find(|(i, _)| *i == iana).map(|(_, w)| *w)
@@ -276,7 +317,7 @@ pub fn windows_to_iana_tz(win: &str) -> Option<&'static str> {
 }
 
 pub fn timezone() -> String {
-    let out = output("tzutil", &["/g"]).unwrap_or_default();
+    let out = raw_windows_timezone();
     crate::regions::get_regions()
         .iter()
         .find(|region| {
@@ -289,7 +330,19 @@ pub fn timezone() -> String {
 }
 
 pub fn raw_windows_timezone() -> String {
-    output("tzutil", &["/g"]).unwrap_or_default()
+    use windows_sys::Win32::System::Time::{
+        GetDynamicTimeZoneInformation, DYNAMIC_TIME_ZONE_INFORMATION,
+    };
+    let mut information = unsafe { std::mem::zeroed::<DYNAMIC_TIME_ZONE_INFORMATION>() };
+    if unsafe { GetDynamicTimeZoneInformation(&mut information) } == u32::MAX {
+        return String::new();
+    }
+    let key = information
+        .TimeZoneKeyName
+        .split(|c| *c == 0)
+        .next()
+        .unwrap_or_default();
+    String::from_utf16_lossy(key)
 }
 
 pub fn timezones() -> Vec<String> {
@@ -403,16 +456,17 @@ fn snapshot() -> Value {
 pub unsafe fn rf_browser_machine() -> *mut c_char {
     let mut state = snapshot();
     state["platform"] = json!("windows");
-    let win_ver = output(
+    static VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    state["version"] = json!(VERSION.get_or_init(|| output(
         "powershell",
         &[
             "-NoProfile",
+            "-NonInteractive",
             "-Command",
-            "[System.Environment]::OSVersion.Version.ToString()",
-        ],
+            "[System.Environment]::OSVersion.Version.ToString()"
+        ]
     )
-    .unwrap_or_default();
-    state["version"] = json!(win_ver);
+    .unwrap_or_default()));
     state["cores"] = json!(std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1));
@@ -466,15 +520,39 @@ fn language_matches(current: &str, requested: &str) -> bool {
             .is_some_and(|s| s.starts_with('-'))
 }
 fn region_settings(language: &str, region: Option<&str>) -> Result<Value, String> {
-    let supported = crate::regions::get_regions();
-    let selected = supported
-        .iter()
-        .find(|r| r.language == language && region.is_none_or(|v| r.locale == v))
-        .ok_or("语言或区域无效。")?;
-    let tag = selected.locale.replace('_', "-");
+    let tag = if let Some(locale) = region {
+        crate::regions::get_regions()
+            .iter()
+            .find(|r| r.language == language && r.locale == locale)
+            .ok_or("语言或区域无效。")?
+            .locale
+            .replace('_', "-")
+    } else {
+        match language {
+            "en" | "en-US" => "en-US",
+            "en-CA" => "en-CA",
+            "en-GB" => "en-GB",
+            "en-SG" => "en-SG",
+            "en-AU" => "en-AU",
+            "zh-Hans" => "zh-CN",
+            "zh-Hant" => "zh-TW",
+            "fr" => "fr-FR",
+            "de" => "de-DE",
+            "es" => "es-ES",
+            "it" => "it-IT",
+            "pt-BR" => "pt-BR",
+            "ja" => "ja-JP",
+            "ko" => "ko-KR",
+            "ru" => "ru-RU",
+            "ar" => "ar-SA",
+            _ => return Err("语言或区域无效。".into()),
+        }
+        .into()
+    };
     let active_language = session_language();
     let script = include_str!("../../scripts/windows-region.ps1").trim_start_matches('\u{feff}');
     let result = Command::new("powershell")
+        .creation_flags(0x08000000)
         .args(["-NoProfile", "-NonInteractive", "-Command", script])
         .env("CC_REGION_LANGUAGE", &tag)
         .env("CC_REGION_LOCALE", region.unwrap_or("").replace('_', "-"))

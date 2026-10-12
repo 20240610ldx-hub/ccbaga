@@ -89,7 +89,7 @@ fn reject_links_and_malformed_preferences() {
     #[cfg(unix)]
     std::os::unix::fs::symlink(&outside, root.join("Default/Cache")).unwrap();
     #[cfg(windows)]
-    assert!(Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(root.join("Default/Cache")).arg(&outside).output().unwrap().status.success());
+    assert!(Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(root.join("Default/Cache").to_string_lossy().replace('/', "\\")).arg(outside.to_string_lossy().replace('/', "\\")).output().unwrap().status.success());
     assert!(profile::clear(&root, false, |_, _| {}).is_err());
     assert!(outside.join("keep").exists());
     let prefs = root.join("Default/Preferences");

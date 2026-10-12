@@ -2,6 +2,7 @@
 // [OUTPUT]: 本地引擎发现与启动、用户主动设置默认浏览器。
 // [POS]: browser 编排的 Windows 平台实现；只接收 URL/文件入口，不执行用户提供的 shell。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+use std::os::windows::process::CommandExt;
 fn register(_: &Path) -> Result<(), String> {
     Ok(())
 }
@@ -35,6 +36,7 @@ New-Item -Path 'HKCU:\Software\RegisteredApplications' -Force | Out-Null
 Set-ItemProperty -LiteralPath 'HKCU:\Software\RegisteredApplications' -Name 'CCBaga-B' -Value 'Software\Clients\StartMenuInternet\CCBaga-B\Capabilities'
 "#;
     let status = Command::new("powershell")
+        .creation_flags(0x08000000)
         .args(["-NoProfile", "-NonInteractive", "-Command", script])
         .env("CCBAGA_EXE", &exe)
         .env(
