@@ -12,17 +12,25 @@ $ErrorActionPreference='Stop'
 $base='HKCU:\Software\Clients\StartMenuInternet\CCBaga-B'
 $cap=$base+'\Capabilities'
 $class='HKCU:\Software\Classes\CCBaga-B.URL'
+$html='HKCU:\Software\Classes\CCBaga-B.HTML'
+$icon='"'+$env:CCBAGA_ICON+'",0'
 $command='"'+$env:CCBAGA_EXE+'" --browser "%1"'
-foreach($key in @($base,$cap,($cap+'\URLAssociations'),$class,($class+'\shell\open\command'),($class+'\DefaultIcon'),($base+'\shell\open\command'))) { New-Item -Path $key -Force | Out-Null }
+foreach($key in @($base,$cap,($cap+'\URLAssociations'),$class,($class+'\shell\open\command'),($class+'\DefaultIcon'),($base+'\shell\open\command'),($cap+'\FileAssociations'),($html+'\shell\open\command'),($html+'\DefaultIcon'),($base+'\DefaultIcon'))) { New-Item -Path $key -Force | Out-Null }
 Set-Item -LiteralPath $base -Value 'CCBaga-B'
 Set-ItemProperty -LiteralPath $cap -Name ApplicationName -Value 'CCBaga-B'
 Set-ItemProperty -LiteralPath $cap -Name ApplicationDescription -Value 'CCBaga companion browser'
+Set-ItemProperty -LiteralPath $cap -Name ApplicationIcon -Value $icon
+foreach($extension in @('.htm','.html')) { Set-ItemProperty -LiteralPath ($cap+'\FileAssociations') -Name $extension -Value 'CCBaga-B.HTML' }
+Set-Item -LiteralPath $html -Value 'CCBaga-B HTML'
+Set-Item -LiteralPath ($html+'\shell\open\command') -Value $command
+Set-Item -LiteralPath ($html+'\DefaultIcon') -Value $icon
+Set-Item -LiteralPath ($base+'\DefaultIcon') -Value $icon
 foreach($protocol in @('http','https')) { Set-ItemProperty -LiteralPath ($cap+'\URLAssociations') -Name $protocol -Value 'CCBaga-B.URL' }
 Set-Item -LiteralPath $class -Value 'CCBaga-B URL'
 Set-ItemProperty -LiteralPath $class -Name 'URL Protocol' -Value ''
 Set-Item -LiteralPath ($class+'\shell\open\command') -Value $command
 Set-Item -LiteralPath ($base+'\shell\open\command') -Value $command
-Set-Item -LiteralPath ($class+'\DefaultIcon') -Value $env:CCBAGA_ICON
+Set-Item -LiteralPath ($class+'\DefaultIcon') -Value $icon
 New-Item -Path 'HKCU:\Software\RegisteredApplications' -Force | Out-Null
 Set-ItemProperty -LiteralPath 'HKCU:\Software\RegisteredApplications' -Name 'CCBaga-B' -Value 'Software\Clients\StartMenuInternet\CCBaga-B\Capabilities'
 "#;
@@ -171,4 +179,44 @@ pub async fn browser_set_default(app: tauri::AppHandle) -> Result<DefaultBrowser
         default_read()
     })
     .await
+}
+
+#[cfg(test)]
+mod windows_browser_tests {
+    use super::*;
+    #[test]
+    fn ci_registration_preserves_default_associations() {
+        if std::env::var("GITHUB_ACTIONS").as_deref() != Ok("true") {
+            return;
+        }
+        use windows_sys::Win32::System::Registry::HKEY_CURRENT_USER;
+        let key = r"Software\Clients\StartMenuInternet\CCBaga-B\Capabilities";
+        assert!(
+            crate::windows::registry_string(HKEY_CURRENT_USER, key, "ApplicationName").is_none()
+        );
+        let before = default_read().unwrap();
+        register_default().unwrap();
+        let read =
+            |path: &str, name: &str| crate::windows::registry_string(HKEY_CURRENT_USER, path, name);
+        assert_eq!(read(key, "ApplicationName").as_deref(), Some("CCBaga-B"));
+        for protocol in ["http", "https"] {
+            assert_eq!(
+                read(&format!(r"{key}\URLAssociations"), protocol).as_deref(),
+                Some("CCBaga-B.URL")
+            );
+        }
+        let command = read(r"Software\Classes\CCBaga-B.URL\shell\open\command", "").unwrap();
+        assert_eq!(
+            command,
+            format!(
+                "\"{}\" --browser \"%1\"",
+                std::env::current_exe().unwrap().display()
+            )
+        );
+        let after = default_read().unwrap();
+        assert_eq!(before.http, after.http);
+        assert_eq!(before.https, after.https);
+        let status = Command::new("powershell").args(["-NoProfile", "-NonInteractive", "-Command", r"Remove-Item -LiteralPath 'HKCU:\Software\Clients\StartMenuInternet\CCBaga-B','HKCU:\Software\Classes\CCBaga-B.URL','HKCU:\Software\Classes\CCBaga-B.HTML' -Recurse -Force; Remove-ItemProperty -LiteralPath 'HKCU:\Software\RegisteredApplications' -Name 'CCBaga-B'"]).status().unwrap();
+        assert!(status.success());
+    }
 }

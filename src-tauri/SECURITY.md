@@ -13,7 +13,7 @@
 | 边界 | 读取与输出 | 限制与依据 |
 | --- | --- | --- |
 | `src/linux.rs` | 当前用户 `/proc` 的进程可执行路径/参数；系统时区、CPU、会话语言和桌面定位偏好 | 参数只用于原生识别，不序列化给 WebView；没有网络客户端。仅用户复制操作写剪贴板，不读取剪贴板。 |
-| `src/windows.rs` / `windows_process.rs` | 当前用户 SID、文件所有权、系统状态与精确程序身份 | 不枚举 Credential Manager 密码；只写剪贴板。参数和创建时间不序列化；结束时重新核验 SID、程序和 live handle，浏览器仅按完整资料目录关闭。 |
+| `src/windows.rs` / `windows_process.rs` | 当前用户 SID、文件所有权、系统状态与精确程序/MSIX 包族身份 | 不枚举 Credential Manager 密码；只写剪贴板。参数和创建时间不序列化；结束时重新核验 SID、程序和 live handle，浏览器仅按完整资料目录关闭。 |
 | `src/cleaner*.rs` | Claude 白名单元数据与待清理配置；界面接收预览和脱敏结果 | 快照、当前用户所有权、规范路径、链接与进程状态核验；用户确认后才删除。保留项目、技能、插件等资产。Linux 只按精确 XDG 白名单补充缓存，不扩大文件夹清理范围。 |
 | `src/browser/config.rs` | 本机环境与用于出口探测的系统代理 | `Machine.system_proxy` 使用 `skip_serializing`，代理凭据不进入 WebView、浏览器回环 JSON 或 UI 日志；对应回归验证。 |
 | `src/browser/server.rs` | 匿名环境观测在 A/B 之间交换 | 仅随机令牌 `127.0.0.1` 会话，限制请求大小与资源根目录；不提供文件写入、命令执行或远程监听。 |

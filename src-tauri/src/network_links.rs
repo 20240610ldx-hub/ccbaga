@@ -2,6 +2,7 @@
 // [OUTPUT]: 两个原始供应商地址的 URL 组装及仓库 Skill 安装入口。
 // [POS]: 应用网络页唯一原生接口；不读取密钥、不执行 SSH、不接收任意 URL。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+#[cfg(not(windows))]
 use std::process::Command;
 fn provider_url(provider: &str) -> Result<String, String> {
     if provider == "skill" {

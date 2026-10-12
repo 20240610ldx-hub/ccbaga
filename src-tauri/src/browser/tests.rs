@@ -88,7 +88,8 @@ fn reject_links_and_malformed_preferences() {
     fs::create_dir(root.join("Default")).unwrap();
     #[cfg(unix)]
     std::os::unix::fs::symlink(&outside, root.join("Default/Cache")).unwrap();
-    #[cfg(unix)]
+    #[cfg(windows)]
+    assert!(Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(root.join("Default/Cache")).arg(&outside).output().unwrap().status.success());
     assert!(profile::clear(&root, false, |_, _| {}).is_err());
     assert!(outside.join("keep").exists());
     let prefs = root.join("Default/Preferences");
@@ -268,4 +269,14 @@ fn machine_proxy_credentials_never_leave_native_code() {
     let value = serde_json::to_string(&m).unwrap();
     assert!(!value.contains("private-password"));
     assert!(!value.contains("system_proxy"));
+}
+
+#[test]
+fn windows_report_requires_real_platform_cpu_and_version() {
+    let mut m = machine(); m.platform = "windows".into(); m.version = "10.0.26100".into();
+    let mut report = network::Report { language: "en-US".into(), languages: vec!["en-US".into()], timezone: m.timezone.clone(), platform: "Win32".into(), cores: m.cores, user_agent: "fixture".into(), platform_version: m.version.clone(), browser_version: "148".into(), geolocation: "denied".into(), error: String::new(), exit: None };
+    let result = |r: &network::Report| network::checks(&m, &Config::default(), Some(r), None, "148").into_iter().find(|c| c.title == "真实设备与 CPU").unwrap().status;
+    assert_eq!(result(&report), "ok");
+    report.platform = "MacIntel".into(); assert_eq!(result(&report), "mismatch");
+    report.platform = "Win32".into(); report.platform_version = "fake".into(); assert_eq!(result(&report), "mismatch");
 }

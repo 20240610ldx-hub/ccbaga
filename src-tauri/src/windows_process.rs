@@ -58,6 +58,20 @@ impl Handle {
         }
         Some(String::from_utf16_lossy(&buffer[..size as usize]))
     }
+    fn packaged_claude(&self) -> bool {
+        let mut buffer = [0u16; 128];
+        let mut size = buffer.len() as u32;
+        let status = unsafe {
+            windows_sys::Win32::Storage::Packaging::Appx::GetPackageFamilyName(
+                self.0,
+                &mut size,
+                buffer.as_mut_ptr(),
+            )
+        };
+        status == 0
+            && String::from_utf16_lossy(&buffer[..size.saturating_sub(1) as usize])
+                == "Claude_pzs8sxrjxfjjc"
+    }
     fn created(&self) -> Option<u64> {
         let [mut created, mut exited, mut kernel, mut user] = [FILETIME {
             dwLowDateTime: 0,
@@ -265,7 +279,12 @@ pub fn claude_processes() -> Result<Vec<ClaudeProcess>, String> {
     for (pid, handle) in processes(false)? {
         let Some(image) = handle.image() else { continue; };
         let args = arguments(&handle).unwrap_or_default();
-        if let (Some(kind), Some(created)) = (claude_kind(&image, &args), handle.created()) {
+        let kind = if handle.packaged_claude() {
+            Some("Claude Desktop")
+        } else {
+            claude_kind(&image, &args)
+        };
+        if let (Some(kind), Some(created)) = (kind, handle.created()) {
             found.push(ClaudeProcess {
                 pid: pid as i32,
                 name: kind.into(),
@@ -283,7 +302,9 @@ pub fn kill_process(target: &ClaudeProcess) -> Result<(), String> {
     {
         return Ok(());
     }
-    if claude_kind(&target.executable, &arguments(&handle).unwrap_or_default()).is_none() {
+    if !handle.packaged_claude()
+        && claude_kind(&target.executable, &arguments(&handle).unwrap_or_default()).is_none()
+    {
         return Ok(());
     }
     if unsafe { TerminateProcess(handle.0, 1) } == 0 {

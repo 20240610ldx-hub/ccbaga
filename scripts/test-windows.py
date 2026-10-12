@@ -20,7 +20,16 @@ class CliTests(unittest.TestCase):
     def setUpClass(cls):
         cls.build=tempfile.TemporaryDirectory(prefix='ccbaga-cli-binary-')
         source=Path(cls.build.name)/'cli.rs'
-        source.write_text('fn main(){println!("2.1.0 (Claude Code)");}',encoding='utf-8')
+        source.write_text(r'''fn main(){
+if std::env::current_exe().unwrap().file_stem().unwrap()=="winget" {
+let target=std::path::PathBuf::from(std::env::var("LOCALAPPDATA").unwrap()).join("Microsoft/WinGet/Packages/Anthropic.ClaudeCode_Microsoft.Winget.Source_8wekyb3d8bbwe/claude.exe");
+match std::env::args().nth(1).as_deref() {
+Some("uninstall") => { std::fs::remove_file(target).unwrap(); },
+Some("install") => { std::fs::copy(std::env::var("CC_FIXTURE_WINGET_PAYLOAD").unwrap(),target).unwrap(); },
+_ => std::process::exit(9)
+} return;
+} println!("2.1.0 (Claude Code)");
+}''',encoding='utf-8')
         cls.binary=source.with_suffix('.exe')
         subprocess.run(['rustc',str(source),'-o',str(cls.binary)],check=True)
     @classmethod
@@ -75,11 +84,49 @@ default {exit 8}
     def test_failed_npm_reinstall_does_not_claim_success(self):
         self.npm();self.env['CC_FIXTURE_FAIL']='1';result=self.invoke('reinstall')
         self.assertNotEqual(result.returncode,0);self.assertNotIn('CC_CLI_DONE=1',result.stdout);self.assets()
+    def test_winget_reinstall_preserves_package_manager(self):
+        destination=self.local/'Microsoft/WinGet/Packages/Anthropic.ClaudeCode_Microsoft.Winget.Source_8wekyb3d8bbwe/claude.exe'
+        destination.parent.mkdir(parents=True);shutil.copyfile(self.binary,destination)
+        shutil.copyfile(self.binary,self.bin/'winget.exe')
+        self.env['CC_FIXTURE_WINGET_PAYLOAD']=str(self.binary)
+        result=self.invoke('reinstall');self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('CC_CLI_METHOD=winget',result.stdout)
+        result=self.invoke('uninstall');self.assertEqual(result.returncode,0,result.stderr)
+        self.assertFalse(destination.exists());self.assets()
     def test_custom_launcher_is_preserved(self):
         custom=self.file('bin/claude.cmd','@echo off\necho personal launcher\n')
         result=self.invoke('uninstall');self.assertNotEqual(result.returncode,0);self.assertTrue(custom.exists());self.assets()
     def test_unmanaged_native_launcher_is_preserved_without_path(self):
         native=self.home/'.local/bin/claude.exe';native.parent.mkdir(parents=True);shutil.copyfile(self.binary,native)
         result=self.invoke('reinstall');self.assertNotEqual(result.returncode,0);self.assertTrue(native.exists());self.assets()
+
+class SystemTests(unittest.TestCase):
+    @unittest.skipUnless(os.environ.get('GITHUB_ACTIONS')=='true','System mutation is restricted to disposable CI runners')
+    def test_language_format_write_retains_languages_and_restores_state(self):
+        script=r"""
+$ErrorActionPreference='Stop'
+$env:PSModulePath=(Join-Path $PSHOME 'Modules')+';'+$env:PSModulePath
+[Console]::OutputEncoding=New-Object System.Text.UTF8Encoding
+$before=Get-WinUserLanguageList
+$override=Get-WinUILanguageOverride
+$format=Get-Culture
+$original=@($before | ForEach-Object { $_.LanguageTag+':'+($_.InputMethodTips -join ',') })
+try {
+  $env:CC_REGION_LANGUAGE=$before[0].LanguageTag
+  $env:CC_REGION_LOCALE='en-CA'
+  & $env:CC_SYSTEM_SCRIPT | Out-Null
+  $after=@(Get-WinUserLanguageList | ForEach-Object { $_.LanguageTag+':'+($_.InputMethodTips -join ',') })
+  if(Compare-Object $original $after){throw 'Existing languages/input methods changed'}
+  $actual=(& $env:CC_POWERSHELL -NoProfile -NonInteractive -Command '(Get-Culture).Name').Trim()
+  if($actual -ne 'en-CA'){throw 'Regional format was not persisted'}
+} finally {
+  Set-WinUserLanguageList $before -Force
+  if($override){Set-WinUILanguageOverride -Language $override.Name}else{Set-WinUILanguageOverride}
+  Set-Culture -CultureInfo $format.Name
+}
+Write-Output 'SYSTEM_VERIFIED'
+"""
+        result=subprocess.run([str(POWERSHELL),'-NoProfile','-NonInteractive','-Command',script],env=os.environ|{'CC_SYSTEM_SCRIPT':str(ROOT/'scripts/windows-region.ps1'),'CC_POWERSHELL':str(POWERSHELL)},capture_output=True,encoding='utf-8',timeout=45)
+        self.assertEqual(result.returncode,0,result.stderr);self.assertIn('SYSTEM_VERIFIED',result.stdout)
 
 if __name__=='__main__':unittest.main()

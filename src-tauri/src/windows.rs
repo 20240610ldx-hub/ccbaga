@@ -8,7 +8,7 @@ use std::{
     process::{Command, Stdio},
 };
 use windows_sys::Win32::Foundation::LocalFree;
-use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
 use windows_sys::Win32::Security::Authorization::{GetNamedSecurityInfoW, SE_FILE_OBJECT};
 use windows_sys::Win32::Security::OWNER_SECURITY_INFORMATION;
 use windows_sys::Win32::Security::{
@@ -108,7 +108,7 @@ pub unsafe fn rf_copy(text: *const c_char) -> Result<(), String> {
     std::ptr::copy_nonoverlapping(wide.as_ptr() as *const u8, ptr as *mut u8, bytes);
     GlobalUnlock(h_mem);
 
-    let owner = windows_sys::Win32::UI::WindowsAndMessaging::GetActiveWindow();
+    let owner = windows_sys::Win32::UI::Input::KeyboardAndMouse::GetActiveWindow();
     if owner.is_null() || OpenClipboard(owner) == 0 {
         GlobalFree(h_mem);
         return Err("无法打开系统剪贴板。".into());
@@ -517,4 +517,37 @@ pub unsafe fn rf_system_location() -> *mut c_char {
             Err("请在打开的 Windows 设置窗口中手动关闭定位权限。".into())
         }
     })())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn ci_timezone_write_is_verified_and_restored() {
+        for region in crate::regions::get_regions() {
+            assert!(iana_to_windows_tz(region.timezone).is_some());
+        }
+        if std::env::var("GITHUB_ACTIONS").as_deref() != Ok("true") {
+            return;
+        }
+        struct Restore(String);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                output("tzutil", &["/s", &self.0]).expect("restore CI timezone");
+            }
+        }
+        let before = Restore(raw_windows_timezone());
+        assert!(!before.0.is_empty());
+        let requested = CString::new("Asia/Tokyo").unwrap();
+        let state: Value =
+            crate::native::decode(unsafe { rf_system_timezone(requested.as_ptr()) }).unwrap();
+        assert!(state["state"].is_object());
+        assert_eq!(raw_windows_timezone(), "Tokyo Standard Time");
+        let invalid = CString::new("Asia/Tokyo; malicious").unwrap();
+        assert!(
+            crate::native::decode::<Value>(unsafe { rf_system_timezone(invalid.as_ptr()) })
+                .is_err()
+        );
+        assert_eq!(raw_windows_timezone(), "Tokyo Standard Time");
+    }
 }

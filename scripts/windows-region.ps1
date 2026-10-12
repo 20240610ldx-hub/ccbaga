@@ -3,6 +3,7 @@
 # [POS]: 电脑环境的内嵌执行层；保留其他语言和输入法，不修改系统账户、定位或系统策略。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 $ErrorActionPreference='Stop'
+$env:PSModulePath=(Join-Path $PSHOME 'Modules')+';'+$env:PSModulePath
 [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding
 $tag=$env:CC_REGION_LANGUAGE
 $format=$env:CC_REGION_LOCALE

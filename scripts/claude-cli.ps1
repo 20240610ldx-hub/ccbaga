@@ -4,6 +4,7 @@
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 param([ValidateSet('read','uninstall','reinstall')][string]$action='read')
 $ErrorActionPreference='Stop'
+$env:PSModulePath=(Join-Path $PSHOME 'Modules')+';'+$env:PSModulePath
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding
 $root=$env:CC_CLI_USER_DIR
 if (-not $root) { $root=$env:USERPROFILE }

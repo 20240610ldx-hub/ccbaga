@@ -3,6 +3,11 @@
 // [POS]: 仅操作测试数据，进程样本由本机编译并握手确认启动，避免重用 Apple 平台二进制，不访问现有 Claude 数据。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
+#[cfg(windows)]
+fn junction(source: &Path, target: &Path) {
+    assert!(std::process::Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(target).arg(source).output().unwrap().status.success());
+}
+
 #[test]
 fn folder_scope_preserves_project_assets_and_refuses_outside_targets() {
     let f = Fixture::new();
@@ -21,6 +26,8 @@ fn folder_scope_preserves_project_assets_and_refuses_outside_targets() {
     outside.file(".claude/projects/session.jsonl", "outside");
     #[cfg(unix)]
     std::os::unix::fs::symlink(&outside.0, f.0.join("linked")).unwrap();
+    #[cfg(windows)]
+    junction(&outside.0, &f.0.join("linked"));
     let plan = folder::collect(&f.0, &Reporter::channel(None)).unwrap();
     assert_eq!(plan.items.len(), 3);
     assert_eq!(plan.folder, f.0.to_string_lossy());
@@ -132,7 +139,8 @@ fn ignores_linked_targets() {
     fs::create_dir(f.0.join("outside")).unwrap();
     #[cfg(unix)]
     std::os::unix::fs::symlink(f.0.join("outside"), f.0.join(".claude")).unwrap();
-    #[cfg(unix)]
+    #[cfg(windows)]
+    junction(&f.0.join("outside"), &f.0.join(".claude"));
     assert!(collect(&f.0, None).unwrap().items.is_empty());
 }
 #[test]
@@ -325,6 +333,8 @@ fn organization_search_stays_in_claude_sessions_and_does_not_follow_links() {
     f.file("source/private.json", r#"{"org_id":"org-12345678"}"#);
     #[cfg(unix)]
     std::os::unix::fs::symlink(f.0.join("source"), f.0.join(".claude/projects/link")).unwrap();
+    #[cfg(windows)]
+    junction(&f.0.join("source"), &f.0.join(".claude/projects/link"));
     let (files, complete) = targets::org_files(&f.0, org).unwrap();
     assert!(complete);
     assert_eq!(files.len(), 1);

@@ -230,10 +230,10 @@ pub fn checks(
             report.map(|r| {
                 r.platform
                     .to_lowercase()
-                    .contains(if machine.platform == "linux" {
-                        "linux"
-                    } else {
-                        "mac"
+                    .contains(match machine.platform.as_str() {
+                        "linux" => "linux",
+                        "windows" => "win",
+                        _ => "mac",
                     })
                     && r.cores == machine.cores
                     && (machine.platform == "linux" || r.platform_version == machine.version)

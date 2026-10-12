@@ -9,7 +9,7 @@ test-sign-browser.py: 临时伪引擎树验证叶子到容器的签名顺序、�
 windows-region.ps1: 当前用户 International 首选语言/显示语言偏好与区域格式设置；保留其他语言、复核持久化，当前会话未生效时明确报告需重新登录。
 claude-cli.ps1: Windows 官方 CLI 程序管理与真实完成协议，保留配置和项目，不执行 VPS 配置。
 package-browser.ps1: Windows 固定引擎前置核验，不打包用户资料或私钥。
-test-windows.py: Windows 程序/安装器边界与隔离样本回归。
+test-windows.py: Windows 原生/npm/WinGet 程序隔离样本的真实卸载重装、失败和自定义启动器拒绝；CI 实际语言/区域写入、输入法保留和完整还原。
 fetch-browser.py: 固定上游引擎 DMG 与 SHA-256，核验版本和 arm64 后恢复引擎；干净 CI 检出不依赖维护者本机 Browser.app。
 release-macos.py: 外部凭据与可选 CC_RELEASE_VERSION 驱动三阶段公证装订；明确将原生构建目录 Browser.app 暂存为交付名 CCBaga-B.app，再由 dmgbuild 无头写入 Finder 布局；装订后的宿主单独归档并签名绑定版本，更新私钥仅传给签名子进程；Apple 凭据不进入构建、DMG 或更新签名子进程，公证工具只通过明确参数接收其认证输入；官方更新器回归核验后生成公开 latest.json；产物和哈希记录写入被忽略的 releases/。
 dmg-settings.py: 固定 800×500 像素背景、两应用到 Applications 的拖拽坐标；通知文件保留在盘内但默认隐藏，不依赖 Finder 自动化。

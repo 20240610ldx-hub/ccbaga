@@ -9,5 +9,6 @@
   Delete "$SMPROGRAMS\CCBaga-B.lnk"
   DeleteRegKey HKCU "Software\Clients\StartMenuInternet\CCBaga-B"
   DeleteRegKey HKCU "Software\Classes\CCBaga-B.URL"
+  DeleteRegKey HKCU "Software\Classes\CCBaga-B.HTML"
   DeleteRegValue HKCU "Software\RegisteredApplications" "CCBaga-B"
 !macroend

@@ -250,71 +250,75 @@ pub(super) fn definitions(root: &Path) -> Vec<Target> {
         item.operation = Operation::Edit(kind);
         result.push(item);
     }
-#[cfg(target_os = "windows")]
-fn win_dir(root: &Path, variable: &str, fallback: &str) -> PathBuf {
-    if super::home().ok().as_deref() == Some(root) {
-        if let Some(path) = std::env::var_os(variable)
-            .map(PathBuf::from)
-            .filter(|p| p.is_absolute())
-        {
-            return path;
+    #[cfg(target_os = "windows")]
+    fn win_dir(root: &Path, variable: &str, fallback: &str) -> PathBuf {
+        if super::home().ok().as_deref() == Some(root) {
+            if let Some(path) = std::env::var_os(variable)
+                .map(PathBuf::from)
+                .filter(|p| p.is_absolute())
+            {
+                return path;
+            }
         }
+        root.join(fallback)
     }
-    root.join(fallback)
-}
 
     #[cfg(target_os = "windows")]
     {
         result.retain(|item| !item.path.starts_with(root.join("Library")));
         let appdata = win_dir(root, "APPDATA", "AppData/Roaming");
         let localappdata = win_dir(root, "LOCALAPPDATA", "AppData/Local");
-        for (path, title) in [
-            (localappdata.join("claude-cli-nodejs"), "Code 系统缓存"),
-            (appdata.join("Claude/Cache"), "Desktop 页面缓存"),
-            (appdata.join("Claude/Code Cache"), "Desktop 编译缓存"),
-            (appdata.join("Claude/GPUCache"), "Desktop 图形缓存"),
-            (appdata.join("Claude/logs"), "Desktop 日志"),
-            (appdata.join("Claude/Crashpad"), "Desktop 崩溃报告"),
-        ] {
-            let mut item = target(
+        result.push(Target {
+            path: localappdata.join("claude-cli-nodejs"),
+            ..target(
                 root,
                 "",
-                title,
+                "Code 系统缓存",
                 "cache",
                 "safe",
                 "仅移除本地缓存或日志。",
-            );
-            item.path = path;
-            result.push(item);
-        }
-        for (path, title) in [
-            (appdata.join("Claude"), "Desktop 完整本地数据"),
+            )
+        });
+        for desktop in [
+            appdata.join("Claude"),
+            localappdata.join("Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude"),
         ] {
-            let mut item = target(
-                root,
-                "",
-                title,
-                "desktop",
-                "login",
-                "重置桌面端登录和本地状态；服务器上的对话不会被删除。",
-            );
-            item.path = path;
-            result.push(item);
-        }
-        for path in [
-            appdata.join("Claude/ant-did"),
-            appdata.join("Claude/ant-device-registry.json"),
-        ] {
-            let mut item = target(
-                root,
-                "",
-                "Desktop 本地设备标识",
-                "account",
-                "login",
-                "仅清除本地记录；不能删除服务端账号或设备记录。",
-            );
-            item.path = path;
-            result.push(item);
+            for (name, title) in [
+                ("Cache", "Desktop 页面缓存"),
+                ("Code Cache", "Desktop 编译缓存"),
+                ("GPUCache", "Desktop 图形缓存"),
+                ("logs", "Desktop 日志"),
+                ("Crashpad", "Desktop 崩溃报告"),
+            ] {
+                result.push(Target {
+                    path: desktop.join(name),
+                    ..target(root, "", title, "cache", "safe", "仅移除本地缓存或日志。")
+                });
+            }
+            result.push(Target {
+                path: desktop.clone(),
+                ..target(
+                    root,
+                    "",
+                    "Desktop 完整本地数据",
+                    "desktop",
+                    "login",
+                    "重置桌面端登录和本地状态；服务器上的对话不会被删除。",
+                )
+            });
+            for name in ["ant-did", "ant-device-registry.json"] {
+                result.push(Target {
+                    path: desktop.join(name),
+                    ..target(
+                        root,
+                        "",
+                        "Desktop 本地设备标识",
+                        "account",
+                        "login",
+                        "仅清除本地记录；不能删除服务端账号或设备记录。",
+                    )
+                });
+            }
         }
     }
     #[cfg(target_os = "linux")]
@@ -447,7 +451,9 @@ pub(super) fn org_files(root: &Path, org: &str) -> Result<(Vec<PathBuf>, bool), 
         "AppData/Roaming/Claude/local_sessions",
         "AppData/Roaming/Claude/conversations",
     ] {
-        if (cfg!(target_os = "linux") || cfg!(target_os = "windows")) && relative.starts_with("Library/") {
+        if (cfg!(target_os = "linux") || cfg!(target_os = "windows"))
+            && relative.starts_with("Library/")
+        {
             continue;
         }
         if !cfg!(target_os = "windows") && relative.starts_with("AppData/") {
