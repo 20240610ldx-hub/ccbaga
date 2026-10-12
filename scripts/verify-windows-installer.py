@@ -29,6 +29,7 @@ def wait_for(check, seconds=45):
 def main():
     if os.name!='nt' or os.environ.get('GITHUB_ACTIONS')!='true':
         raise SystemExit('Installer mutation is restricted to a disposable GitHub Windows runner')
+    trace=Path(tempfile.gettempdir())/'ccbaga-ci-startup.log';trace.unlink(missing_ok=True)
     installer=Path(sys.argv[1]).resolve()
     manifest=json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))
     # ----- 与 Tauri dirs::data_dir 相同的 Known Folder，环境变量不重定向它 -----
@@ -122,9 +123,12 @@ def main():
         except Exception:
             print('CI startup diagnostic:',runtime_log.read_text(encoding='utf-8',errors='replace')[-8192:].replace('secret-marker','[test-marker]'))
             print('CI start file exists:',(data/'browser/start.url').exists())
+            print('CI fixed startup stages:',trace.read_text(encoding='utf-8',errors='replace')[-4096:] if trace.exists() else 'no host entry')
+            subprocess.run(['powershell','-NoProfile','-Command','$p=Get-Process -Id $env:CC_TEST_PID -ErrorAction SilentlyContinue; $p | Select-Object ProcessName,Id,Responding,MainWindowTitle; $p.Modules | ForEach-Object { $_.ModuleName }'],env=env|{'CC_TEST_PID':str(child.pid if child else 0)},check=False)
             raise
         finally:
             stop()
             shutil.rmtree(data)
+            trace.unlink(missing_ok=True)
 
 if __name__=='__main__':main()

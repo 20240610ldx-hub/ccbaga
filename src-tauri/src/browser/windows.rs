@@ -114,20 +114,26 @@ pub fn open_urls(app: tauri::AppHandle, args: Vec<String>) {
 }
 
 fn start_windows_companion(app: &tauri::AppHandle, urls: &[String]) -> Result<(), String> {
+    crate::startup_trace("companion entry");
     let state = app.state::<Browser>();
     let _guard = state.gate.lock().unwrap();
     let engine = prepare_engine(app)?;
+    crate::startup_trace("engine ready");
     let root = root(app)?;
     let profile = root.join("profile");
     profile::check_path(&root, &profile)?;
     let config = config::load(&root)?;
+    crate::startup_trace("config ready");
     let machine = config::machine()?;
+    crate::startup_trace("machine ready");
     config.validate(&machine)?;
     if !profile::running(&profile)? {
         profile::preferences(&profile, &config, &machine)?;
     }
     write_launch_args(&root, &config, &machine, &profile, &version(&engine))?;
+    crate::startup_trace("preferences ready");
     let page = open_session(app, &config, &machine, version(&engine))?;
+    crate::startup_trace("session ready");
     let mut child = Command::new(binary(&engine))
         .args(config::arguments(
             &config,
@@ -142,6 +148,7 @@ fn start_windows_companion(app: &tauri::AppHandle, urls: &[String]) -> Result<()
         .stderr(Stdio::null())
         .spawn()
         .map_err(|_| "无法启动 Windows Chromium 浏览器。请检查引擎文件与依赖。".to_string())?;
+    crate::startup_trace("companion spawned");
     std::thread::spawn(move || {
         let _ = child.wait();
     });

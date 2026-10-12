@@ -2,6 +2,7 @@
 // [OUTPUT]: CCBaga-A窗口、托盘、本地清理和 CLI 卸载/重装、固定网络资源入口与随界面语言切换的托盘菜单。
 // [POS]: 应用编排层；不注册翻译快捷键，不读取翻译设置或 API 密钥。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 // ----- 发布包必须内嵌前端资源，禁止依赖开发服务 -----
 #[cfg(all(not(debug_assertions), not(feature = "custom-protocol")))]
 compile_error!("发布构建需要 custom-protocol；使用 tauri build 或 cargo build --release --features custom-protocol。");
@@ -55,7 +56,20 @@ async fn copy_result(app: tauri::AppHandle, text: String) -> Result<(), String> 
 fn runtime_platform() -> &'static str {
     std::env::consts::OS
 }
+pub(crate) fn startup_trace(stage: &str) {
+    #[cfg(windows)]
+    if std::env::var("GITHUB_ACTIONS").as_deref() == Ok("true") {
+        // CI 只记录固定启动阶段，不读取文件正文、参数或凭据。
+        let path = std::env::temp_dir().join("ccbaga-ci-startup.log");
+        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            use std::io::Write;
+            let _ = writeln!(file, "{stage}");
+        }
+    }
+    let _ = stage;
+}
 fn main() {
+    startup_trace("host entry");
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -74,6 +88,7 @@ fn main() {
             show(app)
         }))
         .setup(|app| {
+            startup_trace("host setup");
             app.manage(ui_language::UiLanguage::load(app.handle()));
             app.manage(cleaner::Cleaner::default());
             app.manage(browser::Browser::default());
@@ -97,6 +112,7 @@ fn main() {
                     _ => {}
                 })
                 .build(app)?;
+            startup_trace("host ready");
             Ok(())
         })
         .on_window_event(|window, event| {

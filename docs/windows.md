@@ -12,13 +12,13 @@ Download **one** `CCBaga-<version>-windows-x86_64-setup.exe` from [Releases](htt
 
 The installer does not have an Authenticode certificate. Windows may show SmartScreen; ordinary installations can use **More info → Run anyway**. Organization policy or Smart App Control may prevent this. Do not disable security policy to install the app. Compare the download's SHA-256 with `SHA256SUMS`.
 
-The sidebar checks for updates only from the official HTTPS manifest. Tauri verifies the installer signature and version, closes this companion browser, then exits A for the update. Windows updates install **both A and B**. Save unfinished work first. A manual reinstall also preserves profiles and personal Claude assets. Uninstall removes the programs and their own shortcuts/registrations, not your profiles, skills or projects.
+The sidebar checks for updates only from the official HTTPS manifest. Tauri verifies the installer signature and version, closes this companion browser, then exits A for the update. Windows updates install **both A and B**. Save unfinished work first. A manual reinstall also preserves profiles and personal Claude assets. By default, uninstall removes the programs and their own shortcuts/registrations, preserving profiles, skills and projects. The standard installer also offers an explicit **Delete application data** checkbox; selecting it removes CCBaga’s own saved profile and settings.
 
 ## Platform behavior
 
 | Operation | Windows implementation |
 | --- | --- |
-| Timezone | Maps the selected IANA zone to a supported Windows ID, uses `tzutil /s`, then checks `tzutil /g`. Insufficient permission opens Date & time settings and reports failure. |
+| Timezone | Maps the selected IANA zone to a supported Windows ID, uses `tzutil /s`, then reads the actual dynamic timezone through the Windows API. Insufficient permission opens Date & time settings and reports failure. |
 | Language and regional format | Uses the current-user International cmdlets, preserving other languages and input methods. Display language can require an installed language pack and sign-out/sign-in; a pending preference is not reported as an active language change. |
 | Default browser | Registers B's capabilities and HTTP/HTTPS handlers under HKCU, opens Windows Default apps for user confirmation, then reads both actual associations separately. It does not overwrite protected UserChoice settings. |
 | Fingerprint and restart | Normally closes only the browser using CCBaga's exact profile, updates the seed/region preferences, and restarts the bundled engine. Other Chrome profiles are unaffected. |
