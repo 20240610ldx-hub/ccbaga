@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: 真实 Linux 打包入口、可丢弃引擎树与复制/提交故障替身。
-# [OUTPUT]: 重建移除旧引擎文件、保留权限/链接/其他资源，并在暂存或提交失败时保留旧构建。
+# [OUTPUT]: 重建移除旧引擎文件、保留权限/链接/其他资源，并在暂存/提交失败保留旧构建，双重失败保留可恢复备份。
 # [POS]: 构建资源回归；非 Linux 仅使用 uname 替身选择 Linux 分支，不安装或启动引擎。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import importlib.util
@@ -107,6 +107,27 @@ class PackageTests(unittest.TestCase):
                 package.replace_engine(self.source, self.output)
         self.assertEqual((self.output / 'LinuxBrowser/chrome').read_text(), 'original engine')
         self.assertFalse(list(self.output.glob('.ccbaga-engine-*')))
+
+    def test_failed_commit_and_rollback_keep_recoverable_old_engine(self):
+        self.run_package()
+        (self.source / 'chrome').write_text('replacement engine')
+        original = Path.rename
+        def fail_commit_and_rollback(path, destination):
+            if path.parent.name.startswith('.ccbaga-engine-') and path.name in ['LinuxBrowser', 'previous']:
+                raise OSError('fixture commit and rollback failure')
+            return original(path, destination)
+        with patch.object(Path, 'rename', fail_commit_and_rollback):
+            with self.assertRaises((OSError, RuntimeError)) as caught:
+                package.replace_engine(self.source, self.output)
+        stages = list(self.output.glob('.ccbaga-engine-*'))
+        self.assertEqual(len(stages), 1)
+        previous = stages[0] / 'previous'
+        self.assertEqual((previous / 'chrome').read_text(), 'original engine')
+        self.assertTrue(os.access(previous / 'chrome', os.X_OK))
+        self.assertEqual(os.readlink(previous / 'linked-library.so'), 'removed-library.so')
+        self.assertIsInstance(caught.exception, RuntimeError)
+        self.assertIn(str(previous), str(caught.exception))
+        self.assertEqual((self.output / 'LICENSE.fingerprint-chromium').read_text(), 'keep license')
 
 
 if __name__ == '__main__':

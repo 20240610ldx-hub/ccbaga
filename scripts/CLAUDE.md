@@ -35,6 +35,6 @@ test-rpm.py: 临时 DEB 文件树经真实 rpmbuild 转换，回归 RPM 版本/�
 verify-linux-package.py: Linux 安装包只读载荷契约，供 Ubuntu/Arch 共用，拒绝缺失 UI、入口或被改写的引擎文件/链接。
 build-arch.sh: 固定摘要容器准备 Node.js 等构建/测试依赖，以非 root makepkg、原生回归与解包验收，公开源码与 Cargo 缓存挂载；不接触 macOS 凭据。
 
-package-linux-browser.py: Linux 源码/Arch 的所属引擎目录完整替换；暂存和提交失败保留旧构建，保持符号链接/权限和其他资源，不混入已删除的旧引擎文件。
-test-package-linux-browser.py: 真实打包入口的首次/重建、版本/执行权限前置检查、复制/提交回滚回归；临时样本不安装引擎，非 Linux 仅替换 uname 选择 Linux 分支。
+package-linux-browser.py: Linux 源码/Arch 的所属引擎目录完整替换；暂存和提交失败保留旧构建，回滚失败保留备份并报告恢复路径，保持符号链接/权限和其他资源，不混入已删除的旧引擎文件。
+test-package-linux-browser.py: 真实打包入口的首次/重建、版本/执行权限前置检查、复制/提交回滚及双重失败备份保留回归；临时样本不安装引擎，非 Linux 仅替换 uname 选择 Linux 分支。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
