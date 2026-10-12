@@ -39,7 +39,7 @@ Chromium uses its normal Linux sandbox. Run as a regular user with working user 
 
 ## Local Arch Linux build
 
-Arch Linux and Arch-based desktops such as Omarchy are supported on x86_64. A native pacman package recipe is included; it is not an AUR publication. Install `base-devel`, `bun`, `rust` (or `rustup` with a stable toolchain), `git`, `pkgconf`, `python` and `cmake`, plus the runtime dependencies above, then:
+Arch Linux and Arch-based desktops such as Omarchy are supported on x86_64. A native pacman package recipe is included; it is not an AUR publication. Install `base-devel`, `bun`, `nodejs`, `rust` (or `rustup` with a stable toolchain), `git`, `pkgconf`, `python` and `cmake`, plus the runtime dependencies above, then:
 
 ```sh
 cd packaging/arch

@@ -5,7 +5,7 @@
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 set -euo pipefail
 cd /work
-pacman -Syu --noconfirm --needed bun rust git pkgconf python cmake webkit2gtk-4.1 gtk3 libayatana-appindicator librsvg patchelf zsh openssh xdg-utils curl nss nspr mesa alsa-lib libxss
+pacman -Syu --noconfirm --needed bun nodejs rust git pkgconf python cmake webkit2gtk-4.1 gtk3 libayatana-appindicator librsvg patchelf zsh openssh xdg-utils curl nss nspr mesa alsa-lib libxss
 useradd -m -u "$(stat -c '%u' /work)" builder
 chown -R builder:builder packaging/arch
 runuser -u builder -- env CARGO_TARGET_DIR=/work/src-tauri/target CC_RELEASE_VERSION="$CC_RELEASE_VERSION" CCBAGA_GIT_URL=file:///work CCBAGA_GIT_REF="commit=$GITHUB_SHA" bash -c 'cd /work/packaging/arch; makepkg -f'

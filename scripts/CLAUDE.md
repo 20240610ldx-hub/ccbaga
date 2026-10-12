@@ -22,4 +22,4 @@ test-linux.py: 临时构建验证安装隔离、B 运行保护、桌面写入回
 
 release-linux.py: 无 Apple/更新凭据的 x86_64 三格式构建；真实解包核对宿主、UI、B 入口、图标与引擎字节，生成独立校验清单。
 verify-linux-package.py: Linux 安装包只读载荷契约，供 Ubuntu/Arch 共用，拒绝缺失 UI、入口或被改写的引擎。
-build-arch.sh: 固定摘要容器中非 root makepkg、原生回归与解包验收，公开源码与 Cargo 缓存挂载；不接触 macOS 凭据。
+build-arch.sh: 固定摘要容器准备 Node.js 等构建/测试依赖，以非 root makepkg、原生回归与解包验收，公开源码与 Cargo 缓存挂载；不接触 macOS 凭据。
