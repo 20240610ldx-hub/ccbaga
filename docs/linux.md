@@ -70,7 +70,7 @@ bun run tauri build --features custom-protocol
 
 The fetcher checks the pinned publisher SHA-256, ELF architecture and actual browser version before preparing `browser-runtime/LinuxBrowser`. It refuses to overwrite an existing prepared engine. Linux builds use the existing PNG icon and platform-native tools.
 
-Packages appear under `src-tauri/target/release/bundle/{deb,rpm,appimage}`. Install the package matching your distribution, or make the AppImage executable and run it. The pinned browser and its notices travel with the package. Source builds are for development. Official versions are provided only by liseami; Linux updates use a new installation package, not the macOS in-app update feed.
+Local Tauri builds produce DEB and AppImage under `src-tauri/target/release/bundle`. RPM downloads use native RPM tooling with the same application file tree. Install the package matching your distribution, or make the AppImage executable and run it. The pinned browser and its notices travel with the package. Source builds are for development. Official versions are provided only by liseami; Linux updates use a new installation package, not the macOS in-app update feed.
 
 For a local source installation without a package manager:
 
