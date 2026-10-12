@@ -83,7 +83,7 @@ def main():
     run('python3', 'scripts/test-linux.py')
     run('python3', 'scripts/test-rpm.py')
     build_env = os.environ | {'NO_STRIP': 'true', 'APPIMAGE_EXTRACT_AND_RUN': '1'}
-    run('bun', 'run', 'tauri', 'build', '--bundles', 'deb,appimage', '--features', 'custom-protocol', '--config', json.dumps({'version': version}), env=build_env)
+    run('bun', 'run', 'tauri', 'build', '--verbose', '--bundles', 'deb,appimage', '--features', 'custom-protocol', '--config', json.dumps({'version': version}), env=build_env)
     debs = list((ROOT / 'src-tauri/target/release/bundle/deb').glob('*.deb'))
     if len(debs) != 1:
         raise RuntimeError('Expected one DEB artifact')
