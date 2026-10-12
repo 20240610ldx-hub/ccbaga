@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: sign-browser.py 与临时伪 Mach-O/Framework/Helper 树。
-# [OUTPUT]: 验证签名依赖顺序、最小 JIT 范围与符号链接边界，不调用真实 codesign。
+# [OUTPUT]: 验证签名依赖顺序、开发/正式运行时分界、最小 JIT 范围与符号链接边界，不调用真实 codesign。
 # [POS]: 浏览器签名流程的隔离回归检查，与真实发布签名校验互补。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import importlib.util
@@ -35,3 +35,12 @@ with tempfile.TemporaryDirectory() as temporary:
     assert {path for path, jit in calls if jit} == set(helpers[:2])
     verify.assert_called_once_with(['/usr/bin/codesign', '--verify', '--deep', '--strict', str(app)], check=True)
 print('Browser signing order, JIT scope and symlink regression passed')
+
+# ----- 临时签名没有 Team ID，不能沿用正式库验证；正式证书保护不降级 -----
+for identity, option, timestamp in [('-', '0', '--timestamp=none'), ('fixture-developer-id', 'runtime', '--timestamp')]:
+    with patch.object(module, 'IDENTITY', identity), patch.object(module.subprocess, 'run') as run:
+        module.sign(Path('/fixture/Chromium'))
+        args = run.call_args.args[0]
+        assert args[args.index('--options') + 1] == option
+        assert timestamp in args
+print('Ad-hoc debug / hardened official signing boundary passed')

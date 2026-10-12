@@ -1,5 +1,5 @@
 <!--
-[INPUT]: 可安装 Skill 目录、三个 AI 工具的个人目录与执行命令。
+[INPUT]: 可安装 Skill 目录、五项 AI 工具的目录与执行命令。
 [OUTPUT]: 英文安装说明、隐私边界和分阶段命令索引。
 [POS]: 网络页 Skill 按钮的公开落点；安装与远端部署分开授权。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -10,17 +10,19 @@ Give your AI the files and connection details. It handles the commands: VPS → 
 
 ## Installation
 
-**Easiest:** In CCBaga-A, open **Network**, select **Claude Code**, **Codex** or **Cursor**, and click **Copy prompt**. Paste it into that tool's local coding-agent chat. The prompt installs this entire skill, runs offline checks and starts the guided workflow. Switching CCBaga to English also switches the copied prompt to English.
+**Easiest:** In CCBaga-A, open **Network**, select **General**, **Codex**, **Cursor**, **OpenCode** or **Copilot**, and click **Copy prompt**. Paste it into that tool's local coding-agent chat. The short prompt installs the complete skill and then invokes it; the skill itself handles the workflow. Switching CCBaga to English also switches the copied prompt to English.
 
 No CCBaga app is required. Ask your agent:
 
-> Install the complete `skills/ccbaga-network` directory from `https://github.com/liseami/CCBaga` into the personal skill directory for this tool. Review its scripts, preserve existing private configuration and run its offline tests. Do not purchase anything or connect to a VPS during installation. Then use `ccbaga-network` in my language. Ask me for the VPS address, the three key files or key bundle, and the residential connection details in one checklist. Handle terminal commands, private configuration, checks and approved deployment yourself; do not ask me to open a terminal or edit JSON.
+> Install the complete `skills/ccbaga-network` directory from `https://github.com/liseami/CCBaga` into the skill directory for this tool. Then run `ccbaga-network` in English.
 
 | Tool | Personal installation directory | Invoke |
 | --- | --- | --- |
-| Claude Code | `~/.claude/skills/ccbaga-network` | `/ccbaga-network` |
+| General | Your current coding agent chooses its supported skill directory | Ask it to use `ccbaga-network` |
 | Codex | `~/.agents/skills/ccbaga-network` | `$ccbaga-network` |
 | Cursor | `~/.cursor/skills/ccbaga-network` | `/ccbaga-network` |
+| OpenCode | `~/.config/opencode/skills/ccbaga-network` | `/ccbaga-network` (included slash metadata) |
+| Copilot CLI | `~/.copilot/skills/ccbaga-network` | `/ccbaga-network` |
 
 Copy **the whole directory**, including `providers.json` and `scripts/`. Restart/reload the agent if it does not discover the new skill. A local agent with terminal/file access is required; a plain web chat or cloud session without access to your local keys cannot complete SSH deployment.
 
@@ -35,7 +37,7 @@ python3 "$HOME/.agents/skills/ccbaga-network/scripts/test_network.py"
 
 The guard preserves an existing installation. Compare/review before replacing existing skill code. Private configuration lives separately under `~/.config/ccbaga-network`; it must never be copied into a Git checkout or skill directory.
 
-[Claude Code documentation](https://code.claude.com/docs/en/skills) · [Codex documentation](https://developers.openai.com/codex/skills) · [Cursor documentation](https://cursor.com/docs/skills)
+[Codex documentation](https://developers.openai.com/codex/skills) · [Cursor documentation](https://cursor.com/docs/skills) · [OpenCode documentation](https://opencode.ai/docs/skills/) · [Copilot documentation](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills)
 
 ## What the AI asks for
 
@@ -75,7 +77,7 @@ Deployment targets an authorized Debian 12/13 server. It changes system packages
 
 Successful deployment saves a private receipt containing the subscription URL and retrieves a private YAML file over SSH. Import that file into a compatible Mihomo client, enable **TUN**, disable **System Proxy**, and leave CCBaga-B's explicit proxy empty. Verify system and browser exits against the fixed expected IP. UDP forwarding is blocked; listed domestic domains/bootstrap DNS remain direct in Rule mode. DNS/WebRTC require separate checks.
 
-The legacy subscription URL uses plain HTTP on port 8443 and contains access credentials. Prefer the local file retrieved over SSH; the token does not encrypt HTTP. Do not publish private receipts, passwords or key contents in issues, logs or online subscription converters. The AI can provide the private local import file directly; you do not need to inspect the receipt in a terminal.
+The subscription URL uses plain HTTP on port 8443 and contains access credentials. Prefer the local file retrieved over SSH; the token does not encrypt HTTP. Do not publish private receipts, passwords or key contents in issues, logs or online subscription converters. The AI can provide the private local import file directly; you do not need to inspect the receipt in a terminal.
 
 ## Verification boundary
 

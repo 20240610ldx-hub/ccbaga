@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "tauri": "tauri",
     "test": "bun test",
-    "install:apps": "sh scripts/install-apps.sh"
+    "install:apps": "sh scripts/install-apps.sh",
+    "dev:install": "python3 scripts/dev-install.py"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

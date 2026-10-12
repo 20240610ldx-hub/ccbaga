@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: Browser.app、CC_SIGN_IDENTITY 与仅供 Chromium Renderer/GPU 的 JIT entitlement。
-# [OUTPUT]: 内层 Mach-O、Helper 应用、Framework 与浏览器外壳按依赖顺序签名，启用 Hardened Runtime 与可信时间戳。
+# [OUTPUT]: 内层 Mach-O、Helper 应用、Framework 与浏览器外壳按依赖顺序签名，正式证书启用 Hardened Runtime/可信时间戳；本机临时签名清除 runtime，避免无 Team ID 的 Framework 被库验证拒绝。
 # [POS]: 浏览器品牌化后的签名边界；不使用深层自动重签，不读取 Apple 私钥，公证由发布脚本独立执行。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import os
@@ -15,7 +15,7 @@ MAGIC = {b'\xfe\xed\xfa\xce', b'\xce\xfa\xed\xfe', b'\xfe\xed\xfa\xcf', b'\xcf\x
 
 
 def sign(path, jit=False):
-    args = ['/usr/bin/codesign', '--force', '--sign', IDENTITY, '--options', 'runtime']
+    args = ['/usr/bin/codesign', '--force', '--sign', IDENTITY, '--options', '0' if IDENTITY == '-' else 'runtime']
     args += ['--timestamp=none'] if IDENTITY == '-' else ['--timestamp']
     if jit:
         args += ['--entitlements', str(JIT)]

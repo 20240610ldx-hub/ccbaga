@@ -1,7 +1,7 @@
 <!--
 [INPUT]: 已实现功能、开发配置、双应用使用方式与 MIT/第三方许可边界。
 [OUTPUT]: 面向公开仓库的英文产品首页、安装与开发入口、架构和贡献导航。
-[POS]: 项目公开入口；不承载内部迁移历史、本机账户路径或签名凭据。
+[POS]: 项目公开入口，连接产品功能、使用说明与模块导航。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 -->
 <div align="center">
@@ -78,8 +78,6 @@ Source builds are available through the [development guide](#development).
 
 Use **Check for updates** at the bottom of CCBaga-A’s sidebar. Startup checks quietly; installation only starts when you choose **Update and restart**. Downloads show actual progress and are verified before installation. Failed downloads can be retried; a failed restart does not download the update again.
 
-**Upgrading from v0.2.7 or v0.2.8:** replace both apps from the latest DMG once to correct the companion browser identity.
-
 In-app updates replace **CCBaga-A**. To update **both A and B**, download the latest DMG and drag both apps into Applications.
 
 ## Quick start
@@ -105,11 +103,11 @@ The success page appears only when the measured checks match, the report reaches
 
 ### Network setup
 
-Open **Network** for three steps: **Get VPS → Get residential proxy → Install Skill**. Select **Claude Code**, **Codex** or **Cursor**, then copy the installation prompt into your local coding agent. The prompt follows the app's English/Chinese setting.
+Open **Network** for three steps: **Get VPS → Get residential proxy → Install Skill**. Select **General**, **Codex**, **Cursor**, **OpenCode** or **Copilot**, then copy the installation prompt into your local coding agent. The prompt follows the app's English/Chinese setting.
 
 The [Network Skill](skills/ccbaga-network/README.md#installation) installs separately from the apps. Give the AI your VPS address, the three matching PEM/PPK/PUB files or downloaded key bundle, and your residential SOCKS5 connection details. It handles file paths, private configuration, commands and checks; you do not need to open a terminal or edit JSON. Missing resources are purchased by you with the AI's guidance. Remote setup runs only after approval of the actual server changes.
 
-The Skill supports authorized Debian 12/13 servers using root key login on port 22. It checks the SSH identity and fixed SOCKS5 exit, configures Xray/Reality and delivers a private local import file after server self-checks pass. Client setup uses **TUN ON**, **System Proxy OFF** and an empty explicit browser proxy; actual TUN/browser verification remains a separate step. The legacy subscription URL uses HTTP and contains credentials; prefer the file retrieved over SSH.
+The Skill supports authorized Debian 12/13 servers using root key login on port 22. It checks the SSH identity and fixed SOCKS5 exit, configures Xray/Reality and delivers a private local import file after server self-checks pass. Client setup uses **TUN ON**, **System Proxy OFF** and an empty explicit browser proxy; actual TUN/browser verification remains a separate step. The subscription URL uses HTTP and contains credentials; prefer the file retrieved over SSH.
 
 Provider buttons link to [DMIT](https://www.dmit.io/aff.php?aff=28800) and [Webshare](https://www.webshare.io/?referral_code=qlm1mt9xibc9). Network setup is optional; local cleanup does not require a VPS or a proxy subscription. **The app does not collect SSH keys or proxy credentials and does not deploy to servers.**
 
@@ -167,6 +165,14 @@ bun run tauri dev
 ```
 
 Local builds are for development and testing; they are not official project downloads.
+
+### Fast local build and install (macOS)
+
+```sh
+bun run dev:install
+```
+
+This builds a debug app with the embedded UI, uses local ad-hoc signatures and installs/starts both apps. It does not use Apple credentials or create an installer. It preserves profiles and settings. The development installer accepts only locally built debug apps; downloaded installers still require the normal signature and Gatekeeper checks.
 
 ### Build
 

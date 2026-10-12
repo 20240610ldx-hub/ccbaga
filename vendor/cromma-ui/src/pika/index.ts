@@ -18,3 +18,4 @@ export { default as MapPin } from "./icons/MapPin";
 export { default as HomeDefault } from "./icons/HomeDefault";
 export { default as WindowBrowser } from "./icons/WindowBrowser";
 export { default as Share01 } from "./icons/Share01";
+export { default as Server } from "./icons/Server";

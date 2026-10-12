@@ -70,6 +70,7 @@ jobs:
           bun run build
           python3 scripts/test-sign-browser.py
           python3 scripts/test-release-env.py
+          python3 scripts/test-install-apps.py
           python3 skills/ccbaga-network/scripts/test_network.py
           bash -n skills/ccbaga-network/scripts/setup-vps.sh
           CC_SIGN_IDENTITY=- sh scripts/package-browser.sh
@@ -247,6 +248,21 @@ jobs:
             gh api --method POST "repos/$GH_REPO/git/refs" \
               -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$RELEASE_COMMIT" >/dev/null
           fi
+          cat > release-notes.md <<'NOTES'
+          CCBaga pairs a native desktop toolkit with an isolated companion browser.
+
+          - **CCBaga-A:** local Claude cleanup, Claude Code CLI management, region settings and real environment checks.
+          - **CCBaga-B:** dedicated Chromium profile, fingerprint rotation and restart.
+          - **Interface:** English/Chinese, a focused black theme, diagonal linework and dot-grid sections.
+          - **Network Skill:** install and run through General, Codex, Cursor, OpenCode or Copilot.
+
+          **macOS Apple Silicon:** download the DMG and drag both apps into Applications. One installer contains A and B.
+          **Linux x86_64:** choose DEB, RPM, AppImage or Arch/pacman; each package includes the companion browser.
+
+          Sidebar updates install A. Use the full installer to update both apps.
+          SHA256SUMS and build provenance accompany the downloads.
+          [Usage and development](https://github.com/liseami/CCBaga#readme) · [Network Skill](https://github.com/liseami/CCBaga/tree/main/skills/ccbaga-network)
+          NOTES
           gh release create "$RELEASE_TAG" releases/*.dmg releases/*.app.tar.gz releases/*.sig releases/*.deb releases/*.rpm releases/*.AppImage releases/*.pkg.tar.zst releases/latest.json releases/SHA256SUMS releases/notarization.json \
-            --verify-tag --title "CCBaga $RELEASE_VERSION" --generate-notes --draft
+            --verify-tag --title "CCBaga $RELEASE_VERSION" --notes-file release-notes.md --draft
           gh release edit "$RELEASE_TAG" --draft=false

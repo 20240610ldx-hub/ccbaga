@@ -1,5 +1,7 @@
 ---
 name: ccbaga-network
+metadata:
+  opencode/slash: "true"
 description: Collect user-supplied files and connection details, then handle DMIT VPS and Webshare static ISP purchases, matching PEM/PPK/PUB SSH keys, local checks, authorized Debian deployment, residential SOCKS5 egress, subscription delivery and verified TUN setup. Use for CCBaga network setup; installation alone does not authorize purchases or server changes.
 ---
 <!--

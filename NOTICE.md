@@ -20,7 +20,7 @@ The browser bundle contains Chromium and additional dependencies with their own 
 
 ## AI tool icons
 
-The small Claude, OpenAI and Cursor SVG icons in `assets/ai-icons` come from [SVGL](https://github.com/pheralb/svgl). Its MIT copyright and permission notice are retained in [LICENSE.svgl.txt](assets/ai-icons/LICENSE.svgl.txt). Brand names and marks belong to their respective owners; these icons identify supported coding tools and do not imply endorsement.
+The five SVG icons in `assets/ai-icons` are unchanged graphics from [LobeHub lobe-icons](https://github.com/lobehub/lobe-icons), pinned to commit `c385b2b8d1f9e19aa86e628d4e23c91ee1111a47`. They identify General (LobeHub mark), Codex, Cursor, OpenCode and GitHub Copilot. The upstream MIT notice is retained in [LICENSE.lobehub.txt](assets/ai-icons/LICENSE.lobehub.txt) and bundled in the app's license resources. Brand marks remain the property of their owners and do not imply endorsement.
 
 ## Application dependencies
 

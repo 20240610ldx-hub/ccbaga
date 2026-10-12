@@ -12,7 +12,7 @@
       "../browser-runtime/Browser.zip": "browser-runtime/Browser.zip",
       "../browser-runtime/version.txt": "browser-runtime/version.txt",
       "../browser-runtime/LICENSE.fingerprint-chromium": "browser-runtime/LICENSE.fingerprint-chromium",
-      "../assets/ai-icons/LICENSE.svgl.txt": "licenses/LICENSE.svgl.txt"
+      "../assets/ai-icons/LICENSE.lobehub.txt": "licenses/LICENSE.lobehub.txt"
     }
   }
 }

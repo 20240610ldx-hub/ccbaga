@@ -16,4 +16,5 @@ Translate.tsx: Pika 原版 Translate SVG，保持源项目路径与轮廓。
 HomeDefault.tsx: Pika 原版房屋轮廓，表达首页入口。
 WindowBrowser.tsx: Pika 原版浏览器窗口轮廓，表达浏览器环境入口。
 Share01.tsx: Pika 原版连通节点轮廓，表达网络搭建入口。
+Server.tsx: Pika 原版 server.svg 转 JSX，表达 VPS；路径不改。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

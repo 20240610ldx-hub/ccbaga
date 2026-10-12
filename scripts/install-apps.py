@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-# [INPUT]: 本机正式双应用构建，或参数指定的已挂载 DMG；固定包标识与 macOS 签名/注册工具。
+# [INPUT]: 本机开发/正式双应用构建，或参数指定的已挂载 DMG；固定包标识与 macOS 签名/注册工具。
 # [OUTPUT]: 核验后事务替换 /Applications 中的 A/B，移除同标识旧名副本，启动新宿主；失败恢复应用包。
-# [POS]: 安装唯一执行层；保留隔离与用户资料，不以禁用 Gatekeeper 冒充有效发布。
+# [POS]: 安装唯一执行层；保留隔离与用户资料；开发仅接受本机临时签名 debug 包，正式/DMG 保持 Gatekeeper 强验收。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 from pathlib import Path
 import os
+import argparse
 import plistlib
 import shutil
 import signal
@@ -22,9 +23,22 @@ def run(*args):
 def identity(app):
     with (app / 'Contents/Info.plist').open('rb') as stream:
         return plistlib.load(stream)['CFBundleIdentifier']
-def verify(app):
+def verify(app, development=False):
     run('codesign', '--verify', '--deep', '--strict', app)
-    run('spctl', '--assess', '--type', 'execute', app)
+    if development:
+        if 'Signature=adhoc' not in run('codesign', '--display', '--verbose=2', app).stderr.splitlines():
+            raise RuntimeError('Development installation requires local ad-hoc signed debug apps')
+    else:
+        run('spctl', '--assess', '--type', 'execute', app)
+
+def arguments(argv=None):
+    parser = argparse.ArgumentParser(description='Install local debug apps or verified release apps')
+    parser.add_argument('folder', nargs='?', help='Mounted official DMG folder')
+    parser.add_argument('--development', action='store_true', help='Only local ad-hoc debug builds; no DMG input')
+    args = parser.parse_args(argv)
+    if args.development and args.folder:
+        parser.error('--development cannot install a downloaded or mounted installer')
+    return args
 def refresh_dock():
     data = plistlib.loads(run('defaults', 'export', 'com.apple.dock', '-').stdout.encode())
     tiles = data.get('persistent-apps', [])
@@ -41,8 +55,10 @@ def refresh_dock():
         run('defaults', 'write', 'com.apple.dock', 'persistent-apps', '-array', *values)
         run('killall', 'Dock')
 def main():
-    folder = Path(sys.argv[1]) if len(sys.argv) > 1 else None
-    sources = [folder / name for name, _, _ in APPS] if folder else [ROOT / 'src-tauri/target/release/bundle/macos/CCBaga-A.app', ROOT / 'browser-runtime/Browser.app']
+    args = arguments()
+    folder = Path(args.folder) if args.folder else None
+    build = 'debug' if args.development else 'release'
+    sources = [folder / name for name, _, _ in APPS] if folder else [ROOT / f'src-tauri/target/{build}/bundle/macos/CCBaga-A.app', ROOT / 'browser-runtime/Browser.app']
     with tempfile.TemporaryDirectory(prefix='.ccbaga-install-', dir='/Applications') as temporary:
         stage = Path(temporary)
         removals = []
@@ -51,7 +67,7 @@ def main():
                 raise RuntimeError(f'Unexpected bundle identity: {source}')
             pending = stage / name
             run('ditto', source, pending)
-            verify(pending)
+            verify(pending, args.development)
             for base in [Path('/Applications'), Path.home() / 'Applications']:
                 for candidate in [base / name, base / old_name]:
                     if candidate.exists():
@@ -84,7 +100,7 @@ def main():
             for name, _, _ in APPS:
                 target = Path('/Applications') / name
                 (stage / name).rename(target); installed.append(target)
-                verify(target); run(REGISTER, '-f', target)
+                verify(target, args.development); run(REGISTER, '-f', target)
         except BaseException:
             for target in installed: shutil.rmtree(target)
             for old, backup in reversed(moved):
@@ -93,6 +109,6 @@ def main():
     try: refresh_dock()
     except subprocess.CalledProcessError: print('Applications installed; Dock refresh could not complete.', file=sys.stderr)
     run('open', '-a', '/Applications/CCBaga-A.app')
-    print('Installed and launched CCBaga-A / CCBaga-B; strict signatures and Gatekeeper passed.')
+    print('Installed and launched CCBaga-A / CCBaga-B; ' + ('local development ad-hoc signatures verified.' if args.development else 'strict signatures and Gatekeeper passed.'))
 if __name__ == '__main__':
     main()
