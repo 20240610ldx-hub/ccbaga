@@ -1,5 +1,5 @@
 <!--
-[INPUT]: Linux 原生边界、共用清理/浏览器/CLI 实现、独立网络 Skill 和回归测试。
+[INPUT]: Linux/Windows 原生边界、共用清理/浏览器/CLI 实现、独立网络 Skill 和回归测试。
 [OUTPUT]: 数据读写、外部连接、操作授权与验证范围的当前安全契约。
 [POS]: 原生模块的安全地图；与 src/CLAUDE.md 的事务边界共同维护。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -13,6 +13,7 @@
 | 边界 | 读取与输出 | 限制与依据 |
 | --- | --- | --- |
 | `src/linux.rs` | 当前用户 `/proc` 的进程可执行路径/参数；系统时区、CPU、会话语言和桌面定位偏好 | 参数只用于原生识别，不序列化给 WebView；没有网络客户端。仅用户复制操作写剪贴板，不读取剪贴板。 |
+| `src/windows.rs` / `windows_process.rs` | 当前用户 SID、文件所有权、系统状态与精确程序身份 | 不枚举 Credential Manager 密码；只写剪贴板。参数和创建时间不序列化；结束时重新核验 SID、程序和 live handle，浏览器仅按完整资料目录关闭。 |
 | `src/cleaner*.rs` | Claude 白名单元数据与待清理配置；界面接收预览和脱敏结果 | 快照、当前用户所有权、规范路径、链接与进程状态核验；用户确认后才删除。保留项目、技能、插件等资产。Linux 只按精确 XDG 白名单补充缓存，不扩大文件夹清理范围。 |
 | `src/browser/config.rs` | 本机环境与用于出口探测的系统代理 | `Machine.system_proxy` 使用 `skip_serializing`，代理凭据不进入 WebView、浏览器回环 JSON 或 UI 日志；对应回归验证。 |
 | `src/browser/server.rs` | 匿名环境观测在 A/B 之间交换 | 仅随机令牌 `127.0.0.1` 会话，限制请求大小与资源根目录；不提供文件写入、命令执行或远程监听。 |
@@ -37,6 +38,8 @@
 ## 本机开发与正式安装
 
 本机 `dev:install` 不读取 Apple/更新私钥，强制临时签名与 debug/custom-protocol。开发浏览器临时签名清除 runtime，避免无 Team ID 的 Framework 被正式库验证拒绝；正式签名仍启用 runtime 与可信时间戳。安装前实际执行 Chromium --version 验证加载。开发安装只能选择仓库的 debug 宿主和本机引擎；拒绝与外部 DMG 路径组合，并核验两个包确为临时签名。正式安装仍要求严格签名和 Gatekeeper。此开发边界不移除下载包隔离、不禁用系统安全机制；用户数据仍沿用同一事务保护。
+
+Windows Skill 私密文件采用用户 SID 独占且保护的 NTFS ACL，写入秘密之前核验；拒绝 junction 和 symlink 父目录。原生 OpenSSH/curl、不依赖 WSL；Job Object 只管理本次子进程树。Windows CLI 卸载和 NSIS 更新不删除用户配置/技能/资料；安装回归只在空白 CI runner 执行。Windows 构建不接触 Apple 凭据或更新私钥，版本签名仅在验收后的独立步骤注入。
 
 ## 验证边界
 

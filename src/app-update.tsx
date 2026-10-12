@@ -51,7 +51,7 @@ export function AppUpdate({blocked,onBusy}:{blocked:boolean;onBusy:(busy:boolean
           if(event.event==='Started')setTotal(event.data.contentLength);
           if(event.event==='Progress')setBytes(value=>value+event.data.chunkLength);
         },{timeout:600000});
-        setPhase('installing');await update.install();installed.current=true;
+        setPhase('installing');if(await invoke<string>('runtime_platform')==='windows')await invoke('browser_quit');await update.install();installed.current=true;
         await update.close().catch(()=>{});resource.current=null;
       }
       setPhase('restarting');await relaunch();

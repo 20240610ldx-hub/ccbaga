@@ -16,11 +16,22 @@ fn answer(stream: &mut TcpStream, status: &str, kind: &str, body: &[u8]) {
     let _ = stream.write_all(body);
 }
 pub fn nonce() -> Result<String, String> {
+    #[cfg(unix)]
+    {
     let mut bytes = [0u8; 24];
     std::fs::File::open("/dev/urandom")
         .and_then(|mut f| f.read_exact(&mut bytes))
         .map_err(|_| "无法创建本地会话令牌。")?;
     Ok(bytes.iter().map(|x| format!("{x:02x}")).collect())
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Security::Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG};
+        let mut bytes = [0u8; 24];
+        let status = unsafe { BCryptGenRandom(std::ptr::null_mut(), bytes.as_mut_ptr(), bytes.len() as u32, BCRYPT_USE_SYSTEM_PREFERRED_RNG) };
+        if status != 0 { return Err("无法创建本地会话令牌。".into()); }
+        Ok(bytes.iter().map(|x| format!("{x:02x}")).collect())
+    }
 }
 pub fn bind() -> Result<TcpListener, String> {
     let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|_| "起始页服务启动失败。")?;

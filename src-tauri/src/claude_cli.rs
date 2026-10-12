@@ -1,4 +1,4 @@
-// [INPUT]: 内嵌 claude-cli.sh、当前用户登录终端环境、清理事务互斥锁及真实进度通道。
+// [INPUT]: 平台内嵌 claude-cli.sh/ps1、当前用户平台环境、清理事务互斥锁及真实进度通道。
 // [OUTPUT]: Claude Code CLI 只读安装状态、一键卸载/重装与版本核验，配置和个人资产不在删除范围。
 // [POS]: 本机程序安装边界；白名单动作由原生层限定，进程未退出时拒绝修改，输出不暴露包管理器原始诊断。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -7,16 +7,21 @@ use crate::{
     progress::{Progress, Reporter},
 };
 use serde::Serialize;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+use std::io::Write;
 use std::{
-    io::{BufRead, BufReader, Read, Write},
-    os::unix::process::CommandExt,
+    io::{BufRead, BufReader, Read},
     path::PathBuf,
     process::{Command, Stdio},
     sync::Arc,
     time::{Duration, Instant},
 };
 use tauri::{ipc::Channel, Manager};
+#[cfg(not(windows))]
 const SCRIPT: &str = include_str!("../../scripts/claude-cli.sh");
+#[cfg(windows)]
+const SCRIPT: &str = include_str!("../../scripts/claude-cli.ps1");
 #[derive(Debug, Default, Serialize)]
 pub struct CliStatus {
     method: String,
@@ -24,17 +29,20 @@ pub struct CliStatus {
     version: String,
 }
 fn execute(mut command: Command, log: Arc<Reporter>, seconds: u64) -> Result<CliStatus, String> {
+    #[cfg(unix)]
+    command.process_group(0);
     let mut child = command
-        .process_group(0)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|_| "无法启动 Claude Code 安装任务。")?;
+    #[cfg(windows)]
+    let job = match crate::windows::ChildJob::attach(&child) { Ok(job) => job, Err(error) => { let _ = child.kill(); let _ = child.wait(); return Err(error); } };
     let mut stdin = child.stdin.take().unwrap();
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
-    let writer = std::thread::spawn(move || stdin.write_all(SCRIPT.as_bytes()));
+    let writer = std::thread::spawn(move || stdin.write_all(SCRIPT.trim_start_matches('\u{feff}').as_bytes()));
     let output = std::thread::spawn(move || {
         let mut result = CliStatus::default();
         let mut completed = false;
@@ -81,6 +89,9 @@ fn execute(mut command: Command, log: Arc<Reporter>, seconds: u64) -> Result<Cli
             }
             _ => {
                 // 安装器可能带起 curl/npm；超时结束整个本次子进程组，防止后台继续修改。
+                #[cfg(windows)]
+                job.stop();
+                #[cfg(unix)]
                 unsafe {
                     kill(-(child.id() as i32), 9);
                 }
@@ -111,10 +122,30 @@ fn execute(mut command: Command, log: Arc<Reporter>, seconds: u64) -> Result<Cli
     }
     Ok(result.0)
 }
+#[cfg(unix)]
 extern "C" {
     fn kill(pid: i32, signal: i32) -> i32;
 }
 fn command(action: &str) -> Result<Command, String> {
+    #[cfg(windows)]
+    {
+        let user_dir = std::env::var_os("USERPROFILE")
+            .or_else(|| std::env::var_os("HOME"))
+            .ok_or("无法定位用户目录。")?;
+        let root = dunce::canonicalize(PathBuf::from(user_dir))
+            .map_err(|_| "无法读取用户目录。")?;
+        use std::os::windows::process::CommandExt;
+        let shell = PathBuf::from(std::env::var_os("SystemRoot").ok_or("无法定位 Windows 系统目录。")?)
+            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        let mut command = Command::new(shell);
+        command.creation_flags(0x08000000)
+            .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command"])
+            .arg(format!("[Console]::InputEncoding = New-Object System.Text.UTF8Encoding; & ([scriptblock]::Create([Console]::In.ReadToEnd())) '{action}'"))
+            .env("CC_CLI_USER_DIR", root);
+        Ok(command)
+    }
+    #[cfg(not(windows))]
+    {
     let root = std::fs::canonicalize(PathBuf::from(
         std::env::var_os("HOME").ok_or("无法定位用户目录。")?,
     ))
@@ -125,6 +156,7 @@ fn command(action: &str) -> Result<Command, String> {
         .env("CC_CLI_USER_DIR", root)
         .current_dir("/");
     Ok(command)
+    }
 }
 #[tauri::command]
 pub async fn claude_cli_read() -> Result<CliStatus, String> {
@@ -165,7 +197,7 @@ pub async fn claude_cli_manage(
     result
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::{

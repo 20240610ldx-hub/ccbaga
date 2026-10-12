@@ -21,8 +21,20 @@ import threading
 from urllib.parse import urlencode, urlsplit
 
 SKILL = Path(__file__).resolve().parent.parent
+if os.name == 'nt':
+    import windows as win
 DEFAULT = Path.home() / '.config/ccbaga-network/connection.json'
 
+
+def program(name):
+    if os.name == 'nt':
+        base = Path(os.environ.get('SystemRoot', r'C:\Windows'))
+        path = base/'System32/OpenSSH'/f'{name}.exe' if name in ['ssh','ssh-keygen'] else base/'System32'/f'{name}.exe'
+        if path.is_file(): return str(path)
+        if name in ['ssh','ssh-keygen']: raise ValueError('Enable Windows OpenSSH Client first; the AI can handle prerequisites after approval')
+    found = shutil.which(name)
+    if not found: raise ValueError(f'Install local {name} first')
+    return found
 
 def provider_url(name):
     settings = json.loads((SKILL / 'providers.json').read_text())[name]
@@ -42,21 +54,31 @@ def host_valid(value):
 def private_write(path, content):
     path = Path(path).expanduser().absolute()
     for parent in [path.parent, *path.parents]:
-        if parent.is_symlink():
+        if parent.is_symlink() or (os.name == 'nt' and parent.is_junction()):
             raise ValueError('Refusing a linked output directory')
+    new_parent = not path.parent.exists()
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name == 'nt' and new_parent: win.protect(path.parent)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, 'w') as stream:
-        stream.write(content)
+    try:
+        if os.name == 'nt': win.protect(path)
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            fd = None
+            stream.write(content)
+    except BaseException:
+        if fd is not None: os.close(fd)
+        path.unlink(missing_ok=True)
+        raise
 
 
 def read_config(path):
     path = Path(path).expanduser()
-    if path.is_symlink():
-        raise ValueError('Config must be a regular private file')
-    with path.open() as stream:
+    if any(p.is_symlink() or (os.name == 'nt' and p.is_junction()) for p in [path, *path.parents]):
+        raise ValueError('Config must be a regular private file outside linked directories')
+    if os.name == 'nt': win.assert_private(path)
+    with path.open(encoding='utf-8') as stream:
         st = os.fstat(stream.fileno())
-        if st.st_uid != os.getuid() or st.st_mode & 0o077 or st.st_size > 65536:
+        if st.st_size > 65536 or (os.name != 'nt' and (st.st_uid != os.getuid() or st.st_mode & 0o077)):
             raise ValueError('Config must be owned by you, mode 0600, and under 64 KiB')
         conf = json.load(stream)
     return validate_config(conf)
@@ -88,7 +110,7 @@ def key_data(pem, ppk, public):
         path = Path(name).expanduser()
         if path.suffix != suffix or not path.is_file() or not 0 < path.stat().st_size <= 65536:
             raise ValueError('Provide one nonempty PEM/PPK/PUB file, each under 64 KiB')
-        values.append(path.read_text())
+        values.append(path.read_text(encoding='utf-8'))
     private, putty, pub = values
     expected = pub.split()[:2]
     lines = putty.splitlines()
@@ -113,7 +135,7 @@ class Key:
         self.temp = tempfile.TemporaryDirectory(prefix='ccbaga-key-')
         self.path = Path(self.temp.name).resolve() / 'identity.pem'
         private_write(self.path, private)
-        result = subprocess.run(['ssh-keygen', '-y', '-P', '', '-f', str(self.path)], capture_output=True, text=True)
+        result = subprocess.run([program('ssh-keygen'), '-y', '-P', '', '-f', str(self.path)], capture_output=True, text=True)
         if result.returncode or result.stdout.split()[:2] != expected:
             self.temp.cleanup()
             raise ValueError('PEM is encrypted, invalid, or does not match PPK/PUB')
@@ -129,17 +151,18 @@ def ssh_args(conf, key, config_path, accept_new=False):
     hosts = Path(config_path).expanduser().absolute().parent / 'known_hosts'
     if hosts.is_symlink():
         raise ValueError('Refusing linked known_hosts')
-    return ['ssh', '-F', '/dev/null', '-T', '-p', '22', '-l', 'root',
+    return [program('ssh'), '-F', os.devnull, '-T', '-p', '22', '-l', 'root',
             '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes', '-o', 'IdentityAgent=none',
             '-o', 'PreferredAuthentications=publickey', '-o', 'PasswordAuthentication=no',
             '-o', 'KbdInteractiveAuthentication=no', '-o', 'StrictHostKeyChecking=' + ('accept-new' if accept_new else 'yes'),
-            '-o', f'UserKnownHostsFile={hosts}', '-o', 'ConnectTimeout=15',
+            '-o', 'UserKnownHostsFile="' + hosts.as_posix() + '"', '-o', 'ConnectTimeout=15',
             '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3', '-i', str(key), conf['vps']]
 
 
 def execute(command, payload='', timeout=30):
     child = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT, start_new_session=True)
+                             stderr=subprocess.STDOUT, start_new_session=os.name != 'nt')
+    job = win.Job(child) if os.name == 'nt' else None
     tail = bytearray()
     def read():
         while chunk := child.stdout.read(4096):
@@ -157,15 +180,19 @@ def execute(command, payload='', timeout=30):
     try:
         code = child.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
-        os.killpg(child.pid, signal.SIGTERM)
+        if job: job.stop()
+        else: os.killpg(child.pid, signal.SIGTERM)
         try:
             child.wait(timeout=2)
         except subprocess.TimeoutExpired:
-            os.killpg(child.pid, signal.SIGKILL); child.wait()
+            if job: job.stop()
+            else: os.killpg(child.pid, signal.SIGKILL)
+            child.wait()
         raise RuntimeError('Task timed out; remote changes may be partial. Do not blindly rerun.')
     finally:
         reader.join(timeout=2); writer.join(timeout=2)
         child.stdout.close()
+        if job: job.close()
     if code:
         raise RuntimeError('SSH/task failed; raw output suppressed to protect credentials. Check connectivity and server state before retrying.')
     return tail.decode(errors='replace')
@@ -183,7 +210,7 @@ def curl_config(conf):
     host = conf['home_host']
     if ':' in host:
         host = '[' + host + ']'
-    return '\n'.join(f'{key} = {json.dumps(value)}' for key, value in [
+    return '\n'.join(f'{key} = {json.dumps(value, ensure_ascii=False)}' for key, value in [
         ('url', 'https://api.ipify.org'), ('proxy', f'socks5h://{host}:{conf["home_port"]}'),
         ('proxy-user', conf['home_user'] + ':' + conf['home_pass'])]) + '\n'
 
@@ -201,17 +228,15 @@ import json,os
 host=os.environ['HOME_HOST']
 if ':' in host:host='['+host+']'
 for key,value in [('url','https://api.ipify.org'),('proxy','socks5h://'+host+':'+os.environ['HOME_PORT']),('proxy-user',os.environ['HOME_USER']+':'+os.environ['HOME_PASS'])]:
- print(key+' = '+json.dumps(value))
+ print(key+' = '+json.dumps(value, ensure_ascii=False))
 REMOTE
 '''
 
 
 def check(conf, key, config_path):
-    for program in ['ssh', 'ssh-keygen', 'curl']:
-        if not shutil.which(program):
-            raise ValueError(f'Install local {program} first')
-    local = subprocess.run(['curl', '--silent', '--show-error', '--fail', '--max-time', '15', '--noproxy', '', '--config', '-'],
-                           input=curl_config(conf), text=True, capture_output=True)
+    for name in ['ssh', 'ssh-keygen', 'curl']: program(name)
+    local = subprocess.run([program('curl'), '--silent', '--show-error', '--fail', '--max-time', '15', '--noproxy', '', '--config', '-'],
+                           input=curl_config(conf), text=True, encoding='utf-8', capture_output=True)
     print('LOCAL_SOCKS=' + ('verified' if local.returncode == 0 and local.stdout.strip() == conf['expected_ip'] else 'unverified; checking from VPS'))
     # ----- 导出秘密通过 SSH 标准输入；curl 的配置同样走标准输入 -----
     probe = PREFLIGHT.replace("python3 - <<'REMOTE'", "python3 - <<'REMOTE' | curl --silent --show-error --fail --max-time 20 --noproxy '' --config -")
@@ -290,7 +315,7 @@ def main():
         return
     conf = read_config(args.config)
     if args.action == 'tun-check':
-        result = execute(['curl', '--silent', '--fail', '--max-time', '20', '--proxy', '', '--noproxy', '*', 'https://api.ipify.org'])
+        result = execute([program('curl'), '--silent', '--fail', '--max-time', '20', '--proxy', '', '--noproxy', '*', 'https://api.ipify.org'])
         if result.strip() != conf['expected_ip']:
             raise RuntimeError('System/TUN exit differs from the expected residential IP')
         print('TUN_EXIT=verified (CLI path only; also verify browser/DNS/WebRTC)'); return
@@ -301,7 +326,7 @@ def main():
             output = execute(ssh_args(conf,key,args.config,accept_new=True) + ['bash -s'],
                              'set -e; test "$(id -u)" = 0; . /etc/os-release; test "$ID" = debian; printf "ROOT=verified; OS=%s\\n" "$VERSION_ID"')
             print(output.strip())
-            result = subprocess.run(['ssh-keygen','-l','-f',str(Path(args.config).expanduser().parent/'known_hosts')],capture_output=True,text=True,check=True)
+            result = subprocess.run([program('ssh-keygen'),'-l','-f',str(Path(args.config).expanduser().parent/'known_hosts')],capture_output=True,text=True,check=True)
             print(result.stdout.strip()); return
         if args.action == 'fetch':
             fetch(conf,key,args.config); return

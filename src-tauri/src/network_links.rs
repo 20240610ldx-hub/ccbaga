@@ -25,6 +25,10 @@ fn provider_url(provider: &str) -> Result<String, String> {
 pub async fn network_open_resource(provider: String) -> Result<(), String> {
     let url = provider_url(&provider)?;
     tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(windows)]
+        { return crate::windows::open_external_url(&url); }
+        #[cfg(not(windows))]
+        {
         let status = Command::new(if cfg!(target_os = "linux") {
             "xdg-open"
         } else {
@@ -37,6 +41,7 @@ pub async fn network_open_resource(provider: String) -> Result<(), String> {
             Ok(())
         } else {
             Err("无法打开供应商网站。".into())
+        }
         }
     })
     .await

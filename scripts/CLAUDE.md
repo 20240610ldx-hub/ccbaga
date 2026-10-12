@@ -6,6 +6,10 @@ brand-browser.sh: 编译 CCBrowser 入口、写入 CCBaga-B 名称/图标/各语
 sign-browser.py: 内层 Mach-O → Helper 应用 → Framework → 浏览器外壳顺序签名；Developer ID 使用可信时间戳、Hardened Runtime，仅 Renderer/GPU 使用 JIT entitlement；本机临时签名清除 runtime，防止缺 Team ID 的 Framework 被库验证拒绝。
 test-release-env.py: 伪造凭据环境导入真实发布入口，断言 Apple/更新私钥不进入构建子进程环境，不加载真实密钥。
 test-sign-browser.py: 临时伪引擎树验证叶子到容器的签名顺序、最小 JIT 授权与符号链接不重复遍历。
+windows-region.ps1: 当前用户 International 首选语言/显示语言偏好与区域格式设置；保留其他语言、复核持久化，当前会话未生效时明确报告需重新登录。
+claude-cli.ps1: Windows 官方 CLI 程序管理与真实完成协议，保留配置和项目，不执行 VPS 配置。
+package-browser.ps1: Windows 固定引擎前置核验，不打包用户资料或私钥。
+test-windows.py: Windows 程序/安装器边界与隔离样本回归。
 fetch-browser.py: 固定上游引擎 DMG 与 SHA-256，核验版本和 arm64 后恢复引擎；干净 CI 检出不依赖维护者本机 Browser.app。
 release-macos.py: 外部凭据与可选 CC_RELEASE_VERSION 驱动三阶段公证装订；明确将原生构建目录 Browser.app 暂存为交付名 CCBaga-B.app，再由 dmgbuild 无头写入 Finder 布局；装订后的宿主单独归档并签名绑定版本，更新私钥仅传给签名子进程；Apple 凭据不进入构建、DMG 或更新签名子进程，公证工具只通过明确参数接收其认证输入；官方更新器回归核验后生成公开 latest.json；产物和哈希记录写入被忽略的 releases/。
 dmg-settings.py: 固定 800×500 像素背景、两应用到 Applications 的拖拽坐标；通知文件保留在盘内但默认隐藏，不依赖 Finder 自动化。
@@ -21,6 +25,9 @@ install-linux.py: Linux 用户前缀安装并保留资料；拒绝自定义启�
 test-linux.py: 临时构建验证安装隔离、B 运行保护、桌面写入回滚、Exec 引用与载荷缺失/引擎篡改拒绝；不访问用户资料。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
+sign-windows-update.py: 已验收安装器的独立版本绑定更新签名和官方更新器核验；更新私钥不进入构建或测试。
+release-windows.py: Windows x64 MSVC 无凭据构建，原生/CLI/Skill 回归与真实 NSIS 安装、启动、升级、卸载验证，交付单安装器与内部引擎哈希清单。
+verify-windows-installer.py: 隔离当前用户数据与安装目录，严格核对安装后引擎/图标/UI、A/B 回环、升级和卸载资产保留。
 release-linux.py: 无 Apple/更新凭据的 x86_64 三格式构建，先运行 Skill 离线回归与脚本语法检查；Tauri 以完整工具日志交付 DEB/AppImage，标准 rpmbuild 从相同 /usr 文件树生成 RPM，避免上游 RPM 打包停滞且禁止剥离厂商引擎；引擎位于 libexec，避免 Qt 可选适配库被宿主 linuxdeploy 错当必备依赖；真实解包核对宿主、UI、B 入口、图标与引擎字节，生成独立校验清单。
 test-rpm.py: 临时 DEB 文件树经真实 rpmbuild 转换，回归 RPM 版本/架构、桌面入口与引擎字节，不执行样本程序。
 verify-linux-package.py: Linux 安装包只读载荷契约，供 Ubuntu/Arch 共用，拒绝缺失 UI、入口或被改写的引擎文件/链接。

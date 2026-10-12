@@ -7,10 +7,15 @@ use std::io::Write;
 pub(super) fn atomic_write(path: &Path, bytes: &[u8], mode: u32) -> Result<(), String> {
     let temporary = path.with_file_name(format!(".rf-cleanup-{}", generation()));
     let result = (|| {
-        let mut file = fs::OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .mode(mode & 0o777)
+        let mut options = fs::OpenOptions::new();
+        options.create_new(true).write(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(mode & 0o777);
+        }
+        let _ = mode;
+        let mut file = options
             .open(&temporary)
             .map_err(|_| "无法创建配置临时文件。")?;
         file.write_all(bytes)
@@ -24,4 +29,3 @@ pub(super) fn atomic_write(path: &Path, bytes: &[u8], mode: u32) -> Result<(), S
     }
     result
 }
-use std::os::unix::fs::OpenOptionsExt;

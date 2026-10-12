@@ -3,6 +3,17 @@
 // [POS]: 清理事务的唯一写入边界；校验后执行，失败停止并报告剩余项未执行。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
+
+#[cfg(unix)]
+fn file_mode(meta: &fs::Metadata) -> u32 {
+    use std::os::unix::fs::PermissionsExt;
+    meta.permissions().mode()
+}
+#[cfg(not(unix))]
+fn file_mode(_meta: &fs::Metadata) -> u32 {
+    0o600
+}
+
 pub(super) fn perform_clean(
     app: &tauri::AppHandle,
     ids: Vec<String>,
@@ -74,7 +85,7 @@ pub(super) fn perform_items(
                         return Err("配置键发生变化，请重新扫描。".into());
                     }
                     identity(item, root)?;
-                    file_io::atomic_write(path, updated.as_bytes(), meta.permissions().mode())
+                    file_io::atomic_write(path, updated.as_bytes(), file_mode(&meta))
                 }
             }
         })();

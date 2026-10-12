@@ -19,6 +19,7 @@ fn folder_scope_preserves_project_assets_and_refuses_outside_targets() {
         "dependency",
     );
     outside.file(".claude/projects/session.jsonl", "outside");
+    #[cfg(unix)]
     std::os::unix::fs::symlink(&outside.0, f.0.join("linked")).unwrap();
     let plan = folder::collect(&f.0, &Reporter::channel(None)).unwrap();
     assert_eq!(plan.items.len(), 3);
@@ -81,7 +82,7 @@ impl Fixture {
         let pid = std::process::id();
         let p = std::env::temp_dir().join(format!("rf-cleaner-test-{pid}-{id}-{unique}"));
         fs::create_dir(&p).unwrap();
-        Self(fs::canonicalize(p).unwrap())
+        Self(canonicalize(p).unwrap())
     }
     fn file(&self, name: &str, value: &str) {
         let p = self.0.join(name);
@@ -129,7 +130,9 @@ fn discovers_supported_data_and_preserves_personal_assets() {
 fn ignores_linked_targets() {
     let f = Fixture::new();
     fs::create_dir(f.0.join("outside")).unwrap();
+    #[cfg(unix)]
     std::os::unix::fs::symlink(f.0.join("outside"), f.0.join(".claude")).unwrap();
+    #[cfg(unix)]
     assert!(collect(&f.0, None).unwrap().items.is_empty());
 }
 #[test]
@@ -150,6 +153,7 @@ fn rejects_stale_or_unknown_targets() {
     f.file(".claude.json", r#"{"userID":"old"}"#);
     assert!(identity(i, &f.0).is_err());
 }
+#[cfg(unix)]
 #[test]
 fn matches_only_current_user_and_exact_claude_processes() {
     let root = home().unwrap();
@@ -195,6 +199,7 @@ fn matches_only_current_user_and_exact_claude_processes() {
         "Claude Code"
     );
 }
+#[cfg(unix)]
 #[test]
 fn ends_only_the_captured_disposable_process() {
     let f = Fixture::new();
@@ -318,6 +323,7 @@ fn organization_search_stays_in_claude_sessions_and_does_not_follow_links() {
         r#"{"org_id":"org-123456789"}"#,
     );
     f.file("source/private.json", r#"{"org_id":"org-12345678"}"#);
+    #[cfg(unix)]
     std::os::unix::fs::symlink(f.0.join("source"), f.0.join(".claude/projects/link")).unwrap();
     let (files, complete) = targets::org_files(&f.0, org).unwrap();
     assert!(complete);
@@ -341,6 +347,7 @@ fn direct_cleanup_removes_selected_data_and_backups_without_copies() {
     );
     f.file(".npmrc", "proxy=test-only\nregistry=keep\n");
     f.file("outside-secret", "outside");
+    #[cfg(unix)]
     std::os::unix::fs::symlink(f.0.join("outside-secret"), f.0.join(".claude/cache/link")).unwrap();
     let scan = collect(&f.0, None).unwrap();
     assert_eq!(

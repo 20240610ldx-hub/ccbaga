@@ -1,11 +1,11 @@
 # [INPUT]: release 分支 commit、锁定依赖与 GitHub Secrets 中的 Apple 与更新签名凭据。
-# [OUTPUT]: macOS 双应用 DMG、Linux DEB/RPM/AppImage/Arch 包、带版本签名的主程序更新与公开清单、SHA-256、递增版本 tag 和 GitHub Release。
+# [OUTPUT]: macOS 双应用 DMG、Linux DEB/RPM/AppImage/Arch 包、Windows 当前用户 NSIS 安装器、带版本签名的主程序更新与公开清单、SHA-256、递增版本 tag 和 GitHub Release。
 # [POS]: 自动发布入口；签名和发布权限分离，仅仓库所有者触发/重跑，拒绝 fork、PR 或其他发布者。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 name: Release
 on:
   push:
-    branches: [release]
+    branches: [release, review/windows-ready]
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,7 +13,7 @@ env:
   MACOSX_DEPLOYMENT_TARGET: "12.0"
 jobs:
   version:
-    if: github.repository == 'liseami/CCBaga' && github.ref == 'refs/heads/release' && github.actor == 'liseami' && github.triggering_actor == 'liseami'
+    if: github.repository == 'liseami/CCBaga' && (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/review/windows-ready') && github.actor == 'liseami' && github.triggering_actor == 'liseami'
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -127,6 +127,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   linux:
+    if: github.ref == 'refs/heads/release'
     needs: version
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -169,6 +170,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   arch:
+    if: github.ref == 'refs/heads/release'
     needs: version
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -194,8 +196,84 @@ jobs:
             releases/Arch-SHA256SUMS
           if-no-files-found: error
           retention-days: 14
+  windows:
+    needs: version
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Prepare MSVC and native Windows engine
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          rustup toolchain install 1.98.1 --profile minimal
+          if($LASTEXITCODE){exit $LASTEXITCODE}
+          rustup default 1.98.1
+          bun install --frozen-lockfile
+          if($LASTEXITCODE){exit $LASTEXITCODE}
+          if(-not (Test-Path "$env:SystemRoot\System32\OpenSSH\ssh.exe")) {
+            Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0 | Out-Null
+          }
+          python scripts/fetch-browser.py
+          if($LASTEXITCODE){exit $LASTEXITCODE}
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c
+        with:
+          workspaces: src-tauri -> target
+          shared-key: windows-msvc
+          cache-on-failure: true
+      - name: Test, build and exercise real Windows installer
+        env:
+          CC_RELEASE_VERSION: ${{ needs.version.outputs.version }}
+        run: python scripts/release-windows.py
+      - name: Sign and verify updater installer
+        if: github.ref == 'refs/heads/release'
+        env:
+          CC_RELEASE_VERSION: ${{ needs.version.outputs.version }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: python scripts/sign-windows-update.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-${{ github.run_id }}
+          path: |
+            releases/*-setup.exe
+            releases/*.exe.sig
+            releases/latest-windows.json
+            releases/Windows-engine-manifest.json
+            releases/Windows-SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+  windows_compat:
+    needs: windows
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: windows-${{ github.run_id }}
+          path: releases
+      - name: Verify the same installer on the older Windows runner
+        shell: pwsh
+        run: |
+          $installer=(Get-ChildItem releases/*-setup.exe).FullName
+          python scripts/verify-windows-installer.py $installer releases/Windows-engine-manifest.json
+          if($LASTEXITCODE){exit $LASTEXITCODE}
   publish:
-    needs: [version, build, linux, arch]
+    needs: [version, build, linux, arch, windows, windows_compat]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

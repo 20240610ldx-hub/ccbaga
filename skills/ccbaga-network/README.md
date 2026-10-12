@@ -55,7 +55,7 @@ The provider entrance configuration is centralized in [providers.json](providers
 
 ## Agent command reference
 
-**These commands are for the AI, not tasks for the user.** Use Python 3.10+, OpenSSH and curl on macOS/Linux. Run commands relative to the installed skill directory (or use absolute paths):
+**These commands are for the AI, not tasks for the user.** Use Python 3.10+, OpenSSH and curl on macOS/Linux. On native Windows use Python 3.12+, Microsoft OpenSSH Client and curl.exe; invoke the same scripts with `python` or `py -3`. The AI handles prerequisites, paths and commands. Private files use verified current-user-only NTFS ACLs; no WSL is required. Windows TUN service installation may need administrator approval. Run commands relative to the installed skill directory (or use absolute paths):
 
 ```sh
 python3 scripts/test_network.py            # offline; no VPS or real credentials

@@ -13,7 +13,8 @@ fn verify(mut manifest: Value, key: &str, bytes: &[u8]) -> Result<(), String> {
     // ----- 仅测试允许本机 HTTP；生产仍使用配置中的公开 HTTPS -----
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
-    manifest["platforms"]["darwin-aarch64"]["url"] = json!(format!("http://{address}/archive"));
+    let target = if manifest["platforms"]["windows-x86_64"].is_object() { "windows-x86_64" } else { "darwin-aarch64" };
+    manifest["platforms"][target]["url"] = json!(format!("http://{address}/archive"));
     let responses = [serde_json::to_vec(&manifest).unwrap(), bytes.to_vec()];
     let server = std::thread::spawn(move || {
         for body in responses {
@@ -43,7 +44,7 @@ fn verify(mut manifest: Value, key: &str, bytes: &[u8]) -> Result<(), String> {
         .unwrap();
     let updater = app
         .updater_builder()
-        .target("darwin-aarch64")
+        .target(target)
         .executable_path("/tmp/ccbaga-test.app/Contents/MacOS/app")
         .version_comparator(|_, _| true)
         .timeout(Duration::from_secs(30))

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-# [INPUT]: 固定上游 Fingerprint Chromium macOS DMG/Linux tar.xz、发布者 SHA-256 与平台工具。
-# [OUTPUT]: 校验来源与架构后恢复被 Git 排除的 Browser.app 或 LinuxBrowser，不读取用户资料。
+# [INPUT]: 固定上游 Fingerprint Chromium macOS DMG/Linux tar.xz/Windows ZIP、发布者 SHA-256 与平台工具。
+# [OUTPUT]: 校验来源与架构后恢复被 Git 排除的 Browser.app、LinuxBrowser 或 WindowsBrowser，不读取用户资料。
 # [POS]: 干净检出的引擎准备边界；保留上游完整资源与许可，不下载随时间变化的 latest。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import hashlib
 import platform
 import tarfile
+import zipfile
 import shutil
 from pathlib import Path
 import plistlib
@@ -51,7 +52,45 @@ def fetch_linux():
     print(f'Fingerprint Chromium {VERSION}: Linux x86_64 SHA-256 verified')
 
 
+def fetch_windows():
+    if platform.machine() not in ('x86_64', 'AMD64'):
+        raise SystemExit('The pinned upstream Windows engine only supports x86_64')
+    target = ROOT / 'browser-runtime/WindowsBrowser'
+    if target.exists():
+        raise SystemExit('WindowsBrowser already exists; refusing to overwrite a prepared engine')
+    url = f'https://github.com/adryfish/fingerprint-chromium/releases/download/{VERSION}/ungoogled-chromium_{VERSION}-1.1_windows_x64.zip'
+    digest = '9ef3f471b7a6641b4224532522b29141ce3746e27d55788d88e2fd951f362579'
+    with tempfile.TemporaryDirectory(prefix='ccbaga-win-engine-') as temporary:
+        archive = Path(temporary)/'browser.zip'
+        subprocess.run(['curl.exe','--fail','--location','--retry','3','--output',str(archive),url],check=True)
+        with archive.open('rb') as stream:
+            if hashlib.file_digest(stream,'sha256').hexdigest()!=digest: raise SystemExit('Upstream browser SHA-256 mismatch')
+        extracted=Path(temporary)/'extracted'
+        with zipfile.ZipFile(archive) as zipped:
+            for item in zipped.infolist():
+                path=Path(item.filename)
+                if path.is_absolute() or '..' in path.parts or ':' in item.filename or '\\' in item.filename: raise SystemExit('Unsafe Windows engine archive path')
+            zipped.extractall(extracted)
+        engines = list(extracted.glob('**/chrome.exe'))
+        if len(engines) != 1:
+            raise SystemExit('Expected exactly one Windows Chromium executable')
+        binary = engines[0]
+        import struct, os
+        with binary.open('rb') as stream:
+            if stream.read(2)!=b'MZ':raise SystemExit('Expected a PE browser executable')
+            stream.seek(0x3c); offset=struct.unpack('<I',stream.read(4))[0];stream.seek(offset)
+            if stream.read(6)!=b'PE\0\0\x64\x86':raise SystemExit('Expected a Windows x64 browser executable')
+        actual=subprocess.check_output(['powershell','-NoProfile','-NonInteractive','-Command','(Get-Item -LiteralPath $env:CC_ENGINE_EXE).VersionInfo.ProductVersion'],env=os.environ|{'CC_ENGINE_EXE':str(binary)},text=True)
+        if VERSION not in actual:
+            raise SystemExit('Upstream browser version mismatch')
+        (binary.parent / 'version.txt').write_text(VERSION + '\n')
+        shutil.copytree(binary.parent, target)
+    print(f'Fingerprint Chromium {VERSION}: Windows x64 SHA-256 verified')
+
+
 def main():
+    if platform.system() == 'Windows':
+        return fetch_windows()
     if platform.system() == 'Linux':
         return fetch_linux()
     if platform.system() != 'Darwin':

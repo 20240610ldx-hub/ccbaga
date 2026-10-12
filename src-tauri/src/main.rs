@@ -1,4 +1,4 @@
-// [INPUT]: macOS/Linux 平台边界、Tauri 生命周期、发布构建 custom-protocol 与清理、CLI 安装管理、浏览器、地区、系统、固定网络资源导航与独立界面语言命令及官方签名更新/重启插件。
+// [INPUT]: macOS/Linux/Windows 平台边界、Tauri 生命周期、发布构建 custom-protocol 与清理、CLI 安装管理、浏览器、地区、系统、固定网络资源导航与独立界面语言命令及官方签名更新/重启插件。
 // [OUTPUT]: CCBaga-A窗口、托盘、本地清理和 CLI 卸载/重装、固定网络资源入口与随界面语言切换的托盘菜单。
 // [POS]: 应用编排层；不注册翻译快捷键，不读取翻译设置或 API 密钥。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -10,6 +10,8 @@ mod claude_cli;
 mod cleaner;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "windows")]
+mod windows;
 mod native;
 mod progress;
 mod regions;
@@ -63,6 +65,11 @@ fn main() {
                 browser::open_urls(app.clone(), args);
                 return;
             }
+            #[cfg(target_os = "windows")]
+            if args.iter().any(|arg| arg == "--browser") {
+                browser::open_urls(app.clone(), args);
+                return;
+            }
             let _ = args;
             show(app)
         }))
@@ -73,6 +80,8 @@ fn main() {
             #[cfg(target_os = "macos")]
             browser::companion(app.handle().clone());
             #[cfg(target_os = "linux")]
+            browser::open_urls(app.handle().clone(), std::env::args().collect());
+            #[cfg(target_os = "windows")]
             browser::open_urls(app.handle().clone(), std::env::args().collect());
             let menu = ui_language::menu(
                 app.handle(),

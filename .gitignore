@@ -23,6 +23,8 @@ browser-runtime/Browser.zip
 *.key
 
 browser-runtime/LinuxBrowser/
+browser-runtime/WindowsBrowser/
+browser-runtime/browser.zip
 
 # Arch makepkg work directories and generated packages
 packaging/arch/src/

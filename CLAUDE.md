@@ -11,7 +11,7 @@ scripts/ - 图标、签名、引擎打包、应用安装与Claude Code CLI 管�
 skills/ - 独立可安装网络 Skill；AI 收集用户资料、运行本机预检与经确认的远端部署，应用只提供安装提示词；见其 CLAUDE.md
 packaging/ - 社区 Linux 构建配方；见其 CLAUDE.md
 assets/ - 两张压缩品牌图、五项 LobeHub AI SVG 与极客像素安装盘背景，分别供图标/README 和 DMG 布局使用；见其 CLAUDE.md
-docs/ - 英文仓库封面与 Linux 开发说明；见其 CLAUDE.md
+docs/ - 英文仓库封面与 Linux/Windows 开发说明；见其 CLAUDE.md
 vendor/ - cromma-web 同款组件库副本，主题、原语与 Pika 图标自包含；见其 CLAUDE.md
 </directory>
 <config>
@@ -36,3 +36,5 @@ CLI 管理：Claude 清理页提供一键卸载/重装，确认后结束全部�
 安全契约：src-tauri/SECURITY.md 描述数据流与外部连接；进程参数只在原生层识别，Machine.system_proxy 禁止序列化；宿主无用户信息上传服务；验证未覆盖的第三方、桌面或远程行为不得宣称通过。
 Linux x86_64 适配：见 docs/linux.md；平台配置拆分为 tauri.macos.conf.json / tauri.linux.conf.json。Linux 原生边界位于 src-tauri/src/linux.rs，浏览器使用带哈希固定的 LinuxBrowser 与 XDG 启动项；版本任务后并行构建 macOS/Ubuntu/Arch；DEB/RPM/AppImage 引擎隔离在 libexec，避免宿主打包工具改写；Linux 实际安装包均解包核验，四格式与 macOS 同批验收后由所有者统一发布，Linux 不接触 Apple/更新私钥。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+
+Windows x64：平台桥使用当前用户 SID、文件所有权和 reparse-point 检查；进程核验精确入口、创建时间和 live handle。凭据管理器不读取或自动删除。当前用户 International cmdlets 保留其他语言并核验实际生效；时区 tzutil 写入后读回，不用默认值伪装状态。默认浏览器只注册自身 HKCU 能力并引导系统确认，独立读取 HTTP/HTTPS。CLI 由内嵌 PowerShell 按原生/npm/bun/WinGet 来源管理，Job Object 限定子进程树；个人资产保留。单 NSIS 同时安装 A/B；Windows 自动更新使用同一安装器且先关闭 B。网络仍只用独立 Skill；Windows 私密文件采用用户 SID 独占 NTFS ACL，原生 OpenSSH/curl，无 WSL 或 VPS UI。无凭据 Windows 预检分支不得发布；正式发布需全部平台验收，Windows 更新私钥仅在测试后的独立签名步骤注入。

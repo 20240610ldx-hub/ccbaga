@@ -36,10 +36,11 @@ class NetworkTests(unittest.TestCase):
         conf = {'pem':str(pem),'ppk':str(ppk),'pub':str(pub)}
         pem.chmod(0o644)
         with n.Key(conf) as key:
-            self.assertEqual(key.stat().st_mode & 0o777,0o600)
+            n.win.assert_private(key) if os.name == 'nt' else self.assertEqual(key.stat().st_mode & 0o777,0o600)
             self.assertEqual(key.read_bytes(),pem.read_bytes())
             copy = key
-        self.assertFalse(copy.exists()); self.assertEqual(pem.stat().st_mode & 0o777,0o644)
+        self.assertFalse(copy.exists())
+        if os.name != 'nt': self.assertEqual(pem.stat().st_mode & 0o777,0o644)
         ppk.write_text(f'PuTTY-User-Key-File-3: {algorithm}\nPublic-Lines: 1\nAAAA\n')
         with self.assertRaises(ValueError): n.Key(conf)
         with self.assertRaises(ValueError): n.key_data(None,str(ppk),str(pub))
@@ -53,8 +54,9 @@ class NetworkTests(unittest.TestCase):
         conf = self.config(); path = self.root/'connection.json'
         n.private_write(path,json.dumps(conf)); self.assertEqual(n.read_config(path),conf)
         with self.assertRaises(FileExistsError): n.private_write(path,'overwrite')
-        path.chmod(0o644)
-        with self.assertRaises(ValueError): n.read_config(path)
+        if os.name == 'nt': subprocess.run(['icacls',str(path),'/grant','*S-1-1-0:(R)'],check=True,capture_output=True)
+        else: path.chmod(0o644)
+        with self.assertRaises((ValueError,OSError)): n.read_config(path)
         link = self.root/'linked.json'; link.symlink_to(path)
         with self.assertRaises(ValueError): n.read_config(link)
         for host in ['-oProxyCommand=id','user@host','host;id','ssh://host','host\nwhoami']:
@@ -65,7 +67,7 @@ class NetworkTests(unittest.TestCase):
         path = self.root/'private/connection.json'
         n.configure(path, io.StringIO(json.dumps(self.config())))
         self.assertEqual(n.read_config(path), self.config())
-        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        n.win.assert_private(path) if os.name == 'nt' else self.assertEqual(path.stat().st_mode & 0o777, 0o600)
         with self.assertRaises(FileExistsError): n.configure(path, io.StringIO(json.dumps(self.config())))
         for conf in [{}, {**self.config(), 'home_port': 0}, {**self.config(), 'pem': None}]:
             invalid = self.root/'invalid.json'
@@ -82,7 +84,8 @@ class NetworkTests(unittest.TestCase):
     def test_credentials_travel_only_in_quoted_stdin(self):
         conf = self.config(); marker = self.root/'injected'
         conf['home_pass'] = "p'$(touch " + str(marker) + ')'
-        out = n.execute(['/bin/bash','-s'],n.exports(conf)+'printf %s "$HOME_PASS"\n')
+        bash = str(Path(os.environ.get('ProgramFiles', r'C:\Program Files'))/'Git/bin/bash.exe') if os.name == 'nt' else '/bin/bash'
+        out = n.execute([bash,'-s'],n.exports(conf)+'printf %s "$HOME_PASS"\n')
         self.assertEqual(out,conf['home_pass']); self.assertFalse(marker.exists())
         args = n.ssh_args(conf,Path('/tmp/key'),self.root/'connection.json')
         self.assertNotIn(conf['home_pass'],' '.join(args))
