@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 原生 runtime_platform、Tauri 官方 updater/process 插件、应用版本、共享 YAML、Cromma UI 与父层事务锁。
  * [OUTPUT]: 侧栏检查更新、静默启动检查、真实下载进度和经签名核验的安装/重启；失败可重试。
- * [POS]: 只更新宿主 A；原生插件负责校验与替换，界面锁避免重启中断其他事务，B 由双应用 DMG 更新；Linux 不请求 macOS 更新源。
+ * [POS]: 原生插件校验与替换；macOS 更新 A、B 使用 DMG，Windows 先退出 B 后以 NSIS 更新两程序；Linux 使用包管理器。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 import { invoke } from "@tauri-apps/api/core";

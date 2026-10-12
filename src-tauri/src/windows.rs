@@ -472,6 +472,7 @@ fn region_settings(language: &str, region: Option<&str>) -> Result<Value, String
         .find(|r| r.language == language && region.is_none_or(|v| r.locale == v))
         .ok_or("语言或区域无效。")?;
     let tag = selected.locale.replace('_', "-");
+    let active_language = session_language();
     let script = include_str!("../../scripts/windows-region.ps1").trim_start_matches('\u{feff}');
     let result = Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-Command", script])
@@ -489,7 +490,7 @@ fn region_settings(language: &str, region: Option<&str>) -> Result<Value, String
     if region.is_some_and(|r| locale() != r) {
         return Err("Windows 区域格式修改未通过核验。".into());
     }
-    if !language_matches(&session_language(), language) {
+    if !language_matches(&active_language, language) {
         open_settings("language")?;
         return Err(
             "首选语言与区域已保存；安装所需语言包并注销、重新登录后再核验显示语言。".into(),

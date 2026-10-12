@@ -42,9 +42,9 @@ Two applications work together: **CCBaga-A** owns native operations; **CCBaga-B*
     <td width="33%"><strong>Real environment checks</strong><br /><br />Compare browser and machine readings with the actual network exit. Passing measured checks produces a green page and a large checkmark.</td>
   </tr>
   <tr>
-    <td><strong>Native system settings</strong><br /><br />Apply timezone, preferred language and region settings. Open desktop controls for location and permissions; see Linux feature limits.</td>
+    <td><strong>Native system settings</strong><br /><br />Apply timezone, preferred language and region settings. Open desktop controls for location and permissions; see platform-specific limits.</td>
     <td><strong>AI-guided network setup</strong><br /><br />Three simple steps, a coding-agent selector and a copyable Skill installation prompt. Give the AI your files and connection details; it handles the commands.</td>
-    <td><strong>Claude Code CLI tools</strong><br /><br />Detect the installation method and version. Uninstall or reinstall through native, npm or Homebrew workflows.</td>
+    <td><strong>Claude Code CLI tools</strong><br /><br />Detect the installation method and version. Uninstall or reinstall through native, npm/bun, Homebrew or WinGet workflows.</td>
   </tr>
 </table>
 
@@ -58,7 +58,7 @@ The interface supports **English and Chinese**, with shared YAML catalogs. Switc
 
 Linux x86_64 packages include DEB, RPM, AppImage and Arch/pacman formats, with the companion browser included. See [Linux setup](docs/linux.md) for installation and platform limits. Official versions are published exclusively by the project owner, **liseami**.
 
-Windows 10/11 x86_64 builds produce native NSIS setup packages including companion browser engine. See [Windows setup](docs/windows.md) for installation, toolchains and platform behaviors.
+Windows x86_64 uses one NSIS setup installer containing both A and B. The installer is not Authenticode signed and may show SmartScreen; managed security policy can block it. See [Windows setup](docs/windows.md) for installation, toolchains and platform behaviors.
 
 ### macOS
 
@@ -81,7 +81,7 @@ Source builds are available through the [development guide](#development).
 
 Use **Check for updates** at the bottom of CCBaga-A’s sidebar. Startup checks quietly; installation only starts when you choose **Update and restart**. Downloads show actual progress and are verified before installation. Failed downloads can be retried; a failed restart does not download the update again.
 
-In-app updates replace **CCBaga-A**. To update **both A and B**, download the latest DMG and drag both apps into Applications.
+On **macOS**, in-app updates replace A; use the latest DMG to update both apps. On **Windows**, a verified NSIS update installs both A and B after closing this companion browser. On **Linux**, use the package manager or full package.
 
 ## Quick start
 
@@ -118,7 +118,7 @@ Provider buttons link to [DMIT](https://www.dmit.io/aff.php?aff=28800) and [Webs
 
 ![Pixel architecture map: native core, companion browser and a separate AI Network Skill](docs/architecture.svg)
 
-The UI owns inputs and presentation. Rust owns validation, task locks, process identity checks and execution. Small Objective-C bridges call macOS APIs; a Rust Linux boundary uses procfs and desktop/session utilities. The browser test page has no Tauri command access; it exchanges context and measurements through a random-token loopback session.
+The UI owns inputs and presentation. Rust owns validation, task locks, process identity checks and execution. Small Objective-C bridges call macOS APIs; Rust Linux and Windows boundaries use native process identity checks and platform controls. The browser test page has no Tauri command access; it exchanges context and measurements through a random-token loopback session.
 
 | Layer | Technology | Responsibility |
 | --- | --- | --- |
@@ -141,7 +141,7 @@ browser-runtime/    Engine metadata, launcher, entitlements and licenses
 scripts/            Icons, local builds and installation helpers
 skills/             Installable AI Network Skill and its execution scripts
 packaging/arch/     Native Arch Linux PKGBUILD and desktop entry
-docs/               README artwork and Linux development guide
+docs/               README artwork and platform development guides
 vendor/cromma-ui/   Vendored interface components
 ```
 
@@ -205,7 +205,7 @@ Automated tests exercise disposable fixtures and local test servers. They do not
 ## Data & permissions
 
 - **Cleanup is local.** It targets recognized Claude data; project source, skills, plugins, hooks, commands and MCP settings are preserved. Cloud-side account records are outside its scope.
-- **Secrets stay out of UI logs.** The apps have no SSH key picker or server deployment command. Keychain cleanup reads item attributes, not password contents. The separate Skill uses private local files and temporary `0600` PEM copies; data supplied to your coding agent is subject to that agent provider’s handling.
+- **Secrets stay out of UI logs.** The apps have no SSH key picker or server deployment command. Keychain cleanup reads item attributes, not password contents. The separate Skill uses private local files and temporary private PEM copies (0600 on POSIX, verified user-only NTFS ACLs on Windows); data supplied to your coding agent is subject to that agent provider’s handling.
 - **Network checks make real requests.** Exit detection uses `ipwho.is` with `ipapi.co` as a fallback on the same route. IP location is a service estimate.
 - **Remote changes are explicit.** The separate Skill contacts only the VPS you provide after server-change approval. Required credentials remain in private local/server configuration, outside Git and public logs.
 - **Permissions are feature-specific.** Timezone changes require macOS administrator authorization. Keychain access follows system prompts. Location controls may require Accessibility permission or a manual action in System Settings.

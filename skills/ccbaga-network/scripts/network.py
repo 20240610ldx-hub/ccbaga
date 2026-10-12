@@ -62,7 +62,7 @@ def private_write(path, content):
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         if os.name == 'nt': win.protect(path)
-        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+        with os.fdopen(fd, 'w', encoding='utf-8', newline='') as stream:
             fd = None
             stream.write(content)
     except BaseException:

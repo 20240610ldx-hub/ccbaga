@@ -22,9 +22,16 @@ def main():
     if platform.system()!='Windows' or platform.machine().upper() not in ('AMD64','X86_64'):raise SystemExit('Windows x64 MSVC is required')
     version=os.environ.get('CC_RELEASE_VERSION',json.loads((ROOT/'package.json').read_text())['version'])
     run('bun','test');run('bun','run','build')
-    run(sys.executable,'skills/ccbaga-network/scripts/test_network.py')
-    run('cargo','test','--locked','--manifest-path','src-tauri/Cargo.toml','--features','custom-protocol')
-    run(sys.executable,'scripts/test-windows.py')
+    checks=[
+        [sys.executable,'skills/ccbaga-network/scripts/test_network.py'],
+        ['cargo','test','--locked','--manifest-path','src-tauri/Cargo.toml','--features','custom-protocol'],
+        [sys.executable,'scripts/test-windows.py'],
+    ]
+    failed=[]
+    for command in checks:
+        result=subprocess.run(command,cwd=ROOT,env=ENV)
+        if result.returncode:failed.append(command[0])
+    if failed:raise SystemExit('Windows checks failed: '+', '.join(failed))
     run('bun','run','tauri','build','--bundles','nsis','--features','custom-protocol','--config',json.dumps({'version':version}))
     installers=list((ROOT/'src-tauri/target/release/bundle/nsis').glob('*-setup.exe'))
     if len(installers)!=1:raise SystemExit('Expected exactly one NSIS installer')

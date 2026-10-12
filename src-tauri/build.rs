@@ -1,5 +1,5 @@
 // [INPUT]: 目标平台、macOS Objective-C 原生桥与 Tauri 配置。
-// [OUTPUT]: 仅 macOS 编译链接系统桥；Linux 直接使用 Rust 平台边界，双方加载各自 Tauri 配置。
+// [OUTPUT]: 仅 macOS 编译链接系统桥；Linux/Windows 使用 Rust 平台边界，各自加载 Tauri 平台配置。
 // [POS]: 原生宿主的构建边界。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 fn main() {

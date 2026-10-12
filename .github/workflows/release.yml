@@ -281,6 +281,9 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: macos-${{ github.run_id }}
@@ -293,11 +296,14 @@ jobs:
         with:
           name: arch-${{ github.run_id }}
           path: releases
-      - name: Verify release digest
-        working-directory: releases
-        run: |
-          cat Linux-SHA256SUMS Arch-SHA256SUMS >> SHA256SUMS
-          sha256sum --check SHA256SUMS
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: windows-${{ github.run_id }}
+          path: releases
+      - name: Verify and assemble minimal public assets
+        env:
+          RELEASE_VERSION: ${{ needs.version.outputs.version }}
+        run: python3 scripts/assemble-release.py
       - name: Attest public release provenance
         if: github.event.repository.private == false
         uses: actions/attest-build-provenance@8beda2b7ed98355c0e97c0a63bec38ae472e66c4 # v4
@@ -309,6 +315,7 @@ jobs:
             releases/*.rpm
             releases/*.AppImage
             releases/*.pkg.tar.zst
+            releases/*-setup.exe
       - name: Create tag and publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -326,21 +333,7 @@ jobs:
             gh api --method POST "repos/$GH_REPO/git/refs" \
               -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$RELEASE_COMMIT" >/dev/null
           fi
-          cat > release-notes.md <<'NOTES'
-          CCBaga pairs a native desktop toolkit with an isolated companion browser.
-
-          - **CCBaga-A:** local Claude cleanup, Claude Code CLI management, region settings and real environment checks.
-          - **CCBaga-B:** dedicated Chromium profile, fingerprint rotation and restart.
-          - **Interface:** English/Chinese, a focused black theme, diagonal linework and dot-grid sections.
-          - **Network Skill:** install and run through General, Codex, Cursor, OpenCode or Copilot.
-
-          **macOS Apple Silicon:** download the DMG and drag both apps into Applications. One installer contains A and B.
-          **Linux x86_64:** choose DEB, RPM, AppImage or Arch/pacman; each package includes the companion browser.
-
-          Sidebar updates install A. Use the full installer to update both apps.
-          SHA256SUMS and build provenance accompany the downloads.
-          [Usage and development](https://github.com/liseami/CCBaga#readme) · [Network Skill](https://github.com/liseami/CCBaga/tree/main/skills/ccbaga-network)
-          NOTES
-          gh release create "$RELEASE_TAG" releases/*.dmg releases/*.app.tar.gz releases/*.sig releases/*.deb releases/*.rpm releases/*.AppImage releases/*.pkg.tar.zst releases/latest.json releases/SHA256SUMS releases/notarization.json \
+          mapfile -t assets < release-files.txt
+          gh release create "$RELEASE_TAG" "${assets[@]}" \
             --verify-tag --title "CCBaga $RELEASE_VERSION" --notes-file release-notes.md --draft
           gh release edit "$RELEASE_TAG" --draft=false
