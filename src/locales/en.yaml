@@ -767,3 +767,13 @@
 "版本说明": "Release notes"
 "安装完成，但重启失败：{error}": "Update installed, but restart failed: {error}"
 "更新失败：{error}": "Update failed: {error}"
+
+"{platform} {v0} / {v1} 核": "{platform} {v0} / {v1} cores"
+"正在应用 {v0}，请完成系统管理员授权。": "Applying {v0}. Approve the system administrator prompt."
+"请完成系统管理员授权；时区先应用，再保存语言与地区格式。": "Approve the system administrator prompt to update time zone, language and region."
+"已向系统请求设为默认浏览器，请检查系统确认。": "Default-browser request sent. Check the system confirmation."
+"系统定位偏好": "System location preference"
+"Linux 版本请通过安装包或源码更新，当前更新源仅提供 macOS。": "Update Linux using a package or source build. The current update feed only provides macOS artifacts."
+"代理环境": "Proxy environment"
+"检测到代理环境变量；桌面代理设置未独立核验，请验证实际出口。": "Proxy environment variables detected. Desktop proxy settings have not been independently checked; verify the actual exit."
+"未发现代理环境变量；桌面代理设置未独立核验，请验证实际出口。": "No proxy environment variables found. Desktop proxy settings have not been independently checked; verify the actual exit."

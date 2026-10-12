@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BROWSER = ROOT / 'browser-runtime/Browser.app'
 HOST = ROOT / 'src-tauri/target/release/bundle/macos/CCBaga-A.app'
 SIGNING_KEYS = ['TAURI_SIGNING_PRIVATE_KEY', 'TAURI_SIGNING_PRIVATE_KEY_PATH', 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD']
-BUILD_ENV = {key: value for key, value in os.environ.items() if key not in SIGNING_KEYS}
+BUILD_ENV = {key: value for key, value in os.environ.items() if key not in SIGNING_KEYS and not key.startswith("APPLE_")}
 
 
 def run(*args, env=None):
@@ -31,7 +31,7 @@ def main():
     for key in required:
         if not os.environ.get(key):
             raise SystemExit(f'Missing environment variable: {key}')
-    signing_env = os.environ.copy()
+    signing_env = BUILD_ENV | {key: os.environ[key] for key in SIGNING_KEYS if key in os.environ}
     if not any(signing_env.get(key) for key in SIGNING_KEYS[:2]):
         raise SystemExit('Missing updater signing private key (external path or secret content)')
     # ----- 第三方 DMG 工具的子进程也不继承更新私钥 -----

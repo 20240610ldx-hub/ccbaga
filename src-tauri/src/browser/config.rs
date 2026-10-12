@@ -2,9 +2,14 @@
 // [OUTPUT]: Default 资料的指纹设置与 Chromium 参数；默认跟随 TUN 网络，保持真实系统版本、CPU 与设备图形。
 // [POS]: 浏览器配置真相源；路径来自宿主，输入不能变成额外命令参数。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+#[cfg(target_os = "linux")]
+use crate::linux::*;
 use crate::native::decode;
 use serde::{Deserialize, Serialize};
-use std::{ffi::c_char, path::Path};
+#[cfg(target_os = "macos")]
+use std::ffi::c_char;
+use std::path::Path;
+#[cfg(target_os = "macos")]
 extern "C" {
     fn rf_browser_machine() -> *mut c_char;
 }
@@ -16,8 +21,9 @@ pub struct Machine {
     pub timezone: String,
     pub languages: Vec<String>,
     pub locale: String,
-    pub location_enabled: bool,
+    pub location_enabled: Option<bool>,
     pub timezones: Vec<String>,
+    #[serde(skip_serializing)]
     pub system_proxy: String,
 }
 pub fn machine() -> Result<Machine, String> {
@@ -128,7 +134,7 @@ pub fn arguments(
         format!("--user-data-dir={}", profile.display()),
         "--profile-directory=Default".into(),
         format!("--fingerprint={}", config.seed),
-        "--fingerprint-platform=macos".into(),
+        format!("--fingerprint-platform={}", machine.platform),
         format!("--fingerprint-platform-version={}", machine.version),
         "--fingerprint-brand=Chrome".into(),
         format!("--fingerprint-brand-version={version}"),

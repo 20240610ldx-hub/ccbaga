@@ -1,9 +1,10 @@
 /**
- * [INPUT]: Tauri 官方 updater/process 插件、应用版本、共享 YAML、Cromma UI 与父层事务锁。
+ * [INPUT]: 原生 runtime_platform、Tauri 官方 updater/process 插件、应用版本、共享 YAML、Cromma UI 与父层事务锁。
  * [OUTPUT]: 侧栏检查更新、静默启动检查、真实下载进度和经签名核验的安装/重启；失败可重试。
- * [POS]: 只更新宿主 A；原生插件负责校验与替换，界面锁避免重启中断其他事务，B 由双应用 DMG 更新。
+ * [POS]: 只更新宿主 A；原生插件负责校验与替换，界面锁避免重启中断其他事务，B 由双应用 DMG 更新；Linux 不请求 macOS 更新源。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
+import { invoke } from "@tauri-apps/api/core";
 import {useEffect,useRef,useState} from 'react';
 import {getVersion} from '@tauri-apps/api/app';
 import {check,type Update} from '@tauri-apps/plugin-updater';
@@ -30,6 +31,10 @@ export function AppUpdate({blocked,onBusy}:{blocked:boolean;onBusy:(busy:boolean
     if(running.current||installed.current)return;
     running.current=true;setPhase('checking');setError('');
     try{
+      if(await invoke<string>('runtime_platform') === 'linux'){
+        if(live.current){setPhase('idle');if(show)setError(t('Linux 版本请通过安装包或源码更新，当前更新源仅提供 macOS。'));}
+        return;
+      }
       const next=await check({timeout:20000});
       if(!live.current){await next?.close();return;}
       await resource.current?.close();resource.current=next;setUpdate(next);setPhase(next?'available':'current');

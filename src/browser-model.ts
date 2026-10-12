@@ -5,7 +5,7 @@
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 export type BrowserConfig={seed:number;proxy:string;follow_machine:boolean;language:string;timezone:string;native_graphics:boolean};
-export type Machine={platform:string;version:string;cores:number;timezone:string;languages:string[];locale:string;location_enabled:boolean;timezones:string[];system_proxy:string};
+export type Machine={platform:string;version:string;cores:number;timezone:string;languages:string[];locale:string;location_enabled:boolean|null;timezones:string[]};
 export type Exit={ip:string;country:string;city:string;timezone:string;isp:string};
 export type Report={language:string;languages:string[];timezone:string;platform:string;cores:number;user_agent:string;platform_version:string;browser_version:string;geolocation:string;exit:Exit|null;error:string};
 export type BrowserContext={ui_language:'zh'|'en';exit_services:string[];region:{id:string;label:string;country:string;language:string;locale:string;timezone:string}|null;config:BrowserConfig;machine:Machine;engine_version:string};

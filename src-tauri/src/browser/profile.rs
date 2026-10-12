@@ -2,15 +2,20 @@
 // [OUTPUT]: 浏览资料占用保护、窄范围 Preferences 更新及缓存/登录数据清理。
 // [POS]: 文件边界；清理只遍历固定位置，拒绝链接，不生成备份。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+#[cfg(target_os = "linux")]
+use crate::linux::*;
 use crate::native::decode;
 use serde::Serialize;
 use serde_json::{json, Value};
+#[cfg(target_os = "macos")]
+use std::ffi::c_char;
 use std::{
-    ffi::{c_char, CString},
+    ffi::CString,
     fs,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
+#[cfg(target_os = "macos")]
 extern "C" {
     fn rf_browser_running(profile: *const c_char) -> *mut c_char;
     fn rf_browser_quit(profile: *const c_char) -> *mut c_char;

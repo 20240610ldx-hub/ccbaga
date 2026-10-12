@@ -21,3 +21,13 @@ browser-runtime/Browser.app/
 browser-runtime/Browser.zip
 .venv-release/
 *.key
+
+browser-runtime/LinuxBrowser/
+
+# Arch makepkg work directories and generated packages
+packaging/arch/src/
+packaging/arch/pkg/
+packaging/arch/ccbaga/
+packaging/arch/*.tar.xz
+packaging/arch/*.tar.xz.part
+packaging/arch/*.pkg.tar.zst

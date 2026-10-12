@@ -53,7 +53,7 @@ export function useQuickActions(onStart: () => void, onChanged: () => void) {
                 activity.finish(true, "CCBaga-B已使用新指纹、地区语言与时区启动，网络跟随 TUN。");
             }
             else if (kind === 'system') {
-                activity.log('system', 'running', "请完成 macOS 管理员授权；时区先应用，再保存语言与地区格式。");
+                activity.log('system', 'running', "请完成系统管理员授权；时区先应用，再保存语言与地区格式。");
                 const result = await invoke<{
                     message: string;
                 }>('system_set_region', { region });

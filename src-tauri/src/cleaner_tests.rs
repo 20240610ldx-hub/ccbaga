@@ -204,7 +204,7 @@ fn ends_only_the_captured_disposable_process() {
         "#include <stdio.h>\n#include <unistd.h>\nint main(void) { puts(\"READY\"); fflush(stdout); sleep(30); return 0; }\n",
     );
     // ----- 自编译样本并等待启动握手；不复制带有平台身份的系统二进制 -----
-    let compilation = std::process::Command::new("/usr/bin/clang")
+    let compilation = std::process::Command::new("cc")
         .arg(f.0.join("process.c"))
         .arg("-o")
         .arg(&executable)
@@ -252,6 +252,7 @@ fn nested_file_changes_invalidate_directory_snapshot() {
     f.file(".claude/cache/nested/file", "changed");
     assert!(identity(item, &f.0).is_err());
 }
+#[cfg(target_os = "macos")]
 #[test]
 fn selected_parent_suppresses_child_and_credentials_are_never_paths() {
     let f = Fixture::new();
@@ -503,4 +504,34 @@ fn node_claude_entry_is_identified_and_unrelated_node_is_preserved() {
     signal_same_process(&target, 9).unwrap();
     assert!(!children.0[0].wait().unwrap().success());
     assert!(children.0[1].try_wait().unwrap().is_none());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_cleanup_uses_xdg_cache_paths_and_preserves_desktop_configuration() {
+    let f = Fixture::new();
+    f.file(".cache/claude-cli-nodejs/data", "cache");
+    f.file(".config/Claude/Cache/data", "cache");
+    f.file(".config/Claude/claude_desktop_config.json", "settings");
+    f.file(
+        "Library/Caches/claude-cli-nodejs/data",
+        "not a Linux target",
+    );
+    let plan = collect(&f.0, None).unwrap();
+    assert_eq!(plan.items.len(), 2);
+    let state = Cleaner::default();
+    let result = perform_items(
+        &f.0,
+        &plan.items,
+        &state,
+        || Ok(false),
+        &Reporter::channel(None),
+    )
+    .unwrap();
+    assert!(result.completed);
+    assert!(f
+        .0
+        .join(".config/Claude/claude_desktop_config.json")
+        .exists());
+    assert!(f.0.join("Library/Caches/claude-cli-nodejs/data").exists());
 }

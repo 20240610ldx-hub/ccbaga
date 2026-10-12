@@ -5,9 +5,13 @@
 pub(crate) mod config;
 mod network;
 mod profile;
+#[cfg(target_os = "linux")]
+include!("linux.rs");
 pub(crate) mod server;
 #[cfg(test)]
 mod tests;
+#[cfg(target_os = "linux")]
+use crate::linux::*;
 use crate::{
     native::decode,
     progress::{Progress, Reporter},
@@ -15,14 +19,16 @@ use crate::{
 use config::{Config, Machine};
 use network::{Check, Exit, Report};
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "macos")]
+use std::ffi::{c_char, CString};
 use std::{
-    ffi::{c_char, CString},
     fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::Mutex,
 };
 use tauri::{ipc::Channel, Manager};
+#[cfg(target_os = "macos")]
 extern "C" {
     fn rf_browser_register(path: *const c_char) -> *mut c_char;
     fn rf_browser_app_running(bundle: *const c_char) -> *mut c_char;
@@ -77,10 +83,14 @@ fn root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .map_err(|_| "应用目录不可用。")?
         .join("browser"))
 }
+#[cfg(target_os = "macos")]
 pub const BROWSER_ID: &str = "ai.local.requirement-french.browser";
+#[cfg(target_os = "macos")]
 const BROWSER_APP: &str = "CCBaga-B.app";
+#[cfg(target_os = "macos")]
 const LSREGISTER: &str = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
 /// install-apps.sh 安装的 CCBaga-B：优先 /Applications，回退 ~/Applications；存在时作为唯一引擎，避免同一包标识出现两份注册。
+#[cfg(target_os = "macos")]
 fn installed() -> Option<PathBuf> {
     let mut places = vec![PathBuf::from("/Applications")];
     if let Some(home) = std::env::var_os("HOME") {
@@ -91,14 +101,17 @@ fn installed() -> Option<PathBuf> {
         .map(|dir| dir.join(BROWSER_APP))
         .find(|app| app.join("Contents/MacOS/Chromium").is_file())
 }
+#[cfg(target_os = "macos")]
 fn register(engine: &Path) -> Result<(), String> {
     let path = CString::new(engine.to_string_lossy().as_bytes()).map_err(|_| "引擎路径无效。")?;
     let _: serde_json::Value = decode(unsafe { rf_browser_register(path.as_ptr()) })?;
     Ok(())
 }
+#[cfg(target_os = "macos")]
 fn bundle_id() -> CString {
     CString::new(BROWSER_ID).unwrap()
 }
+#[cfg(target_os = "macos")]
 fn app_running() -> Result<bool, String> {
     let id = bundle_id();
     let state: serde_json::Value = decode(unsafe { rf_browser_app_running(id.as_ptr()) })?;
@@ -216,6 +229,7 @@ pub fn forget_start_url(app: &tauri::AppHandle) {
     }
 }
 /// 宿主启动时建立起始页会话并带起 CCBaga-B（已在运行则不动），不抢焦点。
+#[cfg(target_os = "macos")]
 pub fn companion(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         if let Err(error) = start_companion(&app) {
@@ -223,6 +237,7 @@ pub fn companion(app: tauri::AppHandle) {
         }
     });
 }
+#[cfg(target_os = "macos")]
 fn start_companion(app: &tauri::AppHandle) -> Result<(), String> {
     let browser = installed().ok_or("未安装 /Applications/CCBaga-B.app。")?;
     let state = app.state::<Browser>();
@@ -273,6 +288,7 @@ pub struct DefaultBrowser {
     #[serde(default)]
     app: String,
 }
+#[cfg(target_os = "macos")]
 fn default_read() -> Result<DefaultBrowser, String> {
     let id = bundle_id();
     let mut value: DefaultBrowser = decode(unsafe { rf_browser_default_read(id.as_ptr()) })?;
@@ -288,6 +304,7 @@ pub async fn browser_default_read() -> Result<DefaultBrowser, String> {
     run(default_read).await
 }
 /// 一键设为默认浏览器：重新注册已安装的 CCBaga-B，注销应用数据中的旧引擎副本，再请求系统切换；macOS 会弹出确认框。
+#[cfg(target_os = "macos")]
 #[tauri::command]
 pub async fn browser_set_default(app: tauri::AppHandle) -> Result<DefaultBrowser, String> {
     run(move || {
@@ -305,6 +322,7 @@ pub async fn browser_set_default(app: tauri::AppHandle) -> Result<DefaultBrowser
     })
     .await
 }
+#[cfg(target_os = "macos")]
 fn engine(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     if let Some(browser) = installed() {
         return Ok(browser);
@@ -318,9 +336,10 @@ fn engine(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     }
     Ok(installed)
 }
+#[cfg(target_os = "macos")]
 fn prepare_engine(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let engine = engine(app)?;
-    if engine.join("Contents/MacOS/Chromium").is_file() {
+    if binary(&engine).is_file() {
         return Ok(engine);
     }
     let parent = engine.parent().ok_or("引擎目录无效。")?;
@@ -337,7 +356,7 @@ fn prepare_engine(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .arg(parent)
         .status()
         .map_err(|_| "无法解压内置引擎。")?;
-    if !status.success() || !engine.join("Contents/MacOS/Chromium").is_file() {
+    if !status.success() || !binary(&engine).is_file() {
         return Err("内置引擎安装失败。".into());
     }
     Ok(engine)
@@ -368,6 +387,7 @@ fn web(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     }
     Err("浏览器起始页缺失。".into())
 }
+#[cfg(target_os = "macos")]
 fn version(engine: &Path) -> String {
     let out = Command::new("/usr/bin/plutil")
         .args(["-extract", "CFBundleShortVersionString", "raw", "-o", "-"])
@@ -480,7 +500,7 @@ pub async fn browser_launch(
         config.validate(&machine)?;
         let engine = prepare_engine(&app)?;
         register(&engine)?;
-        let binary = engine.join("Contents/MacOS/Chromium");
+        let binary = binary(&engine);
         if !binary.is_file() {
             return Err("内置浏览器引擎不可用。".into());
         }
@@ -645,6 +665,15 @@ pub async fn browser_align(
         if !machine.timezones.contains(&exit.timezone) {
             return Err("出口未返回可用时区，未修改机器。".into());
         }
+        #[cfg(target_os = "linux")]
+        {
+            if machine.location_enabled.is_none() {
+                return Err("Linux location state is unknown on this desktop; full machine alignment cannot be verified. No system settings were changed.".into());
+            }
+            let _: serde_json::Value = decode(unsafe {
+                rf_system_region(b"en-US\0".as_ptr().cast(), b"en_US\0".as_ptr().cast())
+            })?;
+        }
         log.log(
             "browser",
             "running",
@@ -659,11 +688,11 @@ pub async fn browser_align(
             rf_system_region(b"en-US\0".as_ptr().cast(), b"en_US\0".as_ptr().cast())
         })?;
         log.log("browser", "ok", "美国英语与 en_US 区域已保存。", 2, Some(3));
-        if config::machine()?.location_enabled {
+        if config::machine()?.location_enabled != Some(false) {
             let _: serde_json::Value = decode(unsafe { rf_system_location() })?;
         }
         let fresh = config::machine()?;
-        if fresh.location_enabled
+        if fresh.location_enabled != Some(false)
             || fresh.timezone != exit.timezone
             || !fresh.locale.starts_with("en_US")
             || fresh.languages.first().map(String::as_str) != Some("en-US")
@@ -720,4 +749,9 @@ pub async fn browser_rotate(app: tauri::AppHandle, region: String) -> Result<Sna
         snapshot(&app)
     })
     .await
+}
+
+#[cfg(target_os = "macos")]
+fn binary(engine: &Path) -> PathBuf {
+    engine.join("Contents/MacOS/Chromium")
 }

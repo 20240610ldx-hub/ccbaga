@@ -1,45 +1,24 @@
 <!--
-[INPUT]: 仓库实际模块边界、验证命令与 GEB 文档契约。
-[OUTPUT]: 英文贡献指南，限定变更说明、测试与公开问题中的脱敏信息。
-[POS]: README 的贡献入口；不假设已存在公共仓库、CI 或发布账号。
+[INPUT]: 仓库模块边界、测试入口与 GEB 契约。
+[OUTPUT]: PR 作者需要遵守的修改、验证和隐私规则。
+[POS]: README 的贡献入口，不提供发布操作流程。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 -->
 # Contributing to CCBaga
 
-Thank you for helping make native maintenance predictable and understandable.
-
-## Getting started
-
-Follow the [development guide](README.md#development). The desktop host and native tests require macOS; the companion browser currently targets Apple Silicon. Use the lockfiles and the vendored UI components already in this repository.
-
-## Reporting a bug
-
-Include the macOS and app versions, the operation you attempted, expected behavior, actual behavior and a sanitized error message. For browser checks, distinguish the browser exit from the machine exit. For a build failure, include the failing command and toolchain versions.
-
-Do not include private keys, account tokens, passwords, full subscription URLs or personal file contents. Report security-sensitive details through a maintainer-provided private channel once the public repository is configured.
-
-## Making a change
-
-1. Read the relevant `CLAUDE.md` module map and the file's input/output header.
-2. Make one focused change and follow the existing module boundaries.
-3. Keep UI strings in both YAML catalogs, with identical keys and interpolation slots.
-4. Add a focused regression for behavior changes where a failure would matter.
-5. Update the source header, module map and public documentation when their contracts change.
-6. Run the checks relevant to the changed behavior.
-
-```sh
-bun run build
-bun test
-MACOSX_DEPLOYMENT_TARGET=12.0 \
-  cargo test --manifest-path src-tauri/Cargo.toml
-python3 scripts/test-sign-browser.py
-bash -n scripts/setup-vps.sh
-```
-
-Documentation-only changes should check local links, code examples and factual accuracy. Do not generate application screenshots to represent untested behavior.
+Follow the [development guide](README.md#development) or [Linux setup](docs/linux.md). Use the existing lockfiles and UI components.
 
 ## Pull requests
 
-Describe the concrete problem, the resulting behavior, the checks you ran and any limits that remain. Keep native operations in Rust/platform bridges and presentation in the UI. Do not broaden cleanup targets, permissions or remote actions without documenting the scope and testing the boundary.
+- Describe the problem, resulting behavior, checks performed and remaining limits.
+- Read the relevant `CLAUDE.md` map. Update file contracts and module maps with your changes.
+- Keep native operations in Rust/platform bridges and UI strings in both YAML catalogs.
+- Preserve cleanup scopes, process identity checks, permissions and secret handling. Add a focused regression when these boundaries change.
+- Run the relevant [checks](README.md#checks); verify documentation links for documentation changes.
+- Preserve third-party notices. Original contributions use the [MIT License](LICENSE).
 
-Keep generated application bundles, browser binaries, credentials and release archives out of source commits. New original contributions follow the project's [MIT License](LICENSE); preserve all applicable third-party notices.
+Official versions are published exclusively by **liseami**. Contributor builds are for development and testing.
+
+## Bug reports
+
+Include the operating system, app version, operation, expected behavior and sanitized error. Never attach private keys, tokens, passwords, subscription URLs or personal file contents. Report sensitive security details privately to the project owner.

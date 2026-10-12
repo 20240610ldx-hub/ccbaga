@@ -1,5 +1,5 @@
 <!--
-[INPUT]: 已实现功能、构建配置、双应用发布契约与 MIT/第三方许可边界。
+[INPUT]: 已实现功能、开发配置、双应用使用方式与 MIT/第三方许可边界。
 [OUTPUT]: 面向公开仓库的英文产品首页、安装与开发入口、架构和贡献导航。
 [POS]: 项目公开入口；不承载内部迁移历史、本机账户路径或签名凭据。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -7,12 +7,12 @@
 <div align="center">
   <img src="docs/brand-logos.svg" width="320" height="149" alt="CCBaga-A and CCBaga-B logos, side by side" />
   <h1>CCBaga</h1>
-  <p><strong>A native macOS toolkit for a cleaner workspace and an environment you can verify.</strong></p>
+  <p><strong>A native macOS and Linux toolkit for a cleaner workspace and an environment you can verify.</strong></p>
   <p>Claude cleanup · Browser fingerprints · System settings · Network setup</p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-e8a181?style=flat-square" alt="MIT license" /></a>
     <img src="https://img.shields.io/badge/macOS-12%2B-111827?style=flat-square&amp;logo=apple&amp;logoColor=white" alt="macOS 12 and later" />
-    <img src="https://img.shields.io/badge/architecture-Apple%20Silicon-111827?style=flat-square" alt="Apple Silicon" />
+    <img src="https://img.shields.io/badge/Linux-x86__64-111827?style=flat-square&amp;logo=linux&amp;logoColor=white" alt="Linux x86_64" />
     <img src="https://img.shields.io/badge/core-Rust%20%2B%20Tauri-111827?style=flat-square&amp;logo=rust&amp;logoColor=white" alt="Rust and Tauri" />
   </p>
   <p>
@@ -41,7 +41,7 @@ Two applications work together: **CCBaga-A** owns native operations; **CCBaga-B*
     <td width="33%"><strong>Real environment checks</strong><br /><br />Compare browser and machine readings with the actual network exit. Passing measured checks produces a green page and a large checkmark.</td>
   </tr>
   <tr>
-    <td><strong>Native system settings</strong><br /><br />Apply timezone, preferred language and region settings. Open macOS controls for location and permissions.</td>
+    <td><strong>Native system settings</strong><br /><br />Apply timezone, preferred language and region settings. Open desktop controls for location and permissions; see Linux feature limits.</td>
     <td><strong>SSH network setup</strong><br /><br />Provide a VPS address, three key files and a residential SOCKS5 exit. Receive a subscription after server self-checks pass.</td>
     <td><strong>Claude Code CLI tools</strong><br /><br />Detect the installation method and version. Uninstall or reinstall through native, npm or Homebrew workflows.</td>
   </tr>
@@ -53,9 +53,13 @@ The interface supports **English and Chinese**, with shared YAML catalogs. Switc
 
 ## Installation
 
-**Platform:** macOS 12 or later, Apple Silicon. Intel, Windows and Linux application builds are not currently supported.
+**Platforms:** macOS 12 or later on Apple Silicon; Linux x86_64 with GTK 3 and WebKitGTK 4.1. Windows, Intel macOS and Linux ARM64 are not supported.
 
-Download the signed installer from [GitHub Releases](https://github.com/liseami/CCBaga/releases/latest). The distribution package is named `CCBaga-<version>-macos-arm64.dmg`. It contains both applications:
+Linux x86_64 packages include DEB, RPM, AppImage and Arch/pacman formats, with the companion browser included. See [Linux setup](docs/linux.md) for installation and platform limits. Official versions are published exclusively by the project owner, **liseami**.
+
+### macOS
+
+Download the official installer from [GitHub Releases](https://github.com/liseami/CCBaga/releases/latest). The distribution package is named `CCBaga-<version>-macos-arm64.dmg`. It contains both applications:
 
 | Application | Installed bundle | Role |
 | --- | --- | --- |
@@ -64,21 +68,19 @@ Download the signed installer from [GitHub Releases](https://github.com/liseami/
 
 Download **one DMG**; it contains both applications. There is no separate browser download. The installer uses the same pixel-art style as this README.
 
-1. Open the release disk image and drag **both applications** into Applications.
+1. Open the disk image and drag **both applications** into Applications.
 2. Launch CCBaga-A. It starts the companion browser automatically.
 3. Choose English at the bottom of the sidebar if needed.
 
-Public release packages must pass Developer ID signing, Apple notarization, ticket stapling and Gatekeeper assessment. See the [release procedure](docs/releasing.md) for the exact checks. macOS may still display its normal first-launch confirmation and ask for permissions when you use privileged features.
-
-Source builds are available through the [development guide](#development). Every successful push to `release` produces a new version, tag and notarized installer.
+Source builds are available through the [development guide](#development).
 
 ## Updates
 
-Use **Check for updates** at the bottom of CCBaga-A’s sidebar. Startup checks quietly; installation only starts when you choose **Update and restart**. Downloads show actual progress and are verified against the embedded public key, including the signed version, before installation. Failed downloads can be retried; a failed restart does not download the update again.
+Use **Check for updates** at the bottom of CCBaga-A’s sidebar. Startup checks quietly; installation only starts when you choose **Update and restart**. Downloads show actual progress and are verified before installation. Failed downloads can be retried; a failed restart does not download the update again.
 
 **Upgrading from v0.2.7 or v0.2.8:** replace both apps from the latest DMG once to correct the companion browser identity.
 
-In-app updates replace **CCBaga-A**. To update **both A and B**, download the latest DMG and drag both apps into Applications. No GitHub token or signing private key is included in either app.
+In-app updates replace **CCBaga-A**. To update **both A and B**, download the latest DMG and drag both apps into Applications.
 
 ## Quick start
 
@@ -119,19 +121,19 @@ Check the SSH connection, review the server changes, then run setup. The script 
 > [!IMPORTANT]
 > Import the subscription into a compatible client, enable **TUN mode**, and leave **system proxy disabled**. Leave CCBaga-B's explicit proxy empty to follow TUN. The subscription uses HTTP and contains connection credentials; keep its URL private. Verify the client-side exit after importing it.
 
-Provider buttons link to [DMIT](https://www.dmit.io/aff.php?aff=28800) and [Webshare](https://www.webshare.io/?referral_code=qlm1mt9xibc9). These URLs contain affiliate/referral codes. Network setup is optional; local cleanup does not require a VPS or a proxy subscription.
+Provider buttons link to [DMIT](https://www.dmit.io/aff.php?aff=28800) and [Webshare](https://www.webshare.io/?referral_code=qlm1mt9xibc9). Network setup is optional; local cleanup does not require a VPS or a proxy subscription.
 
 ## Architecture
 
 ![Pixel architecture map: native core, companion browser and explicit SSH](docs/architecture.svg)
 
-The UI owns inputs and presentation. Rust owns validation, task locks, process identity checks and execution. Small Objective-C bridges call platform APIs. The browser test page has no Tauri command access; it exchanges context and measurements through a random-token loopback session.
+The UI owns inputs and presentation. Rust owns validation, task locks, process identity checks and execution. Small Objective-C bridges call macOS APIs; a Rust Linux boundary uses procfs and desktop/session utilities. The browser test page has no Tauri command access; it exchanges context and measurements through a random-token loopback session.
 
 | Layer | Technology | Responsibility |
 | --- | --- | --- |
 | Desktop host | Rust · Tauri 2 | Native commands, transactions, progress and lifecycle |
 | Interface | React 19 · TypeScript · Cromma UI | Forms, previews and execution results |
-| Platform bridges | AppKit · Security · CoreLocation | macOS permissions and system integration |
+| Platform bridges | AppKit · Security · CoreLocation · Linux Rust | Platform permissions and system integration |
 | Companion browser | Fingerprint Chromium | Dedicated profile and real browser measurements |
 | Network setup | OpenSSH · Bash · Xray | Explicit remote setup and server self-checks |
 | Localization | YAML · Vite | Build-time English/Chinese catalogs |
@@ -145,8 +147,9 @@ src/                Desktop UI, browser test page and localization
 src-tauri/src/      Rust commands and transaction boundaries
 src-tauri/native/   Small macOS API bridges
 browser-runtime/    Engine metadata, launcher, entitlements and licenses
-scripts/            Icons, signing, packaging and setup scripts
-docs/               README artwork and release procedure
+scripts/            Icons, local builds and setup helpers
+packaging/arch/     Native Arch Linux PKGBUILD and desktop entry
+docs/               README artwork and Linux development guide
 vendor/cromma-ui/   Vendored interface components
 ```
 
@@ -158,7 +161,7 @@ The large browser application and archive are generated/runtime inputs, excluded
 
 ### Prerequisites
 
-Use an Apple Silicon Mac with Xcode Command Line Tools, stable Rust and Bun. Follow [Tauri's macOS prerequisites](https://v2.tauri.app/start/prerequisites/#macos) for the native toolchain.
+On Linux, follow [Linux setup](docs/linux.md). On macOS, use an Apple Silicon Mac with Xcode Command Line Tools, stable Rust and Bun. Follow [Tauri's macOS prerequisites](https://v2.tauri.app/start/prerequisites/#macos) for the native toolchain.
 
 The browser engine is an external build input. `python3 scripts/fetch-browser.py` downloads the pinned macOS arm64 **Fingerprint Chromium 148.0.7778.215** engine from the [upstream project](https://github.com/adryfish/fingerprint-chromium), verifies its SHA-256 and preserves its bundle structure and notices. Browser runtime binaries are not included in the source repository.
 
@@ -172,11 +175,7 @@ sh scripts/package-browser.sh
 bun run tauri dev
 ```
 
-Local builds use ad-hoc signing by default, so another developer does not need the maintainer's certificate. They are not public distribution builds. See [Tauri's signing documentation](https://v2.tauri.app/distribute/sign/macos/) and the [release procedure](docs/releasing.md) for Developer ID signing and notarization.
-
-### Automated releases
-
-Push to `release` to run the complete macOS pipeline: frontend and native tests, pinned engine verification, Developer ID signing, Apple notarization and offline ticket stapling. A successful run creates an increasing `v<major>.<minor>.<patch>` tag and uploads the dual-app DMG, signed A update archive, public `latest.json` and SHA-256 manifest. Public repositories also receive GitHub build provenance attestations. Rust dependency caching reduces repeat compilation. Apple and updater signing credentials stay in GitHub Secrets and a disposable runner keychain. See [release setup](docs/releasing.md#github-actions).
+Local builds are for development and testing; they are not official project downloads.
 
 ### Build
 
@@ -187,7 +186,7 @@ MACOSX_DEPLOYMENT_TARGET=12.0 \
 
 The cleaner bundle is written to `src-tauri/target/release/bundle/macos/CCBaga-A.app`. The companion bundle remains at `browser-runtime/Browser.app` until copied to Applications as `CCBaga-B.app`.
 
-Release builds require `custom-protocol` to load the embedded UI. A release compilation without it fails explicitly, preventing an installed app from depending on the development server.
+Production builds require `custom-protocol` to load the embedded UI. Compilation without it fails explicitly, preventing an installed app from depending on the development server.
 
 ### Checks
 
@@ -214,7 +213,7 @@ Custom `CLAUDE_CONFIG_DIR` locations are not automatically included in the defau
 
 ## Contributing
 
-Start with [CONTRIBUTING.md](CONTRIBUTING.md). Small, focused changes with clear behavior and relevant checks are welcome. For bug reports, include the macOS version, app version, operation and sanitized error; never attach private keys, passwords or subscription URLs.
+Start with [CONTRIBUTING.md](CONTRIBUTING.md). Small, focused changes with clear behavior and relevant checks are welcome. For bug reports, include the operating system and version, app version, operation and sanitized error; never attach private keys, passwords or subscription URLs.
 
 ## License & credits
 

@@ -1,4 +1,4 @@
-// [INPUT]: VPS 地址与完整 pem/ppk/pub 密钥包、家宽 SOCKS5 参数、固定 Webshare/DMIT 入口编号与随应用编译的 setup-vps.sh。
+// [INPUT]: VPS 地址与完整 pem/ppk/pub 密钥包、家宽 SOCKS5 参数、providers.json 的固定主地址/参数配置与 setup-vps.sh。
 // [OUTPUT]: 固定供应商链接的系统浏览器打开、SSH 连通检查、远程设置、自检通过后的订阅地址与脱敏阶段日志。
 // [POS]: 远程执行边界；本机 OpenSSH 核验主机密钥，只允许 root:22 的显式私钥登录，禁用 Agent/密码；密钥核验与临时副本由 vps_keys 管理，家宽密码经加密标准输入传递。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -41,21 +41,33 @@ pub struct SetupResult {
     message: String,
 }
 const SCRIPT: &str = include_str!("../../scripts/setup-vps.sh");
-fn provider_url(provider: &str) -> Result<&'static str, String> {
-    match provider {
-        "webshare" => Ok("https://www.webshare.io/?referral_code=qlm1mt9xibc9"),
-        "dmit" => Ok("https://www.dmit.io/aff.php?aff=28800"),
-        _ => Err("无效的供应商入口。".into()),
+fn provider_url(provider: &str) -> Result<String, String> {
+    if !["webshare", "dmit"].contains(&provider) {
+        return Err("无效的供应商入口。".into());
     }
+    let configured: serde_json::Value = serde_json::from_str(include_str!("../providers.json"))
+        .map_err(|_| "无效的供应商入口。")?;
+    let settings = &configured[provider];
+    let mut url = reqwest::Url::parse(settings["base"].as_str().ok_or("无效的供应商入口。")?)
+        .map_err(|_| "无效的供应商入口。")?;
+    url.query_pairs_mut().append_pair(
+        settings["parameter"].as_str().ok_or("无效的供应商入口。")?,
+        settings["value"].as_str().ok_or("无效的供应商入口。")?,
+    );
+    Ok(url.to_string())
 }
 #[tauri::command]
 pub async fn vps_open_provider(provider: String) -> Result<(), String> {
     let url = provider_url(&provider)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let status = Command::new("/usr/bin/open")
-            .arg(url)
-            .status()
-            .map_err(|_| "无法打开供应商网站。")?;
+        let status = Command::new(if cfg!(target_os = "linux") {
+            "xdg-open"
+        } else {
+            "/usr/bin/open"
+        })
+        .arg(url)
+        .status()
+        .map_err(|_| "无法打开供应商网站。")?;
         if status.success() {
             Ok(())
         } else {

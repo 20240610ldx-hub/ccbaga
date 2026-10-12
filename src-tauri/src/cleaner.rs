@@ -1,4 +1,4 @@
-// [INPUT]: Claude 白名单、所选文件夹发现、配置变换、原子写入、官方原生 CLI 版本路径及 macOS 原生桥。
+// [INPUT]: Claude 白名单、所选文件夹发现、配置变换、原子写入、官方原生 CLI 版本路径及 macOS/Linux 平台边界。
 // [OUTPUT]: 全机/文件夹扫描、旧组织发现、直接清理、实时 Claude 进程检查与结束全部已识别进程；CLI 安装管理共用互斥锁与进程核验。
 // [POS]: 本地清理事务编排；界面只提交快照编号，凭据正文不离开原生层。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -266,9 +266,11 @@ fn diagnostics(scan: &mut Scan) {
             "检测到自定义 CLAUDE_CONFIG_DIR；本次仅检查默认目录，自定义目录未纳入清理。".into(),
         );
     }
+    #[cfg(target_os = "macos")]
     let proxy = std::process::Command::new("/usr/sbin/scutil")
         .arg("--proxy")
         .output();
+    #[cfg(target_os = "macos")]
     let enabled = proxy
         .as_ref()
         .map(|o| {
@@ -277,12 +279,34 @@ fn diagnostics(scan: &mut Scan) {
                 .any(|l| l.contains("Enable : 1"))
         })
         .unwrap_or(false);
+    #[cfg(target_os = "linux")]
+    let enabled = [
+        "ALL_PROXY",
+        "all_proxy",
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+    ]
+    .iter()
+    .any(|key| std::env::var_os(key).is_some());
+    #[cfg(target_os = "macos")]
     scan.diagnostics.push(Diagnostic {
         title: "系统代理".into(),
         detail: if enabled {
             "系统代理已开启。此处仅检查，不改动现有 Clash 路由。".into()
         } else {
             "未发现已开启的系统代理；仍需在客户端验证实际出口和断线保护。".into()
+        },
+        status: if enabled { "review" } else { "info" },
+    });
+    #[cfg(target_os = "linux")]
+    scan.diagnostics.push(Diagnostic {
+        title: "代理环境".into(),
+        detail: if enabled {
+            "检测到代理环境变量；桌面代理设置未独立核验，请验证实际出口。".into()
+        } else {
+            "未发现代理环境变量；桌面代理设置未独立核验，请验证实际出口。".into()
         },
         status: if enabled { "review" } else { "info" },
     });
@@ -363,6 +387,7 @@ fn process_row(line: &str, desktop: &[i32], uid: u32) -> Option<ClaudeProcess> {
         executable,
     })
 }
+#[cfg(target_os = "macos")]
 fn processes() -> Result<Vec<ClaudeProcess>, String> {
     let desktop = native::claude_pids()?;
     let output = std::process::Command::new("/bin/ps")
@@ -375,6 +400,29 @@ fn processes() -> Result<Vec<ClaudeProcess>, String> {
     Ok(String::from_utf8_lossy(&output.stdout)
         .lines()
         .filter_map(|line| process_row(line, &desktop, unsafe { getuid() }))
+        .collect())
+}
+#[cfg(target_os = "linux")]
+fn processes() -> Result<Vec<ClaudeProcess>, String> {
+    Ok(crate::linux::processes()?
+        .into_iter()
+        .filter_map(|p| {
+            let desktop = if crate::linux::node_cli(&p) {
+                vec![p.pid]
+            } else {
+                vec![]
+            };
+            process_row(
+                &format!(
+                    "{} {} {}",
+                    unsafe { getuid() },
+                    p.pid,
+                    p.executable.display()
+                ),
+                &desktop,
+                unsafe { getuid() },
+            )
+        })
         .collect())
 }
 fn running() -> Result<bool, String> {
@@ -592,7 +640,12 @@ fn identity(item: &Item, root: &Path) -> Result<(), String> {
         };
     }
     let path = Path::new(&item.path);
-    if !path.starts_with(root) || fs::canonicalize(path).ok().as_deref() != Some(path) {
+    let in_scope = path.starts_with(root);
+    #[cfg(target_os = "linux")]
+    let in_scope = in_scope
+        || (home().ok().as_deref() == Some(root)
+            && targets::definitions(root).iter().any(|t| t.path == path));
+    if !in_scope || fs::canonicalize(path).ok().as_deref() != Some(path) {
         return Err("路径已变化或超出当前用户范围。".into());
     }
     let m = fs::symlink_metadata(path).map_err(|_| "项目已变化，请重新扫描。")?;
