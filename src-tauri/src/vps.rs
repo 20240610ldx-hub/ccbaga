@@ -109,12 +109,24 @@ pub async fn vps_choose_keys(
     app: tauri::AppHandle,
     extension: String,
 ) -> Result<Vec<String>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = app;
+        tauri::async_runtime::spawn_blocking(move || {
+            crate::native::choose_ssh_keys(&extension)
+        })
+        .await
+        .map_err(|_| "无法打开密钥文件选择器。".to_string())?
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
     let (send, receive) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
         let _ = send.send(crate::native::choose_ssh_keys(&extension));
     })
     .map_err(|_| "无法打开密钥文件选择器。")?;
     receive.await.map_err(|_| "无法打开密钥文件选择器。")?
+    }
 }
 impl HomeProxy {
     fn validate(&self) -> Result<(), String> {
