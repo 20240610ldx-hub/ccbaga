@@ -1,4 +1,4 @@
-// [INPUT]: 打包的 Linux Chromium、XDG 桌面入口与共用资料/随机令牌会话。
+// [INPUT]: libexec 隔离的 Linux Chromium、兼容源码/Arch 资源目录、XDG 桌面入口与共用资料/随机令牌会话。
 // [OUTPUT]: 本地引擎发现与启动、用户主动设置默认浏览器。
 // [POS]: browser 编排的 Linux 平台实现；只接收 URL/文件入口，不执行用户提供的 shell。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -8,25 +8,35 @@ fn register(_: &Path) -> Result<(), String> {
 fn binary(engine: &Path) -> PathBuf {
     engine.join("chrome")
 }
+fn packaged_engine(resources: &Path) -> PathBuf {
+    let legacy = resources.join("browser-runtime/LinuxBrowser");
+    if binary(&legacy).is_file() {
+        return legacy;
+    }
+    resources.join("../../libexec/CCBaga-B")
+}
 fn engine(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let packaged = app
-        .path()
-        .resource_dir()
-        .map_err(|_| "资源目录不可用。")?
-        .join("browser-runtime/LinuxBrowser");
-    if binary(&packaged).is_file() {
+    let resources = app.path().resource_dir().map_err(|_| "资源目录不可用。")?;
+    let packaged = packaged_engine(&resources);
+    if binary(&packaged).is_file() || !cfg!(debug_assertions) {
         return Ok(packaged);
     }
-    if cfg!(debug_assertions) {
-        return Ok(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../browser-runtime/LinuxBrowser")
-        );
-    }
-    Ok(app
-        .path()
-        .resource_dir()
-        .map_err(|_| "资源目录不可用。")?
-        .join("browser-runtime/LinuxBrowser"))
+    Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../browser-runtime/LinuxBrowser"))
+}
+#[test]
+fn packaged_browser_paths_preserve_both_layouts() {
+    let root = tests::sample();
+    let resources = root.join("usr/lib/CCBaga-A");
+    fs::create_dir_all(&resources).unwrap();
+    let isolated = root.join("usr/libexec/CCBaga-B");
+    fs::create_dir_all(&isolated).unwrap();
+    fs::write(binary(&isolated), "isolated engine").unwrap();
+    assert_eq!(packaged_engine(&resources).canonicalize().unwrap(), isolated);
+    let legacy = resources.join("browser-runtime/LinuxBrowser");
+    fs::create_dir_all(&legacy).unwrap();
+    fs::write(binary(&legacy), "source/Arch engine").unwrap();
+    assert_eq!(packaged_engine(&resources), legacy);
+    fs::remove_dir_all(root).unwrap();
 }
 fn prepare_engine(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let engine = engine(app)?;

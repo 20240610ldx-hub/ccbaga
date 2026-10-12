@@ -23,7 +23,7 @@ with tempfile.TemporaryDirectory(prefix='ccbaga-rpm-test-') as temporary:
     for name, value in {
         'DEBIAN/control': b'Package: ccbaga-a\nVersion: 0.0.1\nArchitecture: amd64\nMaintainer: Fixture <fixture@example.invalid>\nDescription: disposable package fixture\n',
         'usr/bin/requirement-french': elf,
-        'usr/lib/CCBaga-A/browser-runtime/LinuxBrowser/chrome': elf,
+        'usr/libexec/CCBaga-B/chrome': elf,
         'usr/lib/CCBaga-A/browser-runtime/LICENSE.fingerprint-chromium': b'fixture',
         'usr/lib/CCBaga-A/browser-ui/browser.html': b'fixture',
         'usr/lib/CCBaga-A/browser-ui/assets/browser.js': b'fixture',
@@ -42,5 +42,5 @@ with tempfile.TemporaryDirectory(prefix='ccbaga-rpm-test-') as temporary:
     unpacked = root / 'unpacked'
     unpacked.mkdir()
     subprocess.run(['bsdtar', '-xf', str(rpm), '-C', str(unpacked)], check=True)
-    release.payload.verify(unpacked, tree / 'usr/lib/CCBaga-A/browser-runtime/LinuxBrowser/chrome')
+    release.payload.verify(unpacked, tree / 'usr/libexec/CCBaga-B/chrome')
 print('Native RPM metadata and unmodified payload regression passed.')

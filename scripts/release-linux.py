@@ -36,6 +36,8 @@ def build_rpm(deb, version):
         for name in ['BUILD', 'BUILDROOT', 'RPMS', 'SOURCES', 'SPECS', 'SRPMS']:
             (work / name).mkdir()
         files = ['/usr/bin/requirement-french', '/usr/lib/CCBaga-A']
+        if (tree / 'usr/libexec/CCBaga-B').is_dir():
+            files.append('/usr/libexec/CCBaga-B')
         files.extend('/' + str(path.relative_to(tree)) for path in sorted((tree / 'usr/share').rglob('*')) if path.is_file() or path.is_symlink())
         requires = '\n'.join('Requires: ' + value for value in config['depends'])
         spec = work / 'SPECS/ccbaga.spec'

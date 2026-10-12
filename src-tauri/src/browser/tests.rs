@@ -1,5 +1,5 @@
 // [INPUT]: 临时样本、指纹参数、固定清理边界与本机 HTTP 限流样本。
-// [OUTPUT]: 配置/缓存/链接/地区核验回归与 HTTP 429 后服务备援验证。
+// [OUTPUT]: 模块共用临时目录样本，配置/缓存/链接/地区核验与 HTTP 429 服务备援回归。
 // [POS]: 浏览器模块行为验证；不访问用户实际资料。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -16,7 +16,7 @@ fn machine() -> Machine {
         system_proxy: String::new(),
     }
 }
-fn sample() -> PathBuf {
+pub(super) fn sample() -> PathBuf {
     let root = std::env::temp_dir()
         .canonicalize()
         .unwrap()

@@ -17,9 +17,6 @@
       "deb",
       "appimage"
     ],
-    "resources": {
-      "../browser-runtime/LinuxBrowser/": "browser-runtime/LinuxBrowser/"
-    },
     "linux": {
       "deb": {
         "depends": [
@@ -38,7 +35,8 @@
         ],
         "files": {
           "/usr/share/applications/ccbaga-browser.desktop": "../browser-runtime/ccbaga-browser.desktop",
-          "/usr/share/icons/hicolor/512x512/apps/ccbaga-browser.png": "../browser-runtime/icons/icon.png"
+          "/usr/share/icons/hicolor/512x512/apps/ccbaga-browser.png": "../browser-runtime/icons/icon.png",
+          "/usr/libexec/CCBaga-B/": "../browser-runtime/LinuxBrowser/"
         }
       },
       "rpm": {
@@ -58,7 +56,8 @@
         ],
         "files": {
           "/usr/share/applications/ccbaga-browser.desktop": "../browser-runtime/ccbaga-browser.desktop",
-          "/usr/share/icons/hicolor/512x512/apps/ccbaga-browser.png": "../browser-runtime/icons/icon.png"
+          "/usr/share/icons/hicolor/512x512/apps/ccbaga-browser.png": "../browser-runtime/icons/icon.png",
+          "/usr/libexec/CCBaga-B/": "../browser-runtime/LinuxBrowser/"
         },
         "compression": {
           "type": "zstd",
@@ -68,7 +67,8 @@
       "appimage": {
         "files": {
           "usr/share/applications/ccbaga-browser.desktop": "../browser-runtime/ccbaga-browser.desktop",
-          "usr/share/icons/hicolor/512x512/apps/ccbaga-browser.png": "../browser-runtime/icons/icon.png"
+          "usr/share/icons/hicolor/512x512/apps/ccbaga-browser.png": "../browser-runtime/icons/icon.png",
+          "usr/libexec/CCBaga-B/": "../browser-runtime/LinuxBrowser/"
         }
       }
     }

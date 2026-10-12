@@ -102,21 +102,32 @@ class PayloadTests(unittest.TestCase):
                 'usr/lib/CCBaga-A/browser-ui/assets/browser.js': b'js',
                 'usr/share/applications/ccbaga-browser.desktop': b'Exec=requirement-french --browser %U',
                 'usr/share/icons/hicolor/512x512/apps/ccbaga-browser.png': b'icon',
-                'source-chrome': elf,
+                'source-engine/chrome': elf,
             }.items():
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(content)
                 path.chmod(0o755)
-            payload.verify(root, root / 'source-chrome')
+            payload.verify(root, root / 'source-engine/chrome')
+            browser = root / 'usr/lib/CCBaga-A/browser-runtime/LinuxBrowser/chrome'
+            isolated = root / 'usr/libexec/CCBaga-B/chrome'
+            isolated.parent.mkdir(parents=True)
+            browser.rename(isolated)
+            payload.verify(root, root / 'source-engine/chrome')
             page = root / 'usr/lib/CCBaga-A/browser-ui/browser.html'
             page.unlink()
             with self.assertRaisesRegex(RuntimeError, 'UI'):
-                payload.verify(root, root / 'source-chrome')
+                payload.verify(root, root / 'source-engine/chrome')
             page.write_text('html')
-            (root / 'usr/lib/CCBaga-A/browser-runtime/LinuxBrowser/chrome').write_text('modified')
+            library = root / 'source-engine/libfixture.so'
+            library.write_text('original optional library')
+            (isolated.parent / library.name).write_text('modified library')
+            with self.assertRaisesRegex(RuntimeError, 'engine file'):
+                payload.verify(root, root / 'source-engine/chrome')
+            library.unlink()
+            isolated.write_text('modified')
             with self.assertRaisesRegex(RuntimeError, 'pinned browser'):
-                payload.verify(root, root / 'source-chrome')
+                payload.verify(root, root / 'source-engine/chrome')
 
 
 if __name__ == '__main__':
