@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# [INPUT]: 已构建 NSIS 安装器、固定引擎逐文件哈希与空白 GitHub Windows runner。
+# [INPUT]: 已构建 NSIS 安装器、固定引擎逐文件哈希与空白 GitHub Windows runner；临时目录先解析 8.3 短路径别名。
 # [OUTPUT]: 当前用户安装、实际 A/B 回环启动、升级、卸载和用户资产保留的运行验收。
 # [POS]: 只在可丢弃 CI runner 执行安装；拒绝已有应用资料，不读取开发者用户数据。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -44,7 +44,7 @@ def main():
     finally:ole.CoTaskMemFree(address)
     if data.exists():raise SystemExit('Refusing to touch pre-existing CCBaga application data')
     with tempfile.TemporaryDirectory(prefix='ccbaga-installer-') as temporary:
-        folder=Path(temporary)/'应用 with spaces'
+        folder=(Path(temporary)/'应用 with spaces').resolve()
         home=Path(os.environ['USERPROFILE'])
         claude=home/'.claude'
         if claude.exists():raise SystemExit('Refusing to touch pre-existing Claude data on the CI runner')
