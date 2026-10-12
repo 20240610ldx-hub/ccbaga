@@ -3,6 +3,9 @@
 # [OUTPUT]: 当前用户安装、实际 A/B 回环启动、升级、卸载和用户资产保留的运行验收。
 # [POS]: 只在可丢弃 CI runner 执行安装；拒绝已有应用资料，不读取开发者用户数据。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+import ctypes
+from ctypes import wintypes
+import uuid
 import hashlib
 import json
 import os
@@ -28,7 +31,16 @@ def main():
         raise SystemExit('Installer mutation is restricted to a disposable GitHub Windows runner')
     installer=Path(sys.argv[1]).resolve()
     manifest=json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))
-    data=Path(os.environ['APPDATA'])/'ai.local.requirement-french'
+    # ----- 与 Tauri dirs::data_dir 相同的 Known Folder，环境变量不重定向它 -----
+    shell=ctypes.WinDLL('shell32');ole=ctypes.WinDLL('ole32')
+    known=shell.SHGetKnownFolderPath
+    known.argtypes=[ctypes.c_void_p,wintypes.DWORD,wintypes.HANDLE,ctypes.POINTER(ctypes.c_void_p)];known.restype=ctypes.c_long
+    ole.CoTaskMemFree.argtypes=[ctypes.c_void_p]
+    folder_id=ctypes.create_string_buffer(uuid.UUID('3EB685DB-65F9-4CF6-A03A-E3EF65729F3D').bytes_le)
+    address=ctypes.c_void_p()
+    assert known(folder_id,0,None,ctypes.byref(address))==0
+    try:data=Path(ctypes.wstring_at(address))/'ai.local.requirement-french'
+    finally:ole.CoTaskMemFree(address)
     if data.exists():raise SystemExit('Refusing to touch pre-existing CCBaga application data')
     sys.path.insert(0,str(ROOT/'skills/ccbaga-network/scripts'))
     import windows
@@ -51,17 +63,31 @@ def main():
             assert any(folder.rglob('browser.html')),'Missing embedded browser page'
             assert any(folder.rglob('browser.ico')),'Missing companion icon'
             assert any(folder.rglob('LICENSE.lobehub.txt')),'Missing icon license'
+            return engine
         def assets():
             assert profile.read_bytes()==b'keep-profile'
             assert skill.read_text(encoding='utf-8')=='keep-skill'
             assert json.loads(settings.read_text(encoding='utf-8'))=={'keep':True}
         child=None;job=None
+        runtime_log=Path(temporary)/'runtime.log'
+        def stop():
+            nonlocal child,job
+            if job:job.stop();job.close();job=None
+            if child:child.wait(timeout=20);child=None
+            # Chromium 可能在 Job 绑定前启动；仅回收本次唯一安装目录内的 CI 程序。
+            command='$p=@(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($env:CC_INSTALL_DIR+"\\",[StringComparison]::OrdinalIgnoreCase) }); $p | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; if($p.Count){exit 1}'
+            wait_for(lambda:subprocess.run(['powershell','-NoProfile','-Command',command],env=env|{'CC_INSTALL_DIR':str(folder)},stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0)
+        def ready():
+            if child.poll() is not None:
+                raise AssertionError(f'Installed host exited with status {child.returncode}')
+            return start.is_file() and bool(start.read_text(encoding='utf-8').strip())
         try:
-            install();payload();assets()
-            child=subprocess.Popen([str(folder/'requirement-french.exe')],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            install();engine=payload();assets()
+            with runtime_log.open('wb') as output:
+                child=subprocess.Popen([str(folder/'requirement-french.exe')],env=env,stdout=output,stderr=output)
             job=windows.Job(child)
             start=data/'browser/start.url'
-            wait_for(lambda:start.is_file() and bool(start.read_text(encoding='utf-8').strip()))
+            wait_for(ready)
             page=start.read_text(encoding='utf-8').strip()
             opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
             with opener.open(page,timeout=15) as response:assert response.status==200
@@ -70,11 +96,22 @@ def main():
                 body=response.read(131072)
                 assert b'secret-marker' not in body and b'system_proxy' not in body
                 assert isinstance(json.loads(body),dict)
+            machine=json.loads(body)['machine']
+            def measured():
+                with opener.open(page.rsplit('/',1)[0]+'/report',timeout=15) as response:observed=json.load(response)
+                report=observed.get('report')
+                if not report:return False
+                assert observed['received_at']>0
+                assert report['platform']=='Win32' and report['cores']==machine['cores']
+                assert report['platform_version']==machine['version'],'Actual browser OS version differs from the native machine'
+                assert report['browser_version']==(engine/'version.txt').read_text(encoding='utf-8').strip()
+                return True
+            wait_for(measured)
             assert child.poll() is None,'Installed host exited before verification'
             # ----- 实际同资料浏览器进程：仅查询 CI 样本路径，不打印命令行 -----
             query='$p=@(Get-CimInstance Win32_Process -Filter "Name = \'chrome.exe\'" | Where-Object { $_.ExecutablePath -like ($env:CC_INSTALL_DIR+"*") -and $_.CommandLine -like ("*"+$env:CC_PROFILE+"*") }); if($p.Count -eq 0){exit 1}'
             wait_for(lambda:subprocess.run(['powershell','-NoProfile','-Command',query],env=env|{'CC_INSTALL_DIR':str(folder),'CC_PROFILE':str(profile.parent.parent)},stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0)
-            job.stop();child.wait(timeout=20);job.close();job=None;child=None
+            stop()
             install();payload();assets()
             uninstallers=list(folder.glob('*uninstall*.exe'))
             assert len(uninstallers)==1,'Expected one application uninstaller'
@@ -82,9 +119,12 @@ def main():
             wait_for(lambda:not (folder/'requirement-french.exe').exists())
             assets()
             print('Windows current-user install, A/B launch, upgrade and uninstall verified; user assets preserved.')
+        except Exception:
+            print('CI startup diagnostic:',runtime_log.read_text(encoding='utf-8',errors='replace')[-8192:].replace('secret-marker','[test-marker]'))
+            print('CI start file exists:',(data/'browser/start.url').exists())
+            raise
         finally:
-            if job:job.stop();job.close()
-            if child:child.wait(timeout=20)
+            stop()
             shutil.rmtree(data)
 
 if __name__=='__main__':main()

@@ -1,5 +1,5 @@
 // [INPUT]: 当前用户目录、Claude 清理白名单与可选组织编号。
-// [OUTPUT]: 分类清理目标、受限目录统计及旧组织文件匹配。
+// [OUTPUT]: 分类清理目标、完整目录元数据统计及受限旧组织文件匹配。
 // [POS]: 清理发现边界；不跟随链接，不遍历项目仓库，不读取凭据内容。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -29,6 +29,13 @@ fn target(
         impact: impact.into(),
         operation: Operation::Delete,
     }
+}
+fn desktop_storage(root: &Path, desktop: &Path) -> Vec<Target> {
+    ["Local Storage", "Session Storage", "IndexedDB", "Network", "Cookies", "Cookies-journal", "Service Worker", "WebStorage", "Sessions"]
+        .into_iter().map(|name| Target {
+            path: desktop.join(name),
+            ..target(root, "", "Desktop 会话与登录存储", "desktop", "login", "清除本地登录数据库与网页状态；保留桌面配置、MCP 和其他个人文件。")
+        }).collect()
 }
 pub(super) fn definitions(root: &Path) -> Vec<Target> {
     let mut result = Vec::new();
@@ -135,15 +142,6 @@ pub(super) fn definitions(root: &Path) -> Vec<Target> {
     account.operation = Operation::Edit(config::EditKind::Account);
     result.push(account);
     for (relative, title) in [
-        ("Library/Application Support/Claude", "Desktop 完整本地数据"),
-        (
-            "Library/Application Support/Claude-3p",
-            "Desktop 第三方配置数据",
-        ),
-        (
-            "Library/Application Support/com.anthropic.claudefordesktop",
-            "Desktop 应用支持数据",
-        ),
         (
             "Library/HTTPStorages/com.anthropic.claudefordesktop",
             "Desktop HTTP 登录存储",
@@ -169,6 +167,9 @@ pub(super) fn definitions(root: &Path) -> Vec<Target> {
             "login",
             "重置桌面端登录和本地状态；服务器上的对话不会被删除。",
         ));
+    }
+    for relative in ["Library/Application Support/Claude", "Library/Application Support/Claude-3p", "Library/Application Support/com.anthropic.claudefordesktop"] {
+        result.extend(desktop_storage(root, &root.join(relative)));
     }
     if let Ok(entries) = fs::read_dir(root.join("Library/Preferences/ByHost")) {
         for entry in entries.flatten().take(20_000) {
@@ -295,17 +296,7 @@ pub(super) fn definitions(root: &Path) -> Vec<Target> {
                     ..target(root, "", title, "cache", "safe", "仅移除本地缓存或日志。")
                 });
             }
-            result.push(Target {
-                path: desktop.clone(),
-                ..target(
-                    root,
-                    "",
-                    "Desktop 完整本地数据",
-                    "desktop",
-                    "login",
-                    "重置桌面端登录和本地状态；服务器上的对话不会被删除。",
-                )
-            });
+            result.extend(desktop_storage(root, &desktop));
             for name in ["ant-did", "ant-device-registry.json"] {
                 result.push(Target {
                     path: desktop.join(name),
@@ -365,21 +356,15 @@ fn xdg_dir(root: &Path, variable: &str, fallback: &str) -> PathBuf {
     root.join(fallback)
 }
 
-// ----- 受限统计；链接只计入条目，不进入链接目标 -----
-pub(super) fn measure(path: &Path) -> (u64, usize, bool, Vec<u8>) {
+// ----- 完整统计；不读取文件正文，不进入链接目标 -----
+pub(super) fn measure(path: &Path) -> Result<(u64, usize, Vec<u8>), String> {
     use sha2::{Digest, Sha256};
-    let deadline = Instant::now() + Duration::from_secs(3);
     let mut pending = vec![path.to_path_buf()];
     let mut hash = Sha256::new();
-    let (mut bytes, mut files, mut seen) = (0u64, 0usize, 0usize);
+    let (mut bytes, mut files) = (0u64, 0usize);
     while let Some(path) = pending.pop() {
-        seen += 1;
-        if seen > 30_000 || Instant::now() > deadline {
-            return (bytes, files, false, hash.finalize().to_vec());
-        }
-        let Ok(meta) = fs::symlink_metadata(&path) else {
-            return (bytes, files, false, hash.finalize().to_vec());
-        };
+        let failure = |error: std::io::Error| format!("目录无法完整读取：{}：{error}。请检查权限、退出 Claude 后重新扫描。", path.display());
+        let meta = fs::symlink_metadata(&path).map_err(failure)?;
         hash.update(path.as_os_str().as_encoded_bytes());
         hash.update([0]);
         #[cfg(unix)]
@@ -413,24 +398,14 @@ pub(super) fn measure(path: &Path) -> (u64, usize, bool, Vec<u8>) {
             bytes = bytes.saturating_add(meta.len());
             files += 1;
         } else if meta.is_dir() && !linked(&meta) {
-            let Ok(entries) = fs::read_dir(&path) else {
-                return (bytes, files, false, hash.finalize().to_vec());
-            };
-            let mut children = Vec::new();
-            for entry in entries.take(30_001) {
-                let Ok(entry) = entry else {
-                    return (bytes, files, false, hash.finalize().to_vec());
-                };
-                children.push(entry.path());
-            }
+            let entries = fs::read_dir(&path).map_err(failure)?;
+            let mut children = entries.map(|entry| entry.map(|e| e.path()))
+                .collect::<Result<Vec<_>, _>>().map_err(failure)?;
             children.sort();
             pending.extend(children);
-            if pending.len() > 30_000 {
-                return (bytes, files, false, hash.finalize().to_vec());
-            }
         }
     }
-    (bytes, files, true, hash.finalize().to_vec())
+    Ok((bytes, files, hash.finalize().to_vec()))
 }
 pub(super) fn org_files(root: &Path, org: &str) -> Result<(Vec<PathBuf>, bool), String> {
     use std::io::{BufRead, BufReader};

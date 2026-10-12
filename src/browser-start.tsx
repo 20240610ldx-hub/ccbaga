@@ -8,7 +8,7 @@ import { Button, Panel, PanelHeader, MotionRoot, TooltipProvider } from 'cromma-
 import { useEffect, useState } from 'react';
 import {translate as t,setLocale,useI18n} from "./i18n";
 import { createRoot } from 'react-dom/client';
-import type { BrowserContext, Report, Exit } from './browser-model';
+import { matchesDevice, type BrowserContext, type Report, type Exit } from './browser-model';
 import { probeBrowserExit } from './browser-network';
 import './index.css';
 import './style.css';
@@ -60,7 +60,7 @@ function Start() {
         setLinked(true);
     } }).catch(() => { if (live)
         setLinked(false); }); }, 10000); return () => { live = false; clearInterval(timer); }; }, []);
-    const matching = report && context && context.region && report.exit?.country === context.region.country && report.timezone === report.exit.timezone && report.timezone === context.machine.timezone && report.language === context.region.language && report.cores === context.machine.cores && (context.machine.platform === "linux" ? report.platform.toLowerCase().includes("linux") : report.platform.toLowerCase().includes("mac") && report.platform_version === context.machine.version) && report.browser_version === context.engine_version && report.geolocation === 'denied' && context.machine.location_enabled === false && context.machine.locale.startsWith(context.region.locale) && context.machine.languages[0]?.startsWith(context.region.language);
+    const matching = report && context && context.region && report.exit?.country === context.region.country && report.timezone === report.exit.timezone && report.timezone === context.machine.timezone && report.language === context.region.language && report.cores === context.machine.cores && matchesDevice(context.machine, report) && report.browser_version === context.engine_version && report.geolocation === 'denied' && context.machine.location_enabled === false && context.machine.locale.startsWith(context.region.locale) && context.machine.languages[0]?.startsWith(context.region.language);
     const passed = Boolean(matching && !busy && linked && !error && !report?.error);
     return <div className={`browser-verification-page${passed ? ' is-verified' : ''}`}><main className="browser-start"><div className="cleanup-title"><div><h1>{t("浏览器环境")}</h1></div><Button variant="ink" loading={busy} disabled={busy} onClick={() => void measure()}>{t("重新实测")}</Button></div>
     {passed && <div className="browser-verification-success" role="status"><svg viewBox="0 0 96 96" aria-hidden="true"><circle cx="48" cy="48" r="46" fill="currentColor"/><path d="m27 49 14 14 28-31" fill="none" stroke="white" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/></svg><strong>{t("检测通过")}</strong></div>}

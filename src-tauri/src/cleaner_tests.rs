@@ -1,5 +1,5 @@
 // [INPUT]: 隔离临时目录、脱敏配置、清理事务与当前用户官方原生 CLI 版本路径。
-// [OUTPUT]: 白名单、文件夹范围、配置保留、组织检索、直接删除、快照保护、真实日志次序与原生版本/可丢弃 Node CLI 进程的识别/终止/隔离验证。
+// [OUTPUT]: 白名单、文件夹范围、配置保留、组织检索、直接删除、大目录完整统计、读失败拒绝快照、快照保护、真实日志次序与原生版本/可丢弃 Node CLI 进程的识别/终止/隔离验证。
 // [POS]: 仅操作测试数据，进程样本由本机编译并握手确认启动，避免重用 Apple 平台二进制，不访问现有 Claude 数据。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -271,7 +271,7 @@ fn nested_file_changes_invalidate_directory_snapshot() {
 }
 #[cfg(target_os = "macos")]
 #[test]
-fn selected_parent_suppresses_child_and_credentials_are_never_paths() {
+fn desktop_cleaning_preserves_personal_configuration() {
     let f = Fixture::new();
     f.file("Library/Application Support/Claude/Cache/file", "cache");
     let scan = collect(&f.0, None).unwrap();
@@ -281,7 +281,12 @@ fn selected_parent_suppresses_child_and_credentials_are_never_paths() {
     )
     .unwrap();
     assert_eq!(all.len(), 1);
-    assert!(all[0].path.ends_with("/Claude"));
+    assert!(all[0].path.ends_with("/Claude/Cache"));
+    f.file("Library/Application Support/Claude/claude_desktop_config.json", "personal MCP configuration");
+    f.file("Library/Application Support/Claude/plugins/personal", "personal plugin");
+    perform_items(&f.0, &all, &Cleaner::default(), || Ok(false), &Reporter::channel(None)).unwrap();
+    assert!(f.0.join("Library/Application Support/Claude/claude_desktop_config.json").exists());
+    assert!(f.0.join("Library/Application Support/Claude/plugins/personal").exists());
 }
 #[test]
 fn account_reset_preserves_projects_and_mcp_and_removes_only_known_account_keys() {
@@ -562,4 +567,64 @@ fn linux_cleanup_uses_xdg_cache_paths_and_preserves_desktop_configuration() {
         .join(".config/Claude/claude_desktop_config.json")
         .exists());
     assert!(f.0.join("Library/Caches/claude-cli-nodejs/data").exists());
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_desktop_storage_preserves_mcp_plugins_and_programs() {
+    let f = Fixture::new();
+    for desktop in ["AppData/Roaming/Claude", "AppData/Local/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude"] {
+        f.file(&format!("{desktop}/Cache/data"), "cache");
+        f.file(&format!("{desktop}/Local Storage/token"), "local login state");
+        f.file(&format!("{desktop}/claude_desktop_config.json"), "personal MCP");
+        f.file(&format!("{desktop}/plugins/personal"), "personal plugin");
+    }
+    f.file("AppData/Local/AnthropicClaude/Claude.exe", "installed program");
+    let plan = collect(&f.0, None).unwrap();
+    perform_items(&f.0, &plan.items, &Cleaner::default(), || Ok(false), &Reporter::channel(None)).unwrap();
+    for desktop in ["AppData/Roaming/Claude", "AppData/Local/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude"] {
+        assert!(!f.0.join(desktop).join("Cache").exists());
+        assert!(!f.0.join(desktop).join("Local Storage").exists());
+        assert!(f.0.join(desktop).join("claude_desktop_config.json").exists());
+        assert!(f.0.join(desktop).join("plugins/personal").exists());
+    }
+    assert!(f.0.join("AppData/Local/AnthropicClaude/Claude.exe").exists());
+}
+
+#[test]
+fn large_directory_is_fully_measured_and_cleaned_with_snapshot_protection() {
+    let f = Fixture::new();
+    f.file(".claude/cache/nested/keep-counted", "data");
+    f.file(".claude/skills/personal/SKILL.md", "keep");
+    let cache = f.0.join(".claude/cache");
+    for index in 0..30_005 {
+        fs::write(cache.join(format!("entry-{index:05}")), b"x").unwrap();
+    }
+    let scan = collect(&f.0, None).unwrap();
+    let item = scan.items.iter().find(|item| item.path == cache.to_string_lossy()).unwrap();
+    assert!(item.exact);
+    assert_eq!((item.files, item.bytes), (30_006, 30_009));
+    assert!(identity(item, &f.0).is_ok());
+    fs::write(cache.join("entry-30004"), b"changed").unwrap();
+    assert!(identity(item, &f.0).is_err());
+    let scan = collect(&f.0, None).unwrap();
+    let result = perform_items(&f.0, &scan.items, &Cleaner::default(), || Ok(false), &Reporter::channel(None)).unwrap();
+    assert!(result.completed && !cache.exists());
+    assert!(f.0.join(".claude/skills/personal/SKILL.md").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn unreadable_directory_is_reported_and_never_offered_for_deletion() {
+    use std::os::unix::fs::PermissionsExt;
+    if unsafe { getuid() } == 0 { return; }
+    let f = Fixture::new();
+    f.file(".claude/cache/blocked/data", "keep");
+    let blocked = f.0.join(".claude/cache/blocked");
+    fs::set_permissions(&blocked, fs::Permissions::from_mode(0o000)).unwrap();
+    let scan = collect(&f.0, None).unwrap();
+    fs::set_permissions(&blocked, fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(!scan.items.iter().any(|item| item.path == f.0.join(".claude/cache").to_string_lossy()));
+    assert!(scan.warnings.iter().any(|warning| warning.contains("目录无法完整读取") && warning.contains("blocked")));
+    assert!(blocked.join("data").exists());
 }

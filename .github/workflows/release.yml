@@ -229,10 +229,18 @@ jobs:
           workspaces: src-tauri -> target
           shared-key: windows-msvc
           cache-on-failure: true
-      - name: Test, build and exercise real Windows installer
+      - name: Run Windows native, CLI, frontend and Skill checks
         env:
           CC_RELEASE_VERSION: ${{ needs.version.outputs.version }}
-        run: python scripts/release-windows.py
+        run: python scripts/release-windows.py check
+      - name: Build current-user Windows installer
+        env:
+          CC_RELEASE_VERSION: ${{ needs.version.outputs.version }}
+        run: python scripts/release-windows.py build
+      - name: Verify real installation and browser observations
+        env:
+          CC_RELEASE_VERSION: ${{ needs.version.outputs.version }}
+        run: python scripts/release-windows.py verify
       - name: Sign and verify updater installer
         if: github.ref == 'refs/heads/release'
         env:

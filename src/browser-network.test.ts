@@ -19,3 +19,15 @@ test('无效 IP 与失败响应不能被当作核验成功，保留 HTTP 原因'
   const request=(async()=>new Response('',{status:429}));
   await expect(probeBrowserExit(['https://primary.test/','https://backup.test/'],request)).rejects.toThrow('HTTP 429');
 });
+
+// ----- Windows 原生网页回报不能落入 Mac 分支或以错误版本通过 -----
+test('Windows 设备核验接受真实 Win32，拒绝其他平台、CPU 与版本', async () => {
+    const {matchesDevice}=await import('./browser-model');
+    const machine={platform:'windows',version:'10.0.26100',cores:4};
+    const report={platform:'Win32',platform_version:'10.0.26100',cores:4};
+    expect(matchesDevice(machine,report)).toBe(true);
+    expect(matchesDevice(machine,{...report,platform:'MacIntel'})).toBe(false);
+    expect(matchesDevice(machine,{...report,platform:'Darwin'})).toBe(false);
+    expect(matchesDevice(machine,{...report,cores:8})).toBe(false);
+    expect(matchesDevice(machine,{...report,platform_version:'15.0.0'})).toBe(false);
+});

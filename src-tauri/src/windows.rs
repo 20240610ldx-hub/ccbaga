@@ -444,6 +444,7 @@ fn location_enabled() -> Option<bool> {
 
 fn snapshot() -> Value {
     json!({
+        "platform": "windows",
         "timezone": timezone(),
         "timezones": timezones(),
         "automatic_timezone": null,

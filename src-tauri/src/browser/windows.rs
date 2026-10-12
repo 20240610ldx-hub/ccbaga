@@ -155,7 +155,7 @@ fn default_read() -> Result<DefaultBrowser, String> {
     };
     let http = read("http");
     let https = read("https");
-    let is_default = http == "CCBaga-B.URL" && https == "CCBaga-B.URL";
+    let is_default = http.eq_ignore_ascii_case("CCBaga-B.URL") && https.eq_ignore_ascii_case("CCBaga-B.URL");
     let exe = std::env::current_exe().map_err(|_| "无法定位 CCBaga-A。")?;
     let installed = exe
         .parent()

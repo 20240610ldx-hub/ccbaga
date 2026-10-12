@@ -15,10 +15,10 @@ claude_cli.rs: 内嵌脚本的只读状态与 CLI 程序卸载/重装，登录�
 cleaner_folder.rs: 用户所选目录内的 Claude 白名单发现；不跟随链接、不扫描目录外、不处理项目权限或凭据。
 progress.rs: 有序脱敏阶段事件与有界内存日志；供清理与浏览器共享，只读取事务传入的计数和状态。
 cleaner_transaction.rs: 范围与快照核验后的直接删除和窄范围配置写入；逐项记录，失败停止，不创建备份或撤回记录。
-cleaner_targets.rs: Claude 白名单、目录规模和元数据指纹、旧组织会话检索；不进入链接目标或项目源码。
+cleaner_targets.rs: Claude 白名单、桌面登录存储子目录（不删整个应用资料目录）、完整目录规模和元数据指纹（无时间/条目截断，读取失败不生成可删除快照）、旧组织会话检索；不进入链接目标或项目源码。
 cleaner_config.rs: 账号缓存和代理认证配置的窄范围变换；保留其他配置并只返回键名。
-cleaner_io.rs: 清理后配置原子写入；临时文件仅保存新内容，失败移除，不保留原配置。
-cleaner_tests.rs: 临时白名单/快照/日志验证；官方原生版本路径、自编译并经启动握手的可丢弃进程与 Node 样本验证身份、终止与其他 Node 保留；不复制系统平台二进制，不修改用户数据。
+cleaner_io.rs: 清理后配置原子写入；Windows 写入前保留原所有者/DACL，临时文件仅保存新内容，失败移除，不保留原配置。
+cleaner_tests.rs: 临时白名单/快照/日志验证，覆盖超过 30,000 文件的完整清理与权限失败保护；官方原生版本路径、自编译并经启动握手的可丢弃进程与 Node 样本验证身份、终止与其他 Node 保留；不复制系统平台二进制，不修改用户数据。
 regions.rs: 地区编号到语言、区域格式和代表时区的唯一白名单与目标语言/时区地区匹配；供前端选择与系统/浏览器快捷操作共用，包含目录与本机时区验证。
 linux.rs: Linux procfs 当前用户进程、zoneinfo/timedatectl、GNOME 定位偏好、GNOME/KDE 设置入口与 Wayland/X11 剪贴板；LC_MESSAGES/LC_TIME 分别读取会话语言/区域格式，不匹配时先报手动操作再改时区；未知定位为 null，Linux 钥匙串明确不可用；不将系统代理凭据序列化给 WebView。
 network_links.rs: 固定供应商与 Skill 导航白名单，编译消费 Skill 的 providers.json 组装原始 URL，WebView 不能指定 URL；无密钥访问或 SSH 执行。

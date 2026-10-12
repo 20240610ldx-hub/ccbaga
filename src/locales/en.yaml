@@ -449,7 +449,7 @@
 "路径已变化或超出当前用户范围。": "Path changed or outside the current user’s scope."
 "项目已变化，请重新扫描。": "Item changed. Run another scan."
 "数据已变化，请退出 Claude 后重新扫描。": "Data changed. Quit Claude and scan again."
-"目录统计不完整，拒绝直接清理；请减少目录规模后重新扫描。": "Directory count incomplete. Reduce the directory size and scan again before deletion."
+"目录快照不完整，请重新扫描。": "Directory snapshot is incomplete. Scan again."
 "目录内的文件已经变化，请重新扫描。": "Directory contents changed. Run another scan."
 "清理被中断；已删除的数据不可撤回，请重新扫描剩余项目。": "Cleanup interrupted. Deleted data cannot be restored. Scan remaining items again."
 "无法创建配置临时文件。": "Cannot create temporary configuration file."
@@ -765,3 +765,8 @@
 "检测到自定义 Claude 启动器，未删除或重装。": "A custom Claude launcher was detected and was preserved."
 "Claude Code 安装命令执行失败。": "The Claude Code installation command failed."
 "Claude Code 卸载未完成，部分程序仍存在。": "Claude Code uninstallation is incomplete; some program files remain."
+"Desktop 会话与登录存储": "Desktop sessions and login storage"
+"清除本地登录数据库与网页状态；保留桌面配置、MCP 和其他个人文件。": "Clear local login databases and web state; preserve desktop configuration, MCP and other personal files."
+"无法保留 Windows 配置权限，未写入内容。": "Windows configuration permissions could not be preserved; no content was written."
+
+"目录无法完整读取：{v0}：{v1}。请检查权限、退出 Claude 后重新扫描。": "Cannot fully read directory: {v0}: {v1}. Check permissions, quit Claude, and scan again."

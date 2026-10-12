@@ -216,7 +216,10 @@ fn add_target(scan: &mut Scan, target: targets::Target, batch: u128) {
             }
         }
     }
-    let (bytes, files, exact, tree_stamp) = targets::measure(&path);
+    let (bytes, files, tree_stamp) = match targets::measure(&path) {
+        Ok(measured) => measured,
+        Err(error) => { scan.warnings.push(error); return; }
+    };
     scan.items.push(Item {
         id: format!("{batch}-{}", scan.items.len()),
         path: path.to_string_lossy().into_owned(),
@@ -226,7 +229,7 @@ fn add_target(scan: &mut Scan, target: targets::Target, batch: u128) {
         impact: target.impact,
         bytes,
         files,
-        exact,
+        exact: true,
         keys,
         operation: target.operation,
         directory: meta.is_dir(),
@@ -737,10 +740,10 @@ fn identity(item: &Item, root: &Path) -> Result<(), String> {
         return Err("数据已变化，请退出 Claude 后重新扫描。".into());
     }
     if item.directory {
-        let (_, _, complete, tree) = targets::measure(path);
-        if !complete || !item.exact {
-            return Err("目录统计不完整，拒绝直接清理；请减少目录规模后重新扫描。".into());
+        if !item.exact {
+            return Err("目录快照不完整，请重新扫描。".into());
         }
+        let (_, _, tree) = targets::measure(path)?;
         if tree != item.tree_stamp {
             return Err("目录内的文件已经变化，请重新扫描。".into());
         }

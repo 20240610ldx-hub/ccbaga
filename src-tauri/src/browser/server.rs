@@ -142,6 +142,14 @@ fn handle(
         );
         return;
     }
+    if method == "GET" && path == "report" {
+        let browser = app.state::<Browser>();
+        let session = browser.session.lock().unwrap();
+        let observed = session.as_ref().filter(|s| s.token == token);
+        let body = serde_json::json!({"report": observed.and_then(|s| s.report.as_ref()), "received_at": observed.and_then(|s| s.received_at)});
+        answer(stream, "200 OK", "application/json", &serde_json::to_vec(&body).unwrap());
+        return;
+    }
     if method == "POST" && path == "report" {
         let length = header
             .lines()

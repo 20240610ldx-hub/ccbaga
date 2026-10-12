@@ -21,17 +21,24 @@ def run(*args):
 def main():
     if platform.system()!='Windows' or platform.machine().upper() not in ('AMD64','X86_64'):raise SystemExit('Windows x64 MSVC is required')
     version=os.environ.get('CC_RELEASE_VERSION',json.loads((ROOT/'package.json').read_text())['version'])
-    run('bun','test');run('bun','run','build')
-    checks=[
-        [sys.executable,'skills/ccbaga-network/scripts/test_network.py'],
-        ['cargo','test','--locked','--manifest-path','src-tauri/Cargo.toml','--features','custom-protocol'],
-        [sys.executable,'scripts/test-windows.py'],
-    ]
-    failed=[]
-    for command in checks:
-        result=subprocess.run(command,cwd=ROOT,env=ENV)
-        if result.returncode:failed.append(command[0])
-    if failed:raise SystemExit('Windows checks failed: '+', '.join(failed))
+    phase=sys.argv[1] if len(sys.argv)>1 else 'all'
+    if phase not in ['all','check','build','verify']:raise SystemExit('Invalid build phase')
+    if phase=='verify':
+        run(sys.executable,'scripts/verify-windows-installer.py',str(ROOT/'releases'/f'CCBaga-{version}-windows-x86_64-setup.exe'),str(ROOT/'releases/Windows-engine-manifest.json'))
+        return
+    if phase in ['all','check']:
+        run('bun','test');run('bun','run','build')
+        checks=[
+            [sys.executable,'skills/ccbaga-network/scripts/test_network.py'],
+            ['cargo','test','--locked','--manifest-path','src-tauri/Cargo.toml','--features','custom-protocol'],
+            [sys.executable,'scripts/test-windows.py'],
+        ]
+        failed=[]
+        for command in checks:
+            result=subprocess.run(command,cwd=ROOT,env=ENV)
+            if result.returncode:failed.append(command[0])
+        if failed:raise SystemExit('Windows checks failed: '+', '.join(failed))
+        if phase=='check':return
     run('bun','run','tauri','build','--bundles','nsis','--features','custom-protocol','--config',json.dumps({'version':version}))
     installers=list((ROOT/'src-tauri/target/release/bundle/nsis').glob('*-setup.exe'))
     if len(installers)!=1:raise SystemExit('Expected exactly one NSIS installer')
@@ -41,7 +48,7 @@ def main():
     engine=ROOT/'browser-runtime/WindowsBrowser'
     manifest={str(p.relative_to(engine)).replace('\\','/'):hashlib.file_digest(p.open('rb'),'sha256').hexdigest() for p in engine.rglob('*') if p.is_file()}
     (output/'Windows-engine-manifest.json').write_text(json.dumps(manifest,sort_keys=True)+'\n')
-    run(sys.executable,'scripts/verify-windows-installer.py',str(installer),str(output/'Windows-engine-manifest.json'))
+    if phase=='all':run(sys.executable,'scripts/verify-windows-installer.py',str(installer),str(output/'Windows-engine-manifest.json'))
     digest=hashlib.file_digest(installer.open('rb'),'sha256').hexdigest()
     (output/'Windows-SHA256SUMS').write_text(f'{digest}  {installer.name}\n')
     print('Windows NSIS installer and unchanged companion payload verified.')

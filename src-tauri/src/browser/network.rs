@@ -228,14 +228,12 @@ pub fn checks(
         check(
             "真实设备与 CPU",
             report.map(|r| {
-                r.platform
-                    .to_lowercase()
-                    .contains(match machine.platform.as_str() {
-                        "linux" => "linux",
-                        "windows" => "win",
-                        _ => "mac",
-                    })
-                    && r.cores == machine.cores
+                let platform = r.platform.to_lowercase();
+                (match machine.platform.as_str() {
+                    "windows" => platform == "win32",
+                    "linux" => platform.contains("linux"),
+                    _ => platform.contains("mac"),
+                }) && r.cores == machine.cores
                     && (machine.platform == "linux" || r.platform_version == machine.version)
             }),
             format!(
