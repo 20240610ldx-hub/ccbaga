@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: 带内嵌 UI 和固定 Linux 引擎的本地构建，以及用户指定安装前缀。
-# [OUTPUT]: 用户前缀 A/B 桌面入口和可回滚的应用目录替换，不修改用户资料。
+# [OUTPUT]: 用户前缀 A/B 桌面入口和可回滚的应用目录替换，不修改用户资料。 回滚失败保留并报告恢复目录。
 # [POS]: Linux 源码安装边界；拒绝自定义启动器、链接父目录和仍运行的 A/B。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import argparse
@@ -56,8 +56,9 @@ def install(build, prefix):
     old_desktops = {path: path.read_bytes() if path.exists() else None for path in desktop_files}
     had_launcher = launcher.is_symlink()
     app.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='.ccbaga-stage-', dir=app.parent) as temporary:
-        stage = Path(temporary)
+    stage = Path(tempfile.mkdtemp(prefix='.ccbaga-stage-', dir=app.parent))
+    cleanup_stage = True
+    try:
         pending = stage / 'new'
         (pending / 'bin').mkdir(parents=True)
         resources = pending / 'lib/CCBaga-A'
@@ -81,18 +82,25 @@ def install(build, prefix):
                     raise RuntimeError('Refusing linked desktop entry')
                 target.write_text(f'[Desktop Entry]\nType=Application\nName={title}\nExec={desktop_exec(executable)}{args}\nTerminal=false\nCategories=Utility;\n')
         except Exception:
-            for path, content in old_desktops.items():
-                if content is None:
-                    path.unlink(missing_ok=True)
-                else:
-                    path.write_bytes(content)
-            if not had_launcher:
-                launcher.unlink(missing_ok=True)
-            if app.exists():
-                shutil.rmtree(app)
-            if previous.exists():
-                previous.rename(app)
+            try:
+                for path, content in old_desktops.items():
+                    if content is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        path.write_bytes(content)
+                if not had_launcher:
+                    launcher.unlink(missing_ok=True)
+                if app.exists():
+                    shutil.rmtree(app)
+                if previous.exists():
+                    previous.rename(app)
+            except BaseException as rollback_error:
+                cleanup_stage = False
+                raise RuntimeError(f'Installation rollback failed; recovery stage retained at {stage}') from rollback_error
             raise
+    finally:
+        if cleanup_stage:
+            shutil.rmtree(stage)
     print(f'Installed CCBaga-A and CCBaga-B in {app}. Launch {launcher}.')
 
 
