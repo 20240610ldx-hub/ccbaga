@@ -6,6 +6,7 @@
 import hashlib
 import platform
 import tarfile
+import zipfile
 import shutil
 from pathlib import Path
 import plistlib
@@ -51,7 +52,46 @@ def fetch_linux():
     print(f'Fingerprint Chromium {VERSION}: Linux x86_64 SHA-256 verified')
 
 
+def fetch_windows():
+    if platform.machine() not in ('x86_64', 'AMD64'):
+        raise SystemExit('The pinned upstream Windows engine only supports x86_64')
+    target = ROOT / 'browser-runtime/WindowsBrowser'
+    if target.exists():
+        raise SystemExit('WindowsBrowser already exists; refusing to overwrite a prepared engine')
+    url = f'https://github.com/adryfish/fingerprint-chromium/releases/download/{VERSION}/ungoogled-chromium_{VERSION}-1.1_windows_x64.zip'
+    digest = '9ef3f471b7a6641b4224532522b29141ce3746e27d55788d88e2fd951f362579'
+    archive = ROOT / 'browser-runtime/browser.zip'
+    if not archive.exists():
+        subprocess.run(['curl', '--fail', '--location', '--retry', '3', '--output', str(archive), url], check=True)
+    with archive.open('rb') as stream:
+        if hashlib.file_digest(stream, 'sha256').hexdigest() != digest:
+            archive.unlink(missing_ok=True)
+            raise SystemExit('Upstream browser SHA-256 mismatch')
+    with tempfile.TemporaryDirectory(prefix='ccbaga-win-engine-') as temporary:
+        extracted = Path(temporary) / 'extracted'
+        with zipfile.ZipFile(archive, 'r') as zip_ref:
+            zip_ref.extractall(extracted)
+        engines = list(extracted.glob('**/chrome.exe'))
+        if len(engines) != 1:
+            raise SystemExit('Expected exactly one Windows Chromium executable')
+        binary = engines[0]
+        try:
+            actual = subprocess.check_output(
+                ['powershell', '-NoProfile', '-Command', f'(Get-Item "{binary}").VersionInfo.ProductVersion'],
+                text=True,
+            )
+        except Exception:
+            actual = subprocess.check_output([str(binary), '--version'], text=True)
+        if VERSION not in actual:
+            raise SystemExit('Upstream browser version mismatch')
+        (binary.parent / 'version.txt').write_text(VERSION + '\n')
+        shutil.copytree(binary.parent, target)
+    print(f'Fingerprint Chromium {VERSION}: Windows x64 SHA-256 verified')
+
+
 def main():
+    if platform.system() == 'Windows':
+        return fetch_windows()
     if platform.system() == 'Linux':
         return fetch_linux()
     if platform.system() != 'Darwin':

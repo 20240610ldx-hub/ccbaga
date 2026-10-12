@@ -4,6 +4,8 @@
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 #[cfg(target_os = "linux")]
 use crate::linux::*;
+#[cfg(target_os = "windows")]
+use crate::windows::*;
 use crate::native::decode;
 #[cfg(target_os = "macos")]
 use std::ffi::c_char;
@@ -86,6 +88,9 @@ pub async fn system_set_region(region: String) -> Result<serde_json::Value, Stri
         let language = CString::new(region.language).unwrap();
         let locale = CString::new(region.locale).unwrap();
         #[cfg(target_os = "linux")]
+        let _: serde_json::Value =
+            decode(unsafe { rf_system_region(language.as_ptr(), locale.as_ptr()) })?;
+        #[cfg(target_os = "windows")]
         let _: serde_json::Value =
             decode(unsafe { rf_system_region(language.as_ptr(), locale.as_ptr()) })?;
         let _: serde_json::Value = decode(unsafe { rf_system_timezone(zone.as_ptr()) })?;

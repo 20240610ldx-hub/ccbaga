@@ -7,12 +7,13 @@
 <div align="center">
   <img src="docs/brand-logos.svg" width="320" height="149" alt="CCBaga-A and CCBaga-B logos, side by side" />
   <h1>CCBaga</h1>
-  <p><strong>A native macOS and Linux toolkit for a cleaner workspace and an environment you can verify.</strong></p>
+  <p><strong>A native macOS, Linux, and Windows toolkit for a cleaner workspace and an environment you can verify.</strong></p>
   <p>Claude cleanup · Browser fingerprints · System settings · Network setup</p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-e8a181?style=flat-square" alt="MIT license" /></a>
     <img src="https://img.shields.io/badge/macOS-12%2B-111827?style=flat-square&amp;logo=apple&amp;logoColor=white" alt="macOS 12 and later" />
     <img src="https://img.shields.io/badge/Linux-x86__64-111827?style=flat-square&amp;logo=linux&amp;logoColor=white" alt="Linux x86_64" />
+    <img src="https://img.shields.io/badge/Windows-10%2F11-111827?style=flat-square&amp;logo=windows&amp;logoColor=white" alt="Windows 10 and 11" />
     <img src="https://img.shields.io/badge/core-Rust%20%2B%20Tauri-111827?style=flat-square&amp;logo=rust&amp;logoColor=white" alt="Rust and Tauri" />
   </p>
   <p>
@@ -53,9 +54,11 @@ The interface supports **English and Chinese**, with shared YAML catalogs. Switc
 
 ## Installation
 
-**Platforms:** macOS 12 or later on Apple Silicon; Linux x86_64 with GTK 3 and WebKitGTK 4.1. Windows, Intel macOS and Linux ARM64 are not supported.
+**Platforms:** macOS 12 or later on Apple Silicon; Linux x86_64 with GTK 3 and WebKitGTK 4.1; Windows 10/11 x86_64. Intel macOS and Linux ARM64 are not supported.
 
 Linux x86_64 packages include DEB, RPM, AppImage and Arch/pacman formats, with the companion browser included. See [Linux setup](docs/linux.md) for installation and platform limits. Official versions are published exclusively by the project owner, **liseami**.
+
+Windows 10/11 x86_64 builds produce native NSIS setup packages including companion browser engine. See [Windows setup](docs/windows.md) for installation, toolchains and platform behaviors.
 
 ### macOS
 
@@ -133,7 +136,7 @@ The UI owns inputs and presentation. Rust owns validation, task locks, process i
 | --- | --- | --- |
 | Desktop host | Rust · Tauri 2 | Native commands, transactions, progress and lifecycle |
 | Interface | React 19 · TypeScript · Cromma UI | Forms, previews and execution results |
-| Platform bridges | AppKit · Security · CoreLocation · Linux Rust | Platform permissions and system integration |
+| Platform bridges | AppKit · Security · CoreLocation · Linux / Windows Rust | Platform permissions and system integration |
 | Companion browser | Fingerprint Chromium | Dedicated profile and real browser measurements |
 | Network setup | OpenSSH · Bash · Xray | Explicit remote setup and server self-checks |
 | Localization | YAML · Vite | Build-time English/Chinese catalogs |

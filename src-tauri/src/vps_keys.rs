@@ -3,10 +3,11 @@
 // [POS]: VPS 的单一密钥登录边界；私钥不进入 WebView，源文件不修改，临时副本随事务释放。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use serde::Deserialize;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::{
     fs,
     io::{Read, Write},
-    os::unix::fs::OpenOptionsExt,
     path::PathBuf,
     process::{Command, Stdio},
 };
@@ -80,17 +81,27 @@ impl Keys {
         // ----- 限制副本权限，不更改 Downloads 中的原始文件 -----
         let path =
             std::env::temp_dir().join(format!("cc-ssh-key-{}", crate::browser::server::nonce()?));
-        let mut file = fs::OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .mode(0o600)
-            .open(&path)
-            .map_err(|_| "无法准备 SSH 私钥。")?;
+        let mut options = fs::OpenOptions::new();
+        options.create_new(true).write(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        let mut file = options.open(&path).map_err(|_| "无法准备 SSH 私钥。")?;
         let key = PrivateKey(path);
         file.write_all(pem.as_bytes())
             .map_err(|_| "无法准备 SSH 私钥。")?;
         drop(file);
-        let derived = Command::new("/usr/bin/ssh-keygen")
+        #[cfg(windows)]
+        {
+            if let Ok(user) = std::env::var("USERNAME") {
+                let grant_arg = format!("{user}:(R)");
+                let _ = Command::new("icacls")
+                    .arg(&key.0)
+                    .args(["/inheritance:r", "/grant:r", &grant_arg])
+                    .output();
+            }
+        }
+        let ssh_keygen = if cfg!(windows) { "ssh-keygen" } else { "/usr/bin/ssh-keygen" };
+        let derived = Command::new(ssh_keygen)
             .args(["-y", "-P", "", "-f"])
             .arg(&key.0)
             .stdin(Stdio::null())
@@ -109,6 +120,7 @@ impl Keys {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     #[test]
     fn complete_bundle_is_paired_and_temporary_private_key_is_removed() {
@@ -118,7 +130,8 @@ mod tests {
         ));
         fs::create_dir(&dir).unwrap();
         let pem = dir.join("id_rsa.pem");
-        assert!(Command::new("/usr/bin/ssh-keygen")
+        let ssh_keygen = if cfg!(windows) { "ssh-keygen" } else { "/usr/bin/ssh-keygen" };
+        assert!(Command::new(ssh_keygen)
             .args(["-q", "-t", "ed25519", "-N", "", "-f"])
             .arg(&pem)
             .status()
@@ -135,9 +148,12 @@ mod tests {
             ppk: ppk.to_string_lossy().into(),
             public_key: public_key.to_string_lossy().into(),
         };
+        #[cfg(unix)]
         fs::set_permissions(&pem, fs::Permissions::from_mode(0o644)).unwrap();
         let guard = keys.prepare().unwrap();
         let temporary = guard.0.clone();
+        #[cfg(unix)]
+        {
         assert_eq!(
             fs::metadata(&temporary).unwrap().permissions().mode() & 0o777,
             0o600
@@ -146,6 +162,7 @@ mod tests {
             fs::metadata(&pem).unwrap().permissions().mode() & 0o777,
             0o644
         );
+        }
         assert_eq!(fs::read(&temporary).unwrap(), fs::read(&pem).unwrap());
         drop(guard);
         assert!(!temporary.exists());
@@ -165,7 +182,7 @@ mod tests {
         .unwrap();
         // ----- PPK/PUB 相符而 PEM 来自另一组，也必须拒绝 -----
         let other = dir.join("other.pem");
-        assert!(Command::new("/usr/bin/ssh-keygen")
+        assert!(Command::new(ssh_keygen)
             .args(["-q", "-t", "ed25519", "-N", "", "-f"])
             .arg(&other)
             .status()

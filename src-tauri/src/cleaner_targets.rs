@@ -250,6 +250,75 @@ pub(super) fn definitions(root: &Path) -> Vec<Target> {
         item.operation = Operation::Edit(kind);
         result.push(item);
     }
+#[cfg(target_os = "windows")]
+fn win_dir(root: &Path, variable: &str, fallback: &str) -> PathBuf {
+    if super::home().ok().as_deref() == Some(root) {
+        if let Some(path) = std::env::var_os(variable)
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+        {
+            return path;
+        }
+    }
+    root.join(fallback)
+}
+
+    #[cfg(target_os = "windows")]
+    {
+        result.retain(|item| !item.path.starts_with(root.join("Library")));
+        let appdata = win_dir(root, "APPDATA", "AppData/Roaming");
+        let localappdata = win_dir(root, "LOCALAPPDATA", "AppData/Local");
+        for (path, title) in [
+            (localappdata.join("claude-cli-nodejs"), "Code 系统缓存"),
+            (appdata.join("Claude/Cache"), "Desktop 页面缓存"),
+            (appdata.join("Claude/Code Cache"), "Desktop 编译缓存"),
+            (appdata.join("Claude/GPUCache"), "Desktop 图形缓存"),
+            (appdata.join("Claude/logs"), "Desktop 日志"),
+            (appdata.join("Claude/Crashpad"), "Desktop 崩溃报告"),
+        ] {
+            let mut item = target(
+                root,
+                "",
+                title,
+                "cache",
+                "safe",
+                "仅移除本地缓存或日志。",
+            );
+            item.path = path;
+            result.push(item);
+        }
+        for (path, title) in [
+            (appdata.join("Claude"), "Desktop 完整本地数据"),
+            (localappdata.join("Claude"), "Desktop 本地应用数据"),
+            (localappdata.join("AnthropicClaude"), "Desktop 应用支持数据"),
+        ] {
+            let mut item = target(
+                root,
+                "",
+                title,
+                "desktop",
+                "login",
+                "重置桌面端登录和本地状态；服务器上的对话不会被删除。",
+            );
+            item.path = path;
+            result.push(item);
+        }
+        for path in [
+            appdata.join("Claude/ant-did"),
+            appdata.join("Claude/ant-device-registry.json"),
+        ] {
+            let mut item = target(
+                root,
+                "",
+                "Desktop 本地设备标识",
+                "account",
+                "login",
+                "仅清除本地记录；不能删除服务端账号或设备记录。",
+            );
+            item.path = path;
+            result.push(item);
+        }
+    }
     #[cfg(target_os = "linux")]
     {
         result.retain(|item| !item.path.starts_with(root.join("Library")));
@@ -311,16 +380,32 @@ pub(super) fn measure(path: &Path) -> (u64, usize, bool, Vec<u8>) {
         };
         hash.update(path.as_os_str().as_encoded_bytes());
         hash.update([0]);
-        for field in [
-            meta.dev(),
-            meta.ino(),
-            meta.mtime() as u64,
-            meta.mtime_nsec() as u64,
-            meta.ctime() as u64,
-            meta.ctime_nsec() as u64,
-            meta.len(),
-        ] {
-            hash.update(field.to_le_bytes());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            for field in [
+                meta.dev(),
+                meta.ino(),
+                meta.mtime() as u64,
+                meta.mtime_nsec() as u64,
+                meta.ctime() as u64,
+                meta.ctime_nsec() as u64,
+                meta.len(),
+            ] {
+                hash.update(field.to_le_bytes());
+            }
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            for field in [
+                meta.file_attributes() as u64,
+                meta.last_write_time(),
+                meta.creation_time(),
+                meta.file_size(),
+            ] {
+                hash.update(field.to_le_bytes());
+            }
         }
         if meta.is_file() {
             bytes = bytes.saturating_add(meta.len());
@@ -362,11 +447,11 @@ pub(super) fn org_files(root: &Path, org: &str) -> Result<(Vec<PathBuf>, bool), 
         "Library/Application Support/Claude/local_sessions",
         "Library/Application Support/Claude/conversations",
     ] {
-        if cfg!(target_os = "linux") && relative.starts_with("Library/") {
+        if (cfg!(target_os = "linux") || cfg!(target_os = "windows")) && relative.starts_with("Library/") {
             continue;
         }
         let p = root.join(relative);
-        if fs::canonicalize(&p).ok().as_deref() == Some(p.as_path()) {
+        if canonicalize(&p).ok().as_deref() == Some(p.as_path()) {
             pending.push((p, 0));
         }
     }
@@ -381,7 +466,11 @@ pub(super) fn org_files(root: &Path, org: &str) -> Result<(Vec<PathBuf>, bool), 
             complete = false;
             continue;
         };
-        if meta.uid() != unsafe { getuid() } || meta.file_type().is_symlink() {
+        #[cfg(unix)]
+        let wrong_user = meta.uid() != unsafe { getuid() };
+        #[cfg(not(unix))]
+        let wrong_user = false;
+        if wrong_user || meta.file_type().is_symlink() {
             continue;
         }
         if meta.is_dir() {

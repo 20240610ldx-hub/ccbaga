@@ -7,15 +7,19 @@ use crate::{
     progress::{Progress, Reporter},
 };
 use serde::Serialize;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+#[cfg(unix)]
+use std::io::Write;
 use std::{
-    io::{BufRead, BufReader, Read, Write},
-    os::unix::process::CommandExt,
+    io::{BufRead, BufReader, Read},
     path::PathBuf,
     process::{Command, Stdio},
     sync::Arc,
     time::{Duration, Instant},
 };
 use tauri::{ipc::Channel, Manager};
+#[cfg(not(target_os = "windows"))]
 const SCRIPT: &str = include_str!("../../scripts/claude-cli.sh");
 #[derive(Debug, Default, Serialize)]
 pub struct CliStatus {
@@ -24,17 +28,24 @@ pub struct CliStatus {
     version: String,
 }
 fn execute(mut command: Command, log: Arc<Reporter>, seconds: u64) -> Result<CliStatus, String> {
+    #[cfg(unix)]
+    command.process_group(0);
     let mut child = command
-        .process_group(0)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|_| "无法启动 Claude Code 安装任务。")?;
+    #[cfg(unix)]
     let mut stdin = child.stdin.take().unwrap();
+    #[cfg(not(unix))]
+    let stdin = child.stdin.take().unwrap();
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
+    #[cfg(not(windows))]
     let writer = std::thread::spawn(move || stdin.write_all(SCRIPT.as_bytes()));
+    #[cfg(windows)]
+    let writer = std::thread::spawn(move || drop(stdin));
     let output = std::thread::spawn(move || {
         let mut result = CliStatus::default();
         let mut completed = false;
@@ -81,6 +92,13 @@ fn execute(mut command: Command, log: Arc<Reporter>, seconds: u64) -> Result<Cli
             }
             _ => {
                 // 安装器可能带起 curl/npm；超时结束整个本次子进程组，防止后台继续修改。
+                #[cfg(windows)]
+                {
+                    let _ = Command::new("taskkill")
+                        .args(["/F", "/T", "/PID", &child.id().to_string()])
+                        .output();
+                }
+                #[cfg(unix)]
                 unsafe {
                     kill(-(child.id() as i32), 9);
                 }
@@ -111,10 +129,32 @@ fn execute(mut command: Command, log: Arc<Reporter>, seconds: u64) -> Result<Cli
     }
     Ok(result.0)
 }
+#[cfg(unix)]
 extern "C" {
     fn kill(pid: i32, signal: i32) -> i32;
 }
 fn command(action: &str) -> Result<Command, String> {
+    #[cfg(windows)]
+    {
+        let user_dir = std::env::var_os("USERPROFILE")
+            .or_else(|| std::env::var_os("HOME"))
+            .ok_or("无法定位用户目录。")?;
+        let root = std::fs::canonicalize(PathBuf::from(user_dir))
+            .map_err(|_| "无法读取用户目录。")?;
+        let mut script_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../scripts/claude-cli.ps1");
+        if !script_path.is_file() {
+            script_path = PathBuf::from("scripts/claude-cli.ps1");
+        }
+        let mut command = Command::new("pwsh");
+        command
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(script_path)
+            .arg(action)
+            .env("CC_CLI_USER_DIR", root);
+        Ok(command)
+    }
+    #[cfg(not(windows))]
+    {
     let root = std::fs::canonicalize(PathBuf::from(
         std::env::var_os("HOME").ok_or("无法定位用户目录。")?,
     ))
@@ -125,6 +165,7 @@ fn command(action: &str) -> Result<Command, String> {
         .env("CC_CLI_USER_DIR", root)
         .current_dir("/");
     Ok(command)
+    }
 }
 #[tauri::command]
 pub async fn claude_cli_read() -> Result<CliStatus, String> {
@@ -165,7 +206,7 @@ pub async fn claude_cli_manage(
     result
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::{

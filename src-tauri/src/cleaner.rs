@@ -5,9 +5,16 @@
 use crate::native;
 use crate::progress::{Progress, Reporter};
 use serde::Serialize;
+#[cfg(windows)]
+use dunce::canonicalize;
+#[cfg(not(windows))]
+use std::fs::canonicalize;
+#[cfg(unix)]
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 use std::{
     fs,
-    os::unix::fs::{MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -30,6 +37,7 @@ use transaction::perform_items;
 #[cfg(test)]
 #[path = "cleaner_tests.rs"]
 mod tests;
+#[cfg(unix)]
 extern "C" {
     fn getuid() -> u32;
     fn kill(pid: i32, signal: i32) -> i32;
@@ -71,6 +79,7 @@ struct Stamp {
     changed_nanos: i64,
     size: u64,
 }
+#[cfg(unix)]
 fn stamp(m: &fs::Metadata) -> Stamp {
     Stamp {
         dev: m.dev(),
@@ -80,6 +89,18 @@ fn stamp(m: &fs::Metadata) -> Stamp {
         changed: m.ctime(),
         changed_nanos: m.ctime_nsec(),
         size: m.len(),
+    }
+}
+#[cfg(windows)]
+fn stamp(m: &fs::Metadata) -> Stamp {
+    Stamp {
+        dev: m.file_attributes() as u64,
+        inode: 0,
+        modified: m.last_write_time() as i64,
+        nanos: 0,
+        changed: m.creation_time() as i64,
+        changed_nanos: 0,
+        size: m.file_size(),
     }
 }
 fn generation() -> u128 {
@@ -123,8 +144,12 @@ impl Cleaner {
     }
 }
 fn home() -> Result<PathBuf, String> {
-    fs::canonicalize(PathBuf::from(
-        std::env::var_os("HOME").ok_or("无法定位用户目录。")?,
+    #[cfg(windows)]
+    let var = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
+    #[cfg(not(windows))]
+    let var = std::env::var_os("HOME");
+    canonicalize(PathBuf::from(
+        var.ok_or("无法定位用户目录。")?,
     ))
     .map_err(|_| "无法读取用户目录。".into())
 }
@@ -139,10 +164,14 @@ fn add_target(scan: &mut Scan, target: targets::Target, batch: u128) {
             return;
         }
     };
+    #[cfg(unix)]
+    let wrong_user = meta.uid() != unsafe { getuid() };
+    #[cfg(not(unix))]
+    let wrong_user = false;
     if meta.file_type().is_symlink()
-        || meta.uid() != unsafe { getuid() }
+        || wrong_user
         || (!meta.is_dir() && !meta.is_file())
-        || fs::canonicalize(&path).ok().as_deref() != Some(path.as_path())
+        || canonicalize(&path).ok().as_deref() != Some(path.as_path())
     {
         scan.warnings.push(format!(
             "已跳过链接、其他用户或特殊路径：{}",
@@ -310,6 +339,29 @@ fn diagnostics(scan: &mut Scan) {
         },
         status: if enabled { "review" } else { "info" },
     });
+    #[cfg(target_os = "windows")]
+    {
+        let enabled = [
+            "ALL_PROXY",
+            "all_proxy",
+            "HTTPS_PROXY",
+            "https_proxy",
+            "HTTP_PROXY",
+            "http_proxy",
+        ]
+        .iter()
+        .any(|key| std::env::var_os(key).is_some());
+        scan.diagnostics.push(Diagnostic {
+            title: "代理环境".into(),
+            detail: if enabled {
+                "检测到代理环境变量；桌面代理设置未独立核验，请验证实际出口。".into()
+            } else {
+                "未发现代理环境变量；TUN 是推荐的网络环境。".into()
+            },
+            status: if enabled { "review" } else { "info" },
+        });
+    }
+    #[cfg(not(target_os = "windows"))]
     let timezone = fs::read_link("/etc/localtime")
         .ok()
         .map(|p| {
@@ -320,6 +372,8 @@ fn diagnostics(scan: &mut Scan) {
                 .to_string()
         })
         .unwrap_or("未知".into());
+    #[cfg(target_os = "windows")]
+    let timezone = crate::windows::timezone();
     scan.diagnostics.push(Diagnostic {
         title: "设备时区".into(),
         detail: format!("{timezone} · 可在电脑设置中修改。"),
@@ -334,11 +388,13 @@ fn diagnostics(scan: &mut Scan) {
 }
 #[derive(Clone, Serialize)]
 pub struct ClaudeProcess {
-    pid: i32,
-    name: String,
+    pub pid: i32,
+    pub name: String,
     #[serde(skip)]
-    executable: String,
+    #[allow(dead_code)]
+    pub executable: String,
 }
+#[cfg(any(not(target_os = "windows"), test))]
 fn process_row(line: &str, desktop: &[i32], uid: u32) -> Option<ClaudeProcess> {
     let mut fields = line.trim().splitn(2, char::is_whitespace);
     if fields.next()?.parse::<u32>().ok()? != uid {
@@ -357,8 +413,10 @@ fn process_row(line: &str, desktop: &[i32], uid: u32) -> Option<ClaudeProcess> {
             .split('.')
             .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
         && home().ok().is_some_and(|root| {
-            Path::new(&executable).parent()
-                == Some(root.join(".local/share/claude/versions").as_path())
+            let expected = root.join(".local/share/claude/versions");
+            Path::new(&executable)
+                .parent()
+                .is_some_and(|p| p.components().collect::<Vec<_>>() == expected.components().collect::<Vec<_>>())
         });
     if !desktop_app
         && !native_cli
@@ -425,6 +483,10 @@ fn processes() -> Result<Vec<ClaudeProcess>, String> {
         })
         .collect())
 }
+#[cfg(target_os = "windows")]
+fn processes() -> Result<Vec<ClaudeProcess>, String> {
+    crate::windows::claude_processes()
+}
 fn running() -> Result<bool, String> {
     Ok(!processes()?.is_empty())
 }
@@ -442,6 +504,7 @@ pub async fn cleaner_processes() -> Result<Vec<ClaudeProcess>, String> {
         .await
         .map_err(|_| "进程检查被中断。".to_string())?
 }
+#[cfg(not(target_os = "windows"))]
 fn signal_same_process(target: &ClaudeProcess, signal: i32) -> Result<(), String> {
     if processes()?
         .iter()
@@ -456,6 +519,10 @@ fn signal_same_process(target: &ClaudeProcess, signal: i32) -> Result<(), String
         }
     }
     Ok(())
+}
+#[cfg(target_os = "windows")]
+fn signal_same_process(target: &ClaudeProcess, _signal: i32) -> Result<(), String> {
+    crate::windows::kill_process(target.pid)
 }
 
 fn current_scan(root: &Path, org: Option<&str>) -> Result<Scan, String> {
@@ -645,12 +712,20 @@ fn identity(item: &Item, root: &Path) -> Result<(), String> {
     let in_scope = in_scope
         || (home().ok().as_deref() == Some(root)
             && targets::definitions(root).iter().any(|t| t.path == path));
-    if !in_scope || fs::canonicalize(path).ok().as_deref() != Some(path) {
+    #[cfg(target_os = "windows")]
+    let in_scope = in_scope
+        || (home().ok().as_deref() == Some(root)
+            && targets::definitions(root).iter().any(|t| t.path == path));
+    if !in_scope || canonicalize(path).ok().as_deref() != Some(path) {
         return Err("路径已变化或超出当前用户范围。".into());
     }
     let m = fs::symlink_metadata(path).map_err(|_| "项目已变化，请重新扫描。")?;
+    #[cfg(unix)]
+    let wrong_user = m.uid() != unsafe { getuid() };
+    #[cfg(not(unix))]
+    let wrong_user = false;
     if m.file_type().is_symlink()
-        || m.uid() != unsafe { getuid() }
+        || wrong_user
         || m.is_dir() != item.directory
         || Some(stamp(&m)) != item.stamp
     {

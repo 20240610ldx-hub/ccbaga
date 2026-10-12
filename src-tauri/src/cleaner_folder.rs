@@ -5,14 +5,23 @@
 use super::*;
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
+fn is_other_user(meta: &fs::Metadata) -> bool {
+    meta.uid() != unsafe { getuid() }
+}
+#[cfg(not(unix))]
+fn is_other_user(_meta: &fs::Metadata) -> bool {
+    false
+}
+
 pub(super) fn validate(path: &Path) -> Result<PathBuf, String> {
     let meta =
         fs::symlink_metadata(path).map_err(|_| "无法读取文件夹；请拖入一个可访问的目录。")?;
     if !path.is_absolute()
         || !meta.is_dir()
         || meta.file_type().is_symlink()
-        || meta.uid() != unsafe { getuid() }
-        || fs::canonicalize(path).ok().as_deref() != Some(path)
+        || is_other_user(&meta)
+        || canonicalize(path).ok().as_deref() != Some(path)
     {
         return Err("仅支持当前用户的真实文件夹；不接受文件、链接或其他用户目录。".into());
     }
@@ -104,7 +113,7 @@ pub(super) fn collect(root: &Path, reporter: &Reporter) -> Result<Scan, String> 
                 Ok(m) => m,
                 Err(_) => continue,
             };
-            if meta.file_type().is_symlink() || meta.uid() != unsafe { getuid() } {
+            if meta.file_type().is_symlink() || is_other_user(&meta) {
                 continue;
             }
             let name = entry.file_name().to_string_lossy().into_owned();

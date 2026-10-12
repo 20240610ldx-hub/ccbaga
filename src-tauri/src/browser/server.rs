@@ -16,11 +16,31 @@ fn answer(stream: &mut TcpStream, status: &str, kind: &str, body: &[u8]) {
     let _ = stream.write_all(body);
 }
 pub fn nonce() -> Result<String, String> {
+    #[cfg(unix)]
+    {
     let mut bytes = [0u8; 24];
     std::fs::File::open("/dev/urandom")
         .and_then(|mut f| f.read_exact(&mut bytes))
         .map_err(|_| "无法创建本地会话令牌。")?;
     Ok(bytes.iter().map(|x| format!("{x:02x}")).collect())
+    }
+    #[cfg(not(unix))]
+    {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let count = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let pid = std::process::id();
+        hasher.update(now.to_le_bytes());
+        hasher.update(pid.to_le_bytes());
+        hasher.update(count.to_le_bytes());
+        let res = hasher.finalize();
+        Ok(res[..24].iter().map(|x| format!("{x:02x}")).collect())
+    }
 }
 pub fn bind() -> Result<TcpListener, String> {
     let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|_| "起始页服务启动失败。")?;

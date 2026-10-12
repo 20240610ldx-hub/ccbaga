@@ -86,7 +86,9 @@ fn reject_links_and_malformed_preferences() {
     let outside = sample();
     fs::write(outside.join("keep"), b"keep").unwrap();
     fs::create_dir(root.join("Default")).unwrap();
+    #[cfg(unix)]
     std::os::unix::fs::symlink(&outside, root.join("Default/Cache")).unwrap();
+    #[cfg(unix)]
     assert!(profile::clear(&root, false, |_, _| {}).is_err());
     assert!(outside.join("keep").exists());
     let prefs = root.join("Default/Preferences");

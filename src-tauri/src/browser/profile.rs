@@ -4,15 +4,18 @@
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 #[cfg(target_os = "linux")]
 use crate::linux::*;
+#[cfg(target_os = "windows")]
+use crate::windows::*;
 use crate::native::decode;
 use serde::Serialize;
 use serde_json::{json, Value};
 #[cfg(target_os = "macos")]
 use std::ffi::c_char;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::{
     ffi::CString,
     fs,
-    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
 #[cfg(target_os = "macos")]
@@ -43,6 +46,9 @@ pub fn check_path(root: &Path, path: &Path) -> Result<(), String> {
     let mut current = PathBuf::new();
     for component in path.components() {
         current.push(component);
+        if matches!(component, std::path::Component::Prefix(_)) {
+            continue;
+        }
         match fs::symlink_metadata(&current) {
             Ok(meta) if meta.file_type().is_symlink() => {
                 return Err("检测到链接，未修改资料。".into())
@@ -63,6 +69,7 @@ pub fn write_json(path: &Path, value: &impl Serialize) -> Result<(), String> {
     check_path(root, &temp)?;
     let data = serde_json::to_vec_pretty(value).map_err(|_| "配置编码失败。")?;
     fs::write(&temp, data).map_err(|_| "配置写入失败。")?;
+    #[cfg(unix)]
     fs::set_permissions(&temp, fs::Permissions::from_mode(0o600))
         .map_err(|_| "配置权限设置失败。")?;
     if fs::rename(&temp, path).is_err() {

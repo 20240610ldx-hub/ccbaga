@@ -7,11 +7,15 @@ mod network;
 mod profile;
 #[cfg(target_os = "linux")]
 include!("linux.rs");
+#[cfg(target_os = "windows")]
+include!("windows.rs");
 pub(crate) mod server;
 #[cfg(test)]
 mod tests;
 #[cfg(target_os = "linux")]
 use crate::linux::*;
+#[cfg(target_os = "windows")]
+use crate::windows::*;
 use crate::{
     native::decode,
     progress::{Progress, Reporter},
@@ -125,19 +129,19 @@ fn write_launch_args(
     profile: &Path,
     version: &str,
 ) -> Result<(), String> {
-    use std::{io::Write, os::unix::fs::OpenOptionsExt};
+    use std::io::Write;
+    #[cfg(unix)]
+    use std::os::unix::fs::OpenOptionsExt;
     let mut args = config::arguments(config, machine, profile, "", version);
     args.pop();
     fs::create_dir_all(root).map_err(|_| "无法创建浏览器目录。")?;
     let target = root.join("launch.args");
     let temp = root.join("launch.args.tmp");
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(&temp)
-        .map_err(|_| "无法写入浏览器启动参数。")?;
+    let mut options = fs::OpenOptions::new();
+    options.create(true).write(true).truncate(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let mut file = options.open(&temp).map_err(|_| "无法写入浏览器启动参数。")?;
     file.write_all((args.join("\n") + "\n").as_bytes())
         .map_err(|_| "无法写入浏览器启动参数。")?;
     fs::rename(&temp, &target).map_err(|_| "无法写入浏览器启动参数。")?;
@@ -166,7 +170,9 @@ fn open_session(
     machine: &Machine,
     engine_version: String,
 ) -> Result<String, String> {
-    use std::{io::Write, os::unix::fs::OpenOptionsExt};
+    use std::io::Write;
+    #[cfg(unix)]
+    use std::os::unix::fs::OpenOptionsExt;
     let state = app.state::<Browser>();
     let listener = server::bind()?;
     let port = listener
@@ -193,13 +199,11 @@ fn open_session(
     let root = root(app)?;
     fs::create_dir_all(&root).map_err(|_| "无法创建浏览器目录。")?;
     let temp = root.join("start.url.tmp");
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(&temp)
-        .map_err(|_| "无法写入起始页地址。")?;
+    let mut options = fs::OpenOptions::new();
+    options.create(true).write(true).truncate(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let mut file = options.open(&temp).map_err(|_| "无法写入起始页地址。")?;
     file.write_all(format!("{page}\n").as_bytes())
         .map_err(|_| "无法写入起始页地址。")?;
     fs::rename(&temp, root.join("start.url")).map_err(|_| "无法写入起始页地址。")?;

@@ -60,6 +60,12 @@ fn provider_url(provider: &str) -> Result<String, String> {
 pub async fn vps_open_provider(provider: String) -> Result<(), String> {
     let url = provider_url(&provider)?;
     tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "windows")]
+        let status = Command::new("cmd")
+            .args(["/c", "start", "", &url])
+            .status()
+            .map_err(|_| "无法打开供应商网站。")?;
+        #[cfg(not(target_os = "windows"))]
         let status = Command::new(if cfg!(target_os = "linux") {
             "xdg-open"
         } else {
@@ -154,7 +160,8 @@ fn payload(connection: &Connection, home: &HomeProxy) -> String {
 fn ssh(connection: &Connection) -> Result<(Command, PrivateKey), String> {
     connection.validate()?;
     let key = connection.keys.prepare()?;
-    let mut command = Command::new("/usr/bin/ssh");
+    let ssh_bin = if cfg!(windows) { "ssh" } else { "/usr/bin/ssh" };
+    let mut command = Command::new(ssh_bin);
     command
         .args([
             "-F",
@@ -391,6 +398,8 @@ mod tests {
         ] {
             assert!(!host_valid(host));
         }
+        #[cfg(unix)]
+        {
         let value = "p'$(touch /tmp/cc-injection)\nnext";
         let output = Command::new("/bin/sh")
             .arg("-c")
@@ -398,6 +407,12 @@ mod tests {
             .output()
             .unwrap();
         assert_eq!(String::from_utf8(output.stdout).unwrap(), value);
+        }
+        #[cfg(not(unix))]
+        {
+            let value = "p'$(touch /tmp/cc-injection)\nnext";
+            assert_eq!(quote(value), "'p'\\''$(touch /tmp/cc-injection)\nnext'");
+        }
         let link = "http://example.com:8443/0123456789abcdef0123456789abcdef/clash.yaml";
         assert_eq!(
             subscription(&format!("CC_SUB_URL={link}\n"), "example.com").unwrap(),
@@ -405,6 +420,8 @@ mod tests {
         );
         assert!(subscription(&format!("CC_SUB_URL={link}"), "other.com").is_err());
         assert!(subscription("Setup complete - SOME SELF-TESTS FAILED", "example.com").is_err());
+        #[cfg(unix)]
+        {
         let log = Arc::new(Reporter::channel(None));
         let mut command = Command::new("/bin/sh");
         command.arg("-s");
@@ -418,7 +435,10 @@ mod tests {
             .unwrap(),
             "CC_TEST=ok\n"
         );
+        }
         assert_eq!(tail(&vec![b'x'; 100000][..]).len(), 65536);
+        #[cfg(unix)]
+        {
         let mut timeout_command = Command::new("/bin/sh");
         timeout_command.arg("-s");
         assert!(execute(
@@ -428,6 +448,7 @@ mod tests {
             Arc::new(Reporter::channel(None))
         )
         .is_err());
+        }
         assert!(serde_json::from_str::<Connection>(r#"{"host":"example.com","port":22,"username":"root","auth":"password","password":"secret","identity":""}"#).is_err());
         assert!(subscription(
             "CC_SUB_URL=http://[2001:db8::1]:8443/0123456789abcdef0123456789abcdef/clash.yaml",

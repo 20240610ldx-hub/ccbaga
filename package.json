@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:windows": "bun run build && bun run tauri build --config src-tauri/tauri.windows.conf.json --features custom-protocol",
     "tauri": "tauri",
     "test": "bun test",
+    "test:windows": "python scripts/test-windows.py",
     "install:apps": "sh scripts/install-apps.sh"
   },
   "dependencies": {

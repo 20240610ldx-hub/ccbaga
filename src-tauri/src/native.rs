@@ -1,4 +1,4 @@
-// [INPUT]: macOS Objective-C / Linux Rust 的本地清理、授权、SSH 文件选择与剪贴板接口。
+// [INPUT]: macOS Objective-C / Linux Rust / Windows Rust 的本地清理、授权、SSH 文件选择与剪贴板接口。
 // [OUTPUT]: SSH 文件路径选择、辅助功能权限、剪贴板复制、钥匙串解锁、脱敏凭据发现与允许系统授权的直接删除。
 // [POS]: 清理与电脑设置的平台桥接边界；公共 JSON 解码供独立 system 桥复用。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -7,6 +7,8 @@ use std::ffi::{c_char, CStr, CString};
 
 #[cfg(target_os = "linux")]
 use crate::linux::*;
+#[cfg(target_os = "windows")]
+use crate::windows::*;
 #[cfg(target_os = "macos")]
 extern "C" {
     fn rf_choose_ssh_keys(extension: *const c_char) -> *mut c_char;
@@ -76,6 +78,10 @@ pub fn permissions() -> Result<(), String> {
     {
         crate::linux::open_settings("location").map(|_| ())
     }
+    #[cfg(target_os = "windows")]
+    {
+        crate::windows::open_settings("location").map(|_| ())
+    }
     #[cfg(target_os = "macos")]
     {
         unsafe {
@@ -88,6 +94,8 @@ pub fn copy(text: &str) -> Result<(), String> {
     let text = CString::new(text).map_err(|_| "文本包含无法复制的字符。")?;
     unsafe {
         #[cfg(target_os = "linux")]
+        rf_copy(text.as_ptr())?;
+        #[cfg(target_os = "windows")]
         rf_copy(text.as_ptr())?;
         #[cfg(target_os = "macos")]
         rf_copy(text.as_ptr());
