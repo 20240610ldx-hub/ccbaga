@@ -1,6 +1,9 @@
 ---
 name: ccbaga-network
+license: MIT
+compatibility: Requires a local coding agent with file and terminal access, Python 3.10+ (3.12+ on Windows), OpenSSH and curl; remote deployment targets authorized Debian 12/13 hosts.
 metadata:
+  author: liseami
   opencode/slash: "true"
 description: Collect user-supplied files and connection details, then handle DMIT VPS and Webshare static ISP purchases, matching PEM/PPK/PUB SSH keys, local checks, authorized Debian deployment, residential SOCKS5 egress, subscription delivery and verified TUN setup. Use for CCBaga network setup; installation alone does not authorize purchases or server changes.
 ---

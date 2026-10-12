@@ -770,3 +770,6 @@
 "无法保留 Windows 配置权限，未写入内容。": "Windows configuration permissions could not be preserved; no content was written."
 
 "目录无法完整读取：{v0}：{v1}。请检查权限、退出 Claude 后重新扫描。": "Cannot fully read directory: {v0}: {v1}. Check permissions, quit Claude, and scan again."
+
+"请设置 DO_NOT_TRACK=1，执行 `{v0}`。安装后运行 {v1}，使用中文。": "Set DO_NOT_TRACK=1 and run `{v0}`. Then invoke {v1} in English."
+"请设置 DO_NOT_TRACK=1，使用 `{v0}` 安装 Skill，自行指定当前工具的 --agent。安装后运行 {v1}，使用中文。": "Set DO_NOT_TRACK=1 and install the Skill with `{v0}`, selecting --agent for the current tool yourself. Then invoke {v1} in English."

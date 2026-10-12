@@ -82,6 +82,7 @@ def main():
     run('python3', ROOT / 'skills/ccbaga-network/scripts/test_network.py')
     run('bash', '-n', ROOT / 'skills/ccbaga-network/scripts/setup-vps.sh')
     run('bun', 'test')
+    run('bun', ROOT / 'scripts/test-skill-install.ts')
     run('bun', 'run', 'build')
     run('cargo', 'test', '--locked', '--manifest-path', 'src-tauri/Cargo.toml', '--features', 'custom-protocol')
     run('python3', 'scripts/test-linux.py')

@@ -8,7 +8,7 @@ src/ - 黑色主题的 Laper 最新 Landing 斜纹/点阵/细线内容壳、Crom
 src-tauri/ - 白名单深度清理、Claude Code CLI 安装管理、独立指纹浏览器、国家地区目录、电脑环境设置与固定网络资源导航；见其 CLAUDE.md
 browser-runtime/ - 固定摘要的独立 Fingerprint Chromium 引擎与保留 Framework 链接的打包归档；见其 CLAUDE.md
 scripts/ - 图标、签名、引擎打包、应用安装与Claude Code CLI 管理脚本；见其 CLAUDE.md
-skills/ - 独立可安装网络 Skill；AI 收集用户资料、运行本机预检与经确认的远端部署，应用只提供安装提示词；见其 CLAUDE.md
+skills/ - Agent Skills 标准目录与 npm/npx 通用安装，MIT/兼容声明和全部脚本独立交付；AI 收集用户资料、运行本机预检与经确认的远端部署，应用只提供安装提示词；见其 CLAUDE.md
 packaging/ - 社区 Linux 构建配方；见其 CLAUDE.md
 assets/ - 两张压缩品牌图、五项 LobeHub AI SVG 与极客像素安装盘背景，分别供图标/README 和 DMG 布局使用；见其 CLAUDE.md
 docs/ - 英文仓库封面与 Linux/Windows 开发说明；见其 CLAUDE.md

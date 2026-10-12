@@ -1,6 +1,6 @@
 <!--
-[INPUT]: 可安装 Skill 目录、五项 AI 工具的目录与执行命令。
-[OUTPUT]: 英文安装说明、隐私边界和分阶段命令索引。
+[INPUT]: Agent Skills 规范、npm skills 通用安装器、五项 AI 工具和完整自包含资源。
+[OUTPUT]: 跨平台 npm/npx 安装与更新、隐私边界和分阶段命令索引。
 [POS]: 网络页 Skill 按钮的公开落点；安装与远端部署分开授权。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 -->
@@ -12,9 +12,28 @@ Give your AI the files and connection details. It handles the commands: VPS → 
 
 **Easiest:** In CCBaga-A, open **Network**, select **General**, **Codex**, **Cursor**, **OpenCode** or **Copilot**, and click **Copy prompt**. Paste it into that tool's local coding-agent chat. The short prompt installs the complete skill and then invokes it; the skill itself handles the workflow. Switching CCBaga to English also switches the copied prompt to English.
 
-No CCBaga app is required. Ask your agent:
+No CCBaga app is required. This directory follows the [Agent Skills specification](https://agentskills.io/specification) and includes its MIT license, execution scripts and provider configuration.
 
-> Install the complete `skills/ccbaga-network` directory from `https://github.com/liseami/CCBaga` into the skill directory for this tool. Then run `ccbaga-network` in English.
+### npm / npx
+
+Use the standard [skills installer](https://github.com/vercel-labs/skills), available from npm. Node.js 22.20+ and npm are installation prerequisites; the AI can handle them. The skill's network scripts require Python and the native tools described below.
+
+```sh
+# macOS / Linux — let the AI run this for you
+DO_NOT_TRACK=1 npx --yes skills add liseami/CCBaga --skill ccbaga-network --global --agent codex --copy --yes
+```
+
+```powershell
+# Windows PowerShell — no WSL required
+$env:DO_NOT_TRACK='1'
+npx --yes skills add liseami/CCBaga --skill ccbaga-network --global --agent codex --copy --yes
+```
+
+Choose `--agent codex`, `cursor`, `opencode` or `github-copilot`. For another tool, the AI selects its supported agent identifier. `--global` keeps the installation outside the current project; `--copy` avoids Windows symlink privilege requirements. `DO_NOT_TRACK=1` disables the installer's telemetry and remote audit requests. The command downloads skill files; it does not execute a VPS deployment.
+
+You can also install the npm CLI once with `npm install --global skills`, then use `skills add` with the same options and environment. To update this skill, keep tracking disabled and run `npx --yes skills update ccbaga-network --global`.
+
+Ask your agent to install it and then invoke `ccbaga-network` in your language. Review any existing installation before replacing it; private connection configuration stays outside the skill directory.
 
 | Tool | Personal installation directory | Invoke |
 | --- | --- | --- |
@@ -23,6 +42,8 @@ No CCBaga app is required. Ask your agent:
 | Cursor | `~/.cursor/skills/ccbaga-network` | `/ccbaga-network` |
 | OpenCode | `~/.config/opencode/skills/ccbaga-network` | `/ccbaga-network` (included slash metadata) |
 | Copilot CLI | `~/.copilot/skills/ccbaga-network` | `/ccbaga-network` |
+
+The npm installer uses the shared `~/.agents/skills/ccbaga-network` directory supported by these clients. The table lists their compatible manual directories.
 
 Copy **the whole directory**, including `providers.json` and `scripts/`. Restart/reload the agent if it does not discover the new skill. A local agent with terminal/file access is required; a plain web chat or cloud session without access to your local keys cannot complete SSH deployment.
 

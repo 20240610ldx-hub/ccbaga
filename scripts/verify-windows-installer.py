@@ -53,6 +53,11 @@ def main():
         profile=data/'browser/profile/Default/personal-data';profile.parent.mkdir(parents=True);profile.write_bytes(b'keep-profile')
         env={k:v for k,v in os.environ.items() if not k.startswith(('APPLE_','TAURI_SIGNING_PRIVATE_KEY'))}
         env.update(CC_CLI_USER_DIR=str(home),HTTPS_PROXY='http://secret-marker.invalid:1')
+        def powershell(command,extra=None,quiet=True):
+            script="$env:PSModulePath=$PSHOME+'\\Modules;'+$env:PSModulePath; $ErrorActionPreference='Stop'; "+command
+            result=subprocess.run(['powershell','-NoProfile','-NonInteractive','-Command',script],env=env|(extra or {}),stdout=subprocess.DEVNULL if quiet else None,stderr=subprocess.PIPE)
+            if result.stderr:raise AssertionError('CI PowerShell query failed: '+result.stderr.decode('utf-8',errors='replace')[-2048:])
+            return result.returncode
         def install():
             subprocess.run(f'"{installer}" /S /D={folder}',check=True,timeout=180,env=env)
         def payload():
@@ -79,7 +84,7 @@ def main():
             if child:child.wait(timeout=20);child=None
             # 仅回收本次唯一安装目录内的 CI 程序，处理浏览器自己的独立生命周期。
             command='$p=@(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($env:CC_INSTALL_DIR+"\\",[StringComparison]::OrdinalIgnoreCase) }); $p | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; if($p.Count){exit 1}'
-            wait_for(lambda:subprocess.run(['powershell','-NoProfile','-Command',command],env=env|{'CC_INSTALL_DIR':str(folder)},stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0)
+            wait_for(lambda:powershell(command,{'CC_INSTALL_DIR':str(folder)})==0)
         def ready():
             if child.poll() is not None:
                 raise AssertionError(f'Installed host exited with status {child.returncode}')
@@ -112,7 +117,7 @@ def main():
             assert child.poll() is None,'Installed host exited before verification'
             # ----- 实际同资料浏览器进程：仅查询 CI 样本路径，不打印命令行 -----
             query='$p=@(Get-CimInstance Win32_Process -Filter "Name = \'chrome.exe\'" | Where-Object { $_.ExecutablePath -like ($env:CC_INSTALL_DIR+"*") -and $_.CommandLine -like ("*"+$env:CC_PROFILE+"*") }); if($p.Count -eq 0){exit 1}'
-            wait_for(lambda:subprocess.run(['powershell','-NoProfile','-Command',query],env=env|{'CC_INSTALL_DIR':str(folder),'CC_PROFILE':str(profile.parent.parent)},stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0)
+            wait_for(lambda:powershell(query,{'CC_INSTALL_DIR':str(folder),'CC_PROFILE':str(profile.parent.parent)})==0)
             stop()
             install();payload();assets()
             uninstallers=list(folder.glob('*uninstall*.exe'))
@@ -125,7 +130,7 @@ def main():
             print('CI startup diagnostic:',runtime_log.read_text(encoding='utf-8',errors='replace')[-8192:].replace('secret-marker','[test-marker]'))
             print('CI start file exists:',(data/'browser/start.url').exists())
             print('CI fixed startup stages:',trace.read_text(encoding='utf-8',errors='replace')[-4096:] if trace.exists() else 'no host entry')
-            subprocess.run(['powershell','-NoProfile','-Command','$p=Get-Process -Id $env:CC_TEST_PID -ErrorAction SilentlyContinue; $p | Select-Object ProcessName,Id,Responding,MainWindowTitle; $p.Modules | ForEach-Object { $_.ModuleName }'],env=env|{'CC_TEST_PID':str(child.pid if child else 0)},check=False)
+            powershell('$p=Get-Process -Id $env:CC_TEST_PID -ErrorAction SilentlyContinue; $p | Select-Object ProcessName,Id,Responding,MainWindowTitle; $p.Modules | ForEach-Object { $_.ModuleName }',{'CC_TEST_PID':str(child.pid if child else 0)},quiet=False)
             raise
         finally:
             stop()

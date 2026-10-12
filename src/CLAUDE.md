@@ -24,7 +24,7 @@ dialog.tsx: Radix 受控模态、无 Trigger 时的原焦点恢复与读屏标�
 style.css: 最新 Laper Landing 的四周 16px 外框/隔带（顶端与系统标题行分开）、侧栏完整四边细线、6px 斜纹节距与 7px 点阵标题，颜色统一墨黑；全页满宽细线内容面替代松散圆角卡片，侧栏保留图标与中性选中质感；纹理静态 CSS，模态沿用 Cromma 控件；实测通过页面仍独立整页绿底与 112px 对勾。
 quick-actions.tsx: 标题为「傻瓜設定」的地区与四个快捷操作；Claude 预览可结束全部进程并重扫再确认，进程状态与高级页共用；复用浏览器/系统/清理命令。
 vps.tsx: 网络三步为一体细线网格与 01/02/03 标签，VPS 蓝色服务器按钮、家宽绿色住宅按钮及右侧问号/精简规格表，无箭头；斜纹隔带后的 Skill 区为通用/Codex/Cursor/OpenCode/Copilot 五项 LobeHub 图标分段、仅安装与运行的双语提示词与一键复制，复制状态随语言/工具失效；不收集凭据或执行部署。
-network-skill.ts: 五项工具安装目录与运行入口，通用项由当前工具选目录；双语提示词仅安装/运行，具体网络协议归 Skill。
-network-skill.test.ts: 五项工具顺序、目录/调用符与完整双语复制内容回归，拒绝混入网络流程描述。
+network-skill.ts: npm skills 标准安装命令/agent 标识与运行入口，通用项由 AI 选当前 agent，关闭安装统计；双语提示词仅安装/运行，具体网络协议归 Skill。
+network-skill.test.ts: 五项工具顺序、安装命令/调用符与完整双语复制内容回归，拒绝混入网络流程描述。
 Linux 呈现边界：设备平台由原生快照提供；未知定位不显示关闭；系统授权提示不固定 macOS；更新入口在 Linux 明确要求通过包或源码更新，不请求现有 macOS-only 更新源。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
