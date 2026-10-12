@@ -1,6 +1,6 @@
 #!/bin/sh
-# [INPUT]: 已迁入的 Chromium 引擎、brand-browser.sh 与 macOS ditto。
-# [OUTPUT]: 品牌化为 CCBaga-B 并签名后，保留链接和权限的 Browser.zip 及实际版本元数据。
+# [INPUT]: 固定 Chromium 引擎、CARGO_TARGET_DIR、品牌化脚本与平台复制工具。
+# [OUTPUT]: macOS 签名 Browser.zip；Linux 源码/Arch 构建树中的完整引擎和版本元数据。
 # [POS]: 构建资源入口；避免 Tauri 逐文件复制丢失 Framework 目录链接。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 set -eu
@@ -8,6 +8,9 @@ cd "$(dirname "$0")/.."
 if [ "$(uname -s)" = Linux ]; then
   test -x browser-runtime/LinuxBrowser/chrome || { echo 'Run python3 scripts/fetch-browser.py first' >&2; exit 1; }
   test "$(cat browser-runtime/LinuxBrowser/version.txt)" = "$(cat browser-runtime/version.txt)" || { echo 'Engine version mismatch' >&2; exit 1; }
+  engine_output="${CARGO_TARGET_DIR:-src-tauri/target}/release/browser-runtime"
+  mkdir -p "$engine_output"
+  cp -a browser-runtime/LinuxBrowser "$engine_output/"
   exit 0
 fi
 sh scripts/brand-browser.sh

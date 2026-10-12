@@ -11,7 +11,7 @@ release-macos.py: 外部凭据与可选 CC_RELEASE_VERSION 驱动三阶段公证
 dmg-settings.py: 固定 800×500 像素背景、两应用到 Applications 的拖拽坐标；通知文件保留在盘内但默认隐藏，不依赖 Finder 自动化。
 verify-dmg.py: 只读挂载实际安装盘，校验双应用名称、包标识与启动入口，再校验严格签名与 Gatekeeper、Applications 链接和像素背景；Finder 元数据不得破坏应用签名。
 release-requirements.txt: dmgbuild、ds-store 与 mac-alias 的完整版本及 wheel SHA-256；仅发布阶段安装，不增大应用包。
-package-browser.sh: 先品牌化签名，再打包引擎，ditto 保留 Framework 链接与可执行权限；归档进入应用资源。
+package-browser.sh: 先品牌化签名，再打包引擎，ditto 保留 Framework 链接与可执行权限；归档进入应用资源；Linux 将源引擎复制到 CARGO_TARGET_DIR 的 release 资源树，保持源码/Arch 安装契约，系统包另走 libexec。
 install-apps.sh: bun install:apps 兼容入口，只转交统一安装层。
 install-apps.py: 严格签名与 Gatekeeper 验收后的事务替换、同标识旧名迁移与失败回滚；保留隔离和资料，正常退出后安装、只刷新相关 Dock 项并启动宿主。
 setup-vps.sh: 从用户 Downloads 脚本纳入应用的 Debian 12/13 root 设置；Xray Reality 经家宽 SOCKS5 出口、Stripe 直连例外、阻断 UDP、SSH/防火墙加固与自检；仅全部通过输出 CC_SUB_URL，支持 IPv6 订阅地址，失败不打印完整配置，Xray 凭据配置限 root/实际服务组可读。

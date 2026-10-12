@@ -8,5 +8,5 @@ LICENSE.fingerprint-chromium: 指纹引擎上游 BSD-3-Clause 许可证，随工
 entitlements.plist: 只向 Renderer/GPU Helper 开放 MAP_JIT，对齐 Chromium V8/SwiftShader 需求；不启用调试、任意库加载或未签名可执行内存。
 version.txt: 从实际 Info.plist 生成的引擎版本。
 MIGRATION.md: 旧工程与入口移除、唯一资料迁移位置和实际核验边界。
-LinuxBrowser/: 固定上游 tar.xz，经 SHA-256、ELF x86_64 与实际版本核验；被 Git 忽略，随 Linux 宿主资源分发。ccbaga-browser.desktop: Linux 包的 B 启动项，通过 requirement-french --browser 启动宿主和同一独立资料，不修改默认浏览器。
+LinuxBrowser/: 固定上游 tar.xz，经 SHA-256、ELF x86_64 与实际版本核验；被 Git 忽略；系统安装包走 libexec，源码/Arch 由 package-browser.sh 准备构建资源树。ccbaga-browser.desktop: Linux 包的 B 启动项，通过 requirement-french --browser 启动宿主和同一独立资料，不修改默认浏览器。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
