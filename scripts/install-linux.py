@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# [INPUT]: 带内嵌 UI 和固定 Linux 引擎的本地构建，以及用户指定安装前缀。
+# [INPUT]: 带完整内嵌 UI 和可执行固定 Linux 引擎的本地构建，以及用户指定安装前缀。
 # [OUTPUT]: 用户前缀 A/B 桌面入口和可回滚的应用目录替换，不修改用户资料。
 # [POS]: Linux 源码安装边界；拒绝自定义启动器、链接父目录和仍运行的 A/B。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -26,8 +26,11 @@ def install(build, prefix):
     build, prefix = build.resolve(), prefix.absolute()
     source = build / 'requirement-french'
     engine = build / 'browser-runtime/LinuxBrowser/chrome'
-    if not source.is_file() or not os.access(source, os.X_OK) or not engine.is_file():
+    if not source.is_file() or not os.access(source, os.X_OK) or not engine.is_file() or not os.access(engine, os.X_OK):
         raise RuntimeError('Build first with bun run tauri build; native executable or browser resources missing')
+    browser_ui = build / 'browser-ui'
+    if not (browser_ui / 'browser.html').is_file() or not any(path.is_file() for path in (browser_ui / 'assets').glob('*.js')):
+        raise RuntimeError('Build first with bun run tauri build; browser UI resources missing')
     app = prefix / 'share/ccbaga-install'
     launcher = prefix / 'bin/ccbaga-a'
     executable = app / 'bin/requirement-french'

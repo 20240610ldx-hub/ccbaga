@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: 可丢弃构建树、安装前缀、Linux 安装器和真实产物验收层。
-# [OUTPUT]: 安装隔离、A/B 运行保护、失败回滚、载荷缺失与引擎篡改拒绝回归。
+# [OUTPUT]: 安装隔离、A/B 运行保护、失败回滚、不可执行引擎、载荷缺失与引擎篡改拒绝回归。
 # [POS]: 离线临时目录测试，不安装到真实用户目录。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import importlib.util
@@ -24,7 +24,7 @@ class InstallTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.build = self.root / 'build'
         self.prefix = self.root / 'prefix with spaces'
-        for name in ['requirement-french', 'browser-runtime/LinuxBrowser/chrome', 'browser-ui/browser.html']:
+        for name in ['requirement-french', 'browser-runtime/LinuxBrowser/chrome', 'browser-ui/browser.html', 'browser-ui/assets/browser.js']:
             path = self.build / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('fixture')
@@ -55,6 +55,39 @@ class InstallTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             installer.install(self.build, self.prefix)
         self.assertTrue(desktop.is_symlink())
+
+    def test_non_executable_browser_preserves_existing_installation(self):
+        installer.install(self.build, self.prefix)
+        launcher = self.prefix / 'bin/ccbaga-a'
+        desktop = self.prefix / 'share/applications/ccbaga-browser.desktop'
+        previous_desktop = desktop.read_bytes()
+        (self.build / 'requirement-french').write_text('replacement')
+        (self.build / 'browser-runtime/LinuxBrowser/chrome').chmod(0o644)
+        with self.assertRaisesRegex(RuntimeError, 'browser'):
+            installer.install(self.build, self.prefix)
+        self.assertEqual(launcher.read_text(), 'fixture')
+        self.assertEqual(desktop.read_bytes(), previous_desktop)
+        browser = self.prefix / 'share/ccbaga-install/lib/CCBaga-A/browser-runtime/LinuxBrowser/chrome'
+        self.assertTrue(installer.os.access(browser, installer.os.X_OK))
+
+    def test_incomplete_browser_ui_preserves_existing_installation(self):
+        installer.install(self.build, self.prefix)
+        launcher = self.prefix / 'bin/ccbaga-a'
+        desktop = self.prefix / 'share/applications/ccbaga-browser.desktop'
+        previous_desktop = desktop.read_bytes()
+        (self.build / 'requirement-french').write_text('replacement')
+        for name in ['browser.html', 'assets/browser.js']:
+            with self.subTest(missing=name):
+                resource = self.build / 'browser-ui' / name
+                original = resource.read_bytes()
+                resource.unlink()
+                with self.assertRaisesRegex(RuntimeError, 'browser UI'):
+                    installer.install(self.build, self.prefix)
+                self.assertEqual(launcher.read_text(), 'fixture')
+                self.assertEqual(desktop.read_bytes(), previous_desktop)
+                installed = self.prefix / 'share/ccbaga-install/lib/CCBaga-A/browser-ui' / name
+                self.assertEqual(installed.read_bytes(), original)
+                resource.write_bytes(original)
 
     def test_failed_desktop_write_rolls_back_application(self):
         installer.install(self.build, self.prefix)
