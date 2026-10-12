@@ -1,0 +1,58 @@
+name: Fork-only release assembly regression proof
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    if: github.repository == 'rudycelekli/CCBaga'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+          ref: 3a87e996855efc4c9cdd84b788b1889a9fa72716
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Native original and fixed controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir proof
+          test "$(git rev-parse HEAD)" = 3a87e996855efc4c9cdd84b788b1889a9fa72716
+          git rev-parse HEAD > proof/head.txt
+          python --version > proof/python.txt
+          python - <<'PYSCRIPT'
+          import pathlib, subprocess, tempfile, hashlib, platform, json, sys
+          out=pathlib.Path('proof')
+          (out/'platform.txt').write_text(platform.platform())
+          files=['scripts/assemble-release.py','scripts/test-assemble-release.py']
+          (out/'source-sha256.json').write_text(json.dumps({f:hashlib.sha256(pathlib.Path(f).read_bytes()).hexdigest() for f in files}))
+          with tempfile.TemporaryDirectory() as td:
+              p=pathlib.Path(td)
+              p.joinpath('assemble-release.py').write_bytes(subprocess.check_output(['git','show','612ddd9f11a3cf2ecd64c41dc53c481cfd862679:scripts/assemble-release.py']))
+              p.joinpath('test-assemble-release.py').write_bytes(pathlib.Path(files[1]).read_bytes())
+              before=subprocess.run([sys.executable,str(p/'test-assemble-release.py')],capture_output=True,text=True)
+              log=before.stdout+before.stderr
+              (out/'before.log').write_text(log)
+              assert before.returncode==1 and 'Ran 2 tests' in log and 'FAILED (failures=6)' in log and log.count('SystemExit not raised')==6
+              after=subprocess.run([sys.executable,files[1]],capture_output=True,text=True)
+              log=after.stdout+after.stderr
+              (out/'after.log').write_text(log)
+              assert after.returncode==0 and 'Ran 2 tests' in log and 'OK' in log
+          PYSCRIPT
+          git diff --check
+          git diff --exit-code
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-assembly-proof-${{ matrix.os }}
+          path: proof/
+          if-no-files-found: error
