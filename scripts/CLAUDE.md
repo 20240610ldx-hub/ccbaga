@@ -17,7 +17,7 @@ release-macos.py: 外部凭据与可选 CC_RELEASE_VERSION 驱动三阶段公证
 dmg-settings.py: 固定 800×500 像素背景、两应用到 Applications 的拖拽坐标；通知文件保留在盘内但默认隐藏，不依赖 Finder 自动化。
 verify-dmg.py: 只读挂载实际安装盘，校验双应用名称、包标识与启动入口，再校验严格签名与 Gatekeeper、Applications 链接和像素背景；Finder 元数据不得破坏应用签名。
 release-requirements.txt: dmgbuild、ds-store 与 mac-alias 的完整版本及 wheel SHA-256；仅发布阶段安装，不增大应用包。
-package-browser.sh: 先品牌化签名，再打包引擎，ditto 保留 Framework 链接与可执行权限；归档进入应用资源；Linux 将源引擎复制到 CARGO_TARGET_DIR 的 release 资源树，保持源码/Arch 安装契约，系统包另走 libexec。
+package-browser.sh: 先品牌化签名，再打包引擎，ditto 保留 Framework 链接与可执行权限；归档进入应用资源；Linux 将源引擎暂存后完整替换 CARGO_TARGET_DIR 的 release 资源树中的 LinuxBrowser，保持源码/Arch 安装契约，系统包另走 libexec。
 dev-install.py: 本机 Apple Silicon 快速 debug/custom-protocol 构建、临时签名与双应用重装，安装前验证 Chromium 实际 CLI 可加载；过滤 Apple/更新私钥环境；不公证、不生成 DMG、不发布。
 test-install-apps.py: 安装模式信任边界与环境隔离的离线回归，不操作真实应用或密钥。
 install-apps.sh: bun install:apps 兼容入口，只转交统一安装层。
@@ -25,7 +25,6 @@ install-apps.py: 正式包严格签名/Gatekeeper；--development 仅本机 debu
 claude-cli.sh: 原生宿主内嵌的只读安装检查与官方 CLI 卸载/重装，使用登录终端 PATH，发现 nvm/全局 npm、Homebrew 双通道与原生版本；只卸载程序，保护自定义启动器与配置资产，重装沿用已识别包管理器并核验版本。
 install-linux.py: Linux 用户前缀安装并保留资料；拒绝自定义启动器、链接父目录与整个安装目录下仍运行的 A/B，失败回滚。
 test-linux.py: 临时构建验证安装隔离、B 运行保护、桌面写入回滚、Exec 引用与载荷缺失/引擎篡改拒绝；不访问用户资料。
-[PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 
 assemble-release.py: 逐平台校验后合并更新平台清单，以明确白名单交付九个公开文件；内部签名、公证和引擎地图只留 CI，下载表独立展示安装器，说明可恢复身份管理。
 sign-windows-update.py: 已验收安装器的独立版本绑定更新签名和官方更新器核验；更新私钥不进入构建或测试。
@@ -35,3 +34,7 @@ release-linux.py: 无 Apple/更新凭据的 x86_64 三格式构建，先运行�
 test-rpm.py: 临时 DEB 文件树经真实 rpmbuild 转换，回归 RPM 版本/架构、桌面入口与引擎字节，不执行样本程序。
 verify-linux-package.py: Linux 安装包只读载荷契约，供 Ubuntu/Arch 共用，拒绝缺失 UI、入口或被改写的引擎文件/链接。
 build-arch.sh: 固定摘要容器准备 Node.js 等构建/测试依赖，以非 root makepkg、原生回归与解包验收，公开源码与 Cargo 缓存挂载；不接触 macOS 凭据。
+
+package-linux-browser.py: Linux 源码/Arch 的所属引擎目录完整替换；暂存和提交失败保留旧构建，保持符号链接/权限和其他资源，不混入已删除的旧引擎文件。
+test-package-linux-browser.py: 真实打包入口的首次/重建、版本/执行权限前置检查、复制/提交回滚回归；临时样本不安装引擎，非 Linux 仅替换 uname 选择 Linux 分支。
+[PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
