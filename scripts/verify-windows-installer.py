@@ -32,7 +32,7 @@ def main():
     trace=Path(tempfile.gettempdir())/'ccbaga-ci-startup.log';trace.unlink(missing_ok=True)
     installer=Path(sys.argv[1]).resolve()
     manifest=json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))
-    # ----- 与 Tauri dirs::data_dir 相同的 Known Folder，环境变量不重定向它 -----
+    # ----- 与 Tauri dirs::data_dir 相同的 Known Folder，宿主和验收进程保持相同环境 -----
     shell=ctypes.WinDLL('shell32');ole=ctypes.WinDLL('ole32')
     known=shell.SHGetKnownFolderPath
     known.argtypes=[ctypes.c_void_p,wintypes.DWORD,wintypes.HANDLE,ctypes.POINTER(ctypes.c_void_p)];known.restype=ctypes.c_long
@@ -45,12 +45,14 @@ def main():
     if data.exists():raise SystemExit('Refusing to touch pre-existing CCBaga application data')
     with tempfile.TemporaryDirectory(prefix='ccbaga-installer-') as temporary:
         folder=Path(temporary)/'应用 with spaces'
-        home=Path(temporary)/'fixture-home';home.mkdir()
+        home=Path(os.environ['USERPROFILE'])
+        claude=home/'.claude'
+        if claude.exists():raise SystemExit('Refusing to touch pre-existing Claude data on the CI runner')
         skill=home/'.claude/skills/personal/SKILL.md';skill.parent.mkdir(parents=True);skill.write_text('keep-skill',encoding='utf-8')
         settings=home/'.claude/settings.json';settings.write_text('{"keep":true}',encoding='utf-8')
         profile=data/'browser/profile/Default/personal-data';profile.parent.mkdir(parents=True);profile.write_bytes(b'keep-profile')
         env={k:v for k,v in os.environ.items() if not k.startswith(('APPLE_','TAURI_SIGNING_PRIVATE_KEY'))}
-        env.update(USERPROFILE=str(home),HOME=str(home),CC_CLI_USER_DIR=str(home),HTTPS_PROXY='http://secret-marker.invalid:1')
+        env.update(CC_CLI_USER_DIR=str(home),HTTPS_PROXY='http://secret-marker.invalid:1')
         def install():
             subprocess.run(f'"{installer}" /S /D={folder}',check=True,timeout=180,env=env)
         def payload():
@@ -128,6 +130,7 @@ def main():
         finally:
             stop()
             shutil.rmtree(data)
+            shutil.rmtree(claude)
             trace.unlink(missing_ok=True)
 
 if __name__=='__main__':main()

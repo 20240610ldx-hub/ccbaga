@@ -198,6 +198,8 @@ jobs:
           retention-days: 14
   windows:
     needs: version
+    outputs:
+      installer_ready: ${{ steps.windows_build.outcome == 'success' }}
     runs-on: windows-2025
     timeout-minutes: 90
     steps:
@@ -234,6 +236,7 @@ jobs:
           CC_RELEASE_VERSION: ${{ needs.version.outputs.version }}
         run: python scripts/release-windows.py check
       - name: Build current-user Windows installer
+        id: windows_build
         env:
           CC_RELEASE_VERSION: ${{ needs.version.outputs.version }}
         run: python scripts/release-windows.py build
@@ -249,6 +252,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: python scripts/sign-windows-update.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always() && steps.windows_build.outcome == 'success'
         with:
           name: windows-${{ github.run_id }}
           path: |
@@ -261,6 +265,7 @@ jobs:
           retention-days: 7
   windows_compat:
     needs: windows
+    if: always() && needs.windows.outputs.installer_ready == 'true'
     runs-on: windows-2022
     timeout-minutes: 20
     steps:
