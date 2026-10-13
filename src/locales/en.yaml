@@ -904,7 +904,7 @@
 "使用空身份": "Use empty identity"
 "账号信息暂不可读": "Account information unavailable"
 "账号信息未识别": "Account information not identified"
-"相当于没有痕迹。新账户登录时务必选择。": "Like starting with a clean slate. Always select this before signing in to a new account."
+"清空本地登录身份；保留选定工作区资料，不影响服务端记录。": "Clears local sign-in credentials; preserves selected workspace data, leaving server records unchanged."
 "警告：此操作不可撤销，不会创建新备份。": "Warning: this cannot be undone. No new backup will be created."
 "使用说明": "Guide"
 "本软件仅供旅居人员管理本人的 Claude 身份，禁止用于违反 Anthropic 官方用户协议的行为。": "CCBaga is intended solely for people residing or traveling abroad to manage their own Claude identities. Use that violates Anthropic's official terms of service is prohibited."
