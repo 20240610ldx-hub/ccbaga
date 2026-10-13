@@ -1,5 +1,5 @@
-# [INPUT]: PR 合并提交、锁定依赖与各平台原生测试工具。
-# [OUTPUT]: Ubuntu、macOS、Windows 的前端/原生/Skill、发布装配与平台回归结果，不交付安装包。
+# [INPUT]: PR 合并提交、三平台原生工具与初始引擎准备的离线文件树。
+# [OUTPUT]: 前端/原生/Skill、发布装配与平台回归结果，不交付安装包。
 # [POS]: 无凭据 PR 检查；不签名、不发布、不下载引擎，独立于 release.yml。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 name: Checks
@@ -46,6 +46,8 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13'
+      - name: Browser preparation regression
+        run: python scripts/test-fetch-browser.py
       - name: Prepare Ubuntu tools
         if: runner.os == 'Linux'
         run: |
