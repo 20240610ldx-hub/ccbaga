@@ -110,7 +110,8 @@ jobs:
               run = subprocess.run([sys.executable, str(directory / 'scripts' / filename), '-v'] if filename != 'test-fetch-browser.py'
                                    else [sys.executable, str(directory / 'scripts' / filename)],
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
-              log = run.stdout.decode('utf-8')
+              # Keep raw stdout in artifacts; normalize native Windows line endings only for parsing.
+              log = run.stdout.decode('utf-8').replace('\r\n', '\n')
               (output / (phase + '-' + filename + '.log')).write_bytes(run.stdout)
               outcomes = terminal_outcomes(log)
               receipt['runs'].append({'phase': phase, 'test': filename, 'exit': run.returncode, 'outcomes': outcomes})
