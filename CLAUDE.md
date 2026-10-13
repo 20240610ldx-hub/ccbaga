@@ -4,7 +4,7 @@ Tauri 2.12.1 + Rust + macOS AppKit/UniformTypeIdentifiers/Accessibility/Security
 
 <directory>
 .github/ - PR 的 Ubuntu/macOS/Windows 无凭据回归、release 分支自动测试、公证与发布工作流，以及依赖更新；见其 CLAUDE.md
-src/ - 黑色主题的 Laper 最新 Landing 斜纹/点阵/细线内容壳、Cromma UI 极简侧栏导航与右侧傻瓜设置（国家地区选择和四个快捷按钮）、Claude 身份竖式立体工牌（白底空身份始终最左、当前账号其次、顶部挂孔绿光表示当前身份、弹簧横滚/视差与卡片直接切换）与 CLI 卸载/重装、浏览器核验、电脑设置与网络环境（三步固定资源入口、五项 AI 图标分段、问号服务规格与双语安装/运行提示词）及 YAML 中英文切换；见其 CLAUDE.md
+src/ - 黑色主题的 Laper 最新 Landing 斜纹/点阵/细线内容壳、Cromma UI 极简侧栏导航与右侧傻瓜设置（国家地区选择和四个快捷按钮）、Claude 身份竖式立体工牌（白底空身份始终最左、当前账号其次、顶部挂孔绿光表示当前身份、弹簧横滚/视差与卡片直接切换）与 CLI 卸载/重装、浏览器核验、电脑设置与网络环境（三步固定资源入口、五项 AI 图标分段、问号服务规格与双语安装/运行提示词）及 YAML 中英文切换与只读编号帮助页（账号说明原生折叠）；见其 CLAUDE.md
 src-tauri/ - 白名单身份暂存/切换、Claude Code CLI 安装管理、独立指纹浏览器、国家地区目录、电脑环境设置与固定网络资源导航；见其 CLAUDE.md
 browser-runtime/ - 固定摘要的独立 Fingerprint Chromium 引擎与保留 Framework 链接的打包归档；见其 CLAUDE.md
 tests/ - 独立身份 GUI 虚构 IPC 入口，供发布前真实浏览器交互模拟；不进入生产构建；见其 CLAUDE.md
@@ -12,7 +12,7 @@ scripts/ - 图标、签名、引擎打包、应用安装与Claude Code CLI 管�
 skills/ - Agent Skills 标准目录与 npm/npx 通用安装，MIT/兼容声明和全部脚本独立交付；AI 收集用户资料、运行本机预检与经确认的远端部署，应用只提供安装提示词；见其 CLAUDE.md
 packaging/ - 社区 Linux 构建配方；见其 CLAUDE.md
 assets/ - 两张压缩品牌图、五项 LobeHub AI SVG 与极客像素安装盘背景，分别供图标/README 和 DMG 布局使用；见其 CLAUDE.md
-docs/ - 英文仓库封面与 Linux/Windows 开发说明；见其 CLAUDE.md
+docs/ - 英文仓库封面、操作速查与 Linux/Windows 开发说明；见其 CLAUDE.md
 vendor/ - cromma-web 同款组件库副本，主题、原语与 Pika 图标自包含；见其 CLAUDE.md
 </directory>
 <config>
@@ -22,14 +22,14 @@ index.html - 单窗口 HTML 入口
 browser.html - 独立浏览器实测页入口
 vite.config.ts - 双入口静态构建与 YAML 编译，文案单独共享分块
 tsconfig.json - 严格类型检查与 Vite 静态资源导入类型，品牌图由构建器打包
-README.md - 英文项目入口，功能、安装、架构、开发与验证边界
+README.md - 英文项目入口，旅居人员本人 Claude 身份管理用途与禁止违反官方用户协议声明、功能、安装和开发导航
 CONTRIBUTING.md - 英文贡献流程与模块契约
 LICENSE - 项目原创代码 MIT 授权
 NOTICE.md - 第三方引擎、组件与图标的授权边界
 .gitignore - 排除本机凭据、依赖、引擎与发布产物
 </config>
 
-法则：侧栏傻瓜设置置顶，分隔线后网络环境、Claude 身份管理、浏览器环境、电脑环境；BAGA! 品牌和黑白 Laper 斜纹/点阵壳，完整侧栏边框，底部更新与界面语言。YAML 中英文独立于系统/指纹语言，运行包嵌入前端，不依赖开发服务。
+法则：侧栏傻瓜设置置顶，分隔线后网络环境、Claude 身份管理、浏览器环境、电脑环境，再分隔使用说明；BAGA! 品牌和黑白 Laper 斜纹/点阵壳，完整侧栏边框，底部更新与界面语言。YAML 中英文独立于系统/指纹语言，运行包嵌入前端，不依赖开发服务。
 身份契约：默认范围同时覆盖 Claude Code 与 Claude Desktop；用户逐类选择保留在工作区或随身份暂存。登录/本地标识始终随身份；Skills、插件、MCP、个人设置、项目记录、会话历史和缓存分别选择，实际项目源码不扫描。空身份是把已选择的当前状态从 Claude 默认工作目录移开，保存可恢复身份后留出空工作区，不宣称抹除服务端记录或对同用户程序隐身。
 身份显示：只读默认 .claude.json 中 oauthAccount 的 displayName/emailAddress/organizationName 白名单；UI 不接收令牌。Desktop 仅元数据候选检测，未知或不可读账号明确标注，不宣称当前账号已通过服务端验证。
 保险库：app_data_dir/identity-vault 与 Claude 工作目录分离；bundled SQLite 保存名称、策略、归档编号/大小/时间与恢复日志，不保存凭据正文；FULL 同步、数据库事务。自定义 BAGAID01 容器用 tar/gzip 压缩、ring AES-256-GCM 认证帧和独立归档密钥，保险库主密钥只在受保护本机 key.bin 中；POSIX 0700/0600、Windows 创建时明确用户所有者/独占 DACL。普通解压工具不能直接读取，但本机同用户/管理员不是绝对隔离边界。

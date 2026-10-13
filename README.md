@@ -1,6 +1,6 @@
 <!--
 [INPUT]: 已实现功能、开发配置、跨平台 PR 回归、双应用使用方式与 MIT/第三方许可边界。
-[OUTPUT]: 面向公开仓库的英文产品首页、安装与开发入口、架构和贡献导航。
+[OUTPUT]: 面向公开仓库的英文产品首页、旅居人员用途声明、安装与开发入口、架构和贡献导航。
 [POS]: 项目公开入口，连接产品功能、使用说明与模块导航。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 -->
@@ -21,6 +21,7 @@
     <a href="#installation">Installation</a> ·
     <a href="#updates">Updates</a> ·
     <a href="#quick-start">Quick start</a> ·
+    <a href="docs/usage.md">Usage guide</a> ·
     <a href="#architecture">Architecture</a> ·
     <a href="#development">Development</a> ·
     <a href="CONTRIBUTING.md">Contributing</a>
@@ -28,6 +29,8 @@
 </div>
 
 ![CCBaga: native control, observable environments](docs/readme-hero.png)
+
+**Intended use:** CCBaga is intended solely for people residing or traveling abroad to manage their own Claude identities. Use that violates Anthropic's official terms of service is prohibited.
 
 CCBaga brings local maintenance and environment setup into one focused desktop workflow. Inspect Claude data before removing it, rotate your companion browser's fingerprint and restart it, align system settings with a selected region, and compare real browser readings with the machine and network exit.
 
@@ -51,6 +54,8 @@ Two applications work together: **CCBaga-A** owns native operations; **CCBaga-B*
 **One region selector. Four everyday actions.** Easy setup puts browser cache cleanup, fingerprint rotation, timezone/language reset and identity archiving on the same page. The sidebar keeps advanced controls in Network, Claude identities, Browser and Computer.
 
 The interface supports **English and Chinese**, with shared YAML catalogs. Switching the interface language does not change the computer or browser language.
+
+The bilingual **Usage guide** covers common actions and data boundaries. See the [full guide](docs/usage.md).
 
 ## Installation
 
