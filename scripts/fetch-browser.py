@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: 固定上游 Fingerprint Chromium macOS DMG/Linux tar.xz/Windows ZIP、发布者 SHA-256 与平台工具。
-# [OUTPUT]: 校验来源与架构后恢复被 Git 排除的 Browser.app、LinuxBrowser 或 WindowsBrowser，不读取用户资料。
+# [OUTPUT]: 校验来源与架构后恢复被 Git 排除的 Browser.app、LinuxBrowser 或 WindowsBrowser，完整复制后才公开目标，失败清理暂存目录，不读取用户资料。
 # [POS]: 干净检出的引擎准备边界；保留上游完整资源与许可，不下载随时间变化的 latest。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import hashlib
@@ -17,6 +17,20 @@ ROOT = Path(__file__).resolve().parent.parent
 VERSION = '148.0.7778.215'
 URL = f'https://github.com/adryfish/fingerprint-chromium/releases/download/{VERSION}/ungoogled-chromium_{VERSION}-1.1_macos.dmg'
 SHA256 = 'b72f091e2e1a7583eed389c4b8e3534ed355e568af8c8bbf8fc30a25e23ca679'
+
+
+def publish_engine(source, target, copy):
+    """Copy beside the destination, then publish a complete prepared engine."""
+    staging = Path(tempfile.mkdtemp(prefix=f'.{target.name}-stage-', dir=target.parent))
+    pending = staging / 'engine'
+    try:
+        copy(source, pending)
+        pending.rename(target)
+    finally:
+        try:
+            shutil.rmtree(staging)
+        except OSError as error:
+            raise RuntimeError(f'Could not remove engine staging directory at {staging}') from error
 
 
 def fetch_linux():
@@ -48,7 +62,7 @@ def fetch_linux():
         if VERSION not in actual:
             raise SystemExit('Upstream browser version mismatch')
         (binary.parent / 'version.txt').write_text(VERSION + '\n')
-        shutil.copytree(binary.parent, target, symlinks=True)
+        publish_engine(binary.parent, target, lambda source, pending: shutil.copytree(source, pending, symlinks=True))
     print(f'Fingerprint Chromium {VERSION}: Linux x86_64 SHA-256 verified')
 
 
@@ -84,7 +98,7 @@ def fetch_windows():
         if VERSION not in actual:
             raise SystemExit('Upstream browser version mismatch')
         (binary.parent / 'version.txt').write_text(VERSION + '\n')
-        shutil.copytree(binary.parent, target)
+        publish_engine(binary.parent, target, shutil.copytree)
     print(f'Fingerprint Chromium {VERSION}: Windows x64 SHA-256 verified')
 
 
@@ -116,7 +130,7 @@ def main():
             binary = apps[0] / 'Contents/MacOS' / metadata['CFBundleExecutable']
             if 'arm64' not in subprocess.check_output(['lipo', '-archs', str(binary)], text=True).split():
                 raise SystemExit('Upstream browser does not contain Apple Silicon code')
-            subprocess.run(['ditto', str(apps[0]), str(target)], check=True)
+            publish_engine(apps[0], target, lambda source, pending: subprocess.run(['ditto', str(source), str(pending)], check=True))
         finally:
             for volume in volumes:
                 subprocess.run(['hdiutil', 'detach', str(volume)], check=True)
