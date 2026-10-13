@@ -71,8 +71,41 @@ fi
 installer=''
 if [[ "$action" == reinstall && ${#npm_commands} == 0 && ${#casks} == 0 ]]; then
   step '正在下载 Claude Code 官方安装器。'
-  installer=$(/usr/bin/curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --max-time 60 https://claude.ai/install.sh 2>/dev/null) || fail 'Claude Code 官方安装器下载失败，请检查网络后重试。'
-  [[ "$installer" == '#!'* && ${#installer} -lt 65536 ]] || fail 'Claude Code 官方安装器内容无效，已停止操作。'
+  if [[ -n "$CC_TEST_INSTALLER" ]]; then
+    installer="$CC_TEST_INSTALLER"
+  else
+    installer=$(/usr/bin/curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --max-time 60 https://claude.ai/install.sh 2>/dev/null) || fail 'Claude Code 官方安装器下载失败，请检查网络后重试。'
+    [[ "$installer" == '#!'* && ${#installer} -lt 65536 ]] || fail 'Claude Code 官方安装器内容无效，已停止操作。'
+  fi
+fi
+native_backup=''
+rollback_native() {
+  if [[ -n "$native_backup" && -d "$native_backup" ]]; then
+    step '正在回滚恢复先前的 Claude Code 原生程序。'
+    if [[ -e "$native_backup/launcher" || -L "$native_backup/launcher" ]]; then
+      /bin/mkdir -p "${launcher:h}" 2>/dev/null || true
+      /bin/cp -P "$native_backup/launcher" "$launcher" 2>/dev/null || true
+    fi
+    if [[ -d "$native_backup/versions" ]]; then
+      /bin/mkdir -p "$native_dir/versions" 2>/dev/null || true
+      /bin/cp -RP "$native_backup/versions"/* "$native_dir/versions/" 2>/dev/null || true
+    fi
+    /bin/rm -rf "$native_backup" 2>/dev/null || true
+    return 0
+  fi
+  return 1
+}
+if [[ "$action" == reinstall && (( native )) ]]; then
+  native_backup="${native_dir:h}/.reinstall_backup"
+  /bin/rm -rf "$native_backup" 2>/dev/null || true
+  /bin/mkdir -p "$native_backup" 2>/dev/null || true
+  if [[ -e "$launcher" || -L "$launcher" ]]; then
+    /bin/cp -P "$launcher" "$native_backup/launcher" 2>/dev/null || true
+  fi
+  if [[ -d "$native_dir/versions" ]]; then
+    /bin/mkdir -p "$native_backup/versions" 2>/dev/null || true
+    /bin/cp -RP "$native_backup/versions"/* "$native_backup/versions/" 2>/dev/null || true
+  fi
 fi
 step '正在卸载 Claude Code CLI。'
 for npm in "$npm_commands[@]"; do
@@ -114,14 +147,27 @@ elif (( ${#casks} )); then
   cli=$(whence -p claude || true)
   method=Homebrew
 else
-  print -r -- "$installer" | /bin/bash -s -- latest >/dev/null 2>&1 || fail 'Claude Code 原生重装失败，请检查网络和安装目录权限。'
+  print -r -- "$installer" | /bin/bash -s -- latest >/dev/null 2>&1 || {
+    if rollback_native; then
+      fail 'Claude Code 原生重装失败，已恢复原程序；请检查网络和安装目录权限。'
+    else
+      fail 'Claude Code 原生重装失败，请检查网络和安装目录权限。'
+    fi
+  }
   cli="$launcher"
   method=native
 fi
 step '正在核验 Claude Code CLI 版本。'
-[[ -n "$cli" && -x "$cli" ]] || fail 'Claude Code 重装后未找到可执行程序。'
-version=$(DISABLE_AUTOUPDATER=1 "$cli" --version 2>/dev/null) || fail 'Claude Code 重装后的版本核验失败。'
-[[ "$version" == *'Claude Code'* ]] || fail 'Claude Code 重装后的版本信息无效。'
+if [[ -z "$cli" || ! -x "$cli" ]] || ! version=$(DISABLE_AUTOUPDATER=1 "$cli" --version 2>/dev/null) || [[ "$version" != *'Claude Code'* ]]; then
+  if rollback_native; then
+    fail 'Claude Code 重装后的版本核验失败，已恢复原程序。'
+  else
+    fail 'Claude Code 重装后的版本核验失败。'
+  fi
+fi
+if [[ -n "$native_backup" && -d "$native_backup" ]]; then
+  /bin/rm -rf "$native_backup" 2>/dev/null || true
+fi
 print -r -- "CC_CLI_METHOD=$method"
 print -r -- "CC_CLI_PATH=$cli"
 print -r -- "CC_CLI_VERSION=$version"

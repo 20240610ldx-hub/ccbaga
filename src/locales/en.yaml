@@ -929,3 +929,7 @@
 "保存页面提示和相关工单。": "Save the message and related support tickets."
 "用受影响的账号登录 claude.ai，按页面指引申诉。": "Sign in to claude.ai with the affected account and follow the appeal instructions."
 "如页面提供导出入口，可下载数据；不要绕过限制。": "Export your data if the page offers it. Do not bypass the restriction."
+
+"Claude Code 原生重装失败，已恢复原程序；请检查网络和安装目录权限。": "Native Claude Code reinstall failed and previous program was restored. Check your connection and installation directory permissions."
+"Claude Code 重装后的版本核验失败，已恢复原程序。": "Version check failed after Claude Code reinstall. Previous program was restored."
+"正在回滚恢复先前的 Claude Code 原生程序。": "Rolling back and restoring the previous native Claude Code program."

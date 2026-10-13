@@ -29,6 +29,9 @@ function Run($program, $arguments) {
     if ($LASTEXITCODE -ne 0) { Fail 'Claude Code 安装命令执行失败。' }
 }
 function NativeInstaller {
+    if ($env:CC_TEST_INSTALLER) {
+        return [scriptblock]::Create($env:CC_TEST_INSTALLER)
+    }
     try {
         $content=(Invoke-WebRequest -UseBasicParsing -Uri 'https://claude.ai/install.ps1' -TimeoutSec 60).Content
     } catch { Fail 'Claude Code 官方安装器下载失败，请检查网络后重试。' }
@@ -128,6 +131,45 @@ try {
             # 先下载并检查脚本，再卸载；网络或响应异常时不丢失已有程序。
             $installer=NativeInstaller
         }
+        $backupDir=$null
+        if ($action -eq 'reinstall' -and $method -eq 'native' -and $state.methods.Contains('native')) {
+            $backupDir=Join-Path (Split-Path $versions -Parent) '.reinstall_backup'
+            if (Test-Path -LiteralPath $backupDir) { Remove-Item -LiteralPath $backupDir -Recurse -Force }
+            New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+            if (Test-Path -LiteralPath $native) {
+                Copy-Item -LiteralPath $native -Destination (Join-Path $backupDir 'claude.exe') -Force
+            }
+            if (Test-Path -LiteralPath $versions) {
+                $backupVersions=Join-Path $backupDir 'versions'
+                New-Item -ItemType Directory -Path $backupVersions -Force | Out-Null
+                foreach ($file in $state.nativeFiles) {
+                    if (Test-Path -LiteralPath $file.FullName) {
+                        Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $backupVersions $file.Name) -Force
+                    }
+                }
+            }
+        }
+        function script:RollbackNative {
+            if ($backupDir -and (Test-Path -LiteralPath $backupDir)) {
+                Step '正在回滚恢复先前的 Claude Code 原生程序。'
+                $backupExe=Join-Path $backupDir 'claude.exe'
+                if (Test-Path -LiteralPath $backupExe) {
+                    $nativeDir=Split-Path $native -Parent
+                    if (-not (Test-Path -LiteralPath $nativeDir)) { New-Item -ItemType Directory -Path $nativeDir -Force | Out-Null }
+                    Copy-Item -LiteralPath $backupExe -Destination $native -Force
+                }
+                $backupVersions=Join-Path $backupDir 'versions'
+                if (Test-Path -LiteralPath $backupVersions) {
+                    if (-not (Test-Path -LiteralPath $versions)) { New-Item -ItemType Directory -Path $versions -Force | Out-Null }
+                    Get-ChildItem -LiteralPath $backupVersions -File | ForEach-Object {
+                        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $versions $_.Name) -Force
+                    }
+                }
+                Remove-Item -LiteralPath $backupDir -Recurse -Force
+                return $true
+            }
+            return $false
+        }
         Step '正在卸载 Claude Code CLI。'
         RemovePrograms $state
         if ($action -eq 'reinstall') {
@@ -141,11 +183,26 @@ try {
                     $global:LASTEXITCODE=0
                     & $installer | Out-Null
                     if ($LASTEXITCODE -ne 0) { throw 'Native installer failed' }
-                } catch { Fail 'Claude Code 原生重装失败，请检查网络和安装目录权限。' }
+                } catch {
+                    if (RollbackNative) {
+                        Fail 'Claude Code 原生重装失败，已恢复原程序；请检查网络和安装目录权限。'
+                    } else {
+                        Fail 'Claude Code 原生重装失败，请检查网络和安装目录权限。'
+                    }
+                }
             }
             Step '正在核验 Claude Code CLI 版本。'
             $state=Status
-            if (-not $state.known -or -not $state.version) { Fail 'Claude Code 重装后的版本核验失败。' }
+            if (-not $state.known -or -not $state.version) {
+                if (RollbackNative) {
+                    Fail 'Claude Code 重装后的版本核验失败，已恢复原程序。'
+                } else {
+                    Fail 'Claude Code 重装后的版本核验失败。'
+                }
+            }
+            if ($backupDir -and (Test-Path -LiteralPath $backupDir)) {
+                Remove-Item -LiteralPath $backupDir -Recurse -Force
+            }
         } else { $state=Status;if($state.methods.Count){Fail 'Claude Code 卸载未完成。'} }
     }
     Write-Output "CC_CLI_METHOD=$($state.methods -join ' / ')"
