@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory(prefix='ccbaga-rpm-test-') as temporary:
         'usr/bin/requirement-french': elf,
         'usr/libexec/CCBaga-B/chrome': elf,
         'usr/lib/CCBaga-A/browser-runtime/LICENSE.fingerprint-chromium': b'fixture',
-        'usr/lib/CCBaga-A/browser-ui/browser.html': b'fixture',
+        'usr/lib/CCBaga-A/browser-ui/browser.html': b'<script type="module" src="./assets/browser.js"></script>',
         'usr/lib/CCBaga-A/browser-ui/assets/browser.js': b'fixture',
         'usr/share/applications/ccbaga-browser.desktop': b'Exec=requirement-french --browser %U',
         'usr/share/icons/hicolor/512x512/apps/ccbaga-browser.png': b'fixture',
