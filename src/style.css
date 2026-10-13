@@ -298,6 +298,32 @@ h3 { margin: 0; font-size: 13px; font-weight: 500; }
 .resource-specs dt { color: var(--muted-foreground); }
 .resource-specs dd { margin: 0; overflow-wrap: anywhere; }
 
+/* ----- 使用说明：把操作后果、账号边界和申诉路径集中在可扫描的帮助页 ----- */
+.help-page { padding-bottom: 36px; }
+.help-page > .cleanup-title { margin-bottom: var(--landing-band); }
+.help-lede { max-width: 920px; margin: 0 auto; padding: 20px 28px; border: 1px solid var(--landing-line); background: var(--muted); }
+.help-lede strong { display: block; font-size: 14px; font-weight: 550; line-height: 1.6; }
+.help-lede p { margin-top: 8px; font-size: 12px; line-height: 1.8; color: var(--muted-foreground); }
+.help-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 920px; margin: 16px auto 0; border: 1px solid var(--landing-line); }
+.help-card { min-width: 0; padding: 22px 24px; border-bottom: 1px solid var(--landing-line); }
+.help-grid .help-card:nth-child(even) { border-left: 1px solid var(--landing-line); }
+.help-grid .help-card:nth-last-child(-n+2) { border-bottom: 0; }
+.help-card h2 { font-size: 14px; font-weight: 550; }
+.help-card > p { margin-top: 12px; font-size: 12px; line-height: 1.8; color: var(--muted-foreground); }
+.help-list { display: grid; gap: 10px; margin: 14px 0 0; padding-left: 18px; color: var(--muted-foreground); }
+.help-list li { padding-left: 2px; font-size: 12px; line-height: 1.75; }
+.help-risk { max-width: 920px; margin: 16px auto 0; border: 1px solid #e3c2b9; background: #fff6f2; }
+.help-risk h2 { color: #8d3023; }
+.help-risk > p, .help-risk .help-list { color: #754d46; }
+.help-source-note { padding-top: 16px; border-top: 1px solid var(--landing-line); font-size: 11px !important; }
+@media(max-width:800px) {
+  .help-grid { grid-template-columns: 1fr; }
+  .help-grid .help-card:nth-child(even) { border-left: 0; }
+  .help-grid .help-card:nth-last-child(-n+2) { border-bottom: 1px solid var(--landing-line); }
+  .help-grid .help-card:last-child { border-bottom: 0; }
+  .help-lede, .help-card { padding-inline: 20px; }
+}
+
 /* ----- 身份单排卡片：原生横向滚动，无分页和数量截断；空身份保持白底 ----- */
 .identity-page { height:100%; overflow-y:auto; padding:0 0 24px; scrollbar-gutter:stable; }
 .identity-page > .cleanup-title { margin:0 0 var(--landing-band); }

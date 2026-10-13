@@ -21,6 +21,7 @@
     <a href="#installation">Installation</a> ·
     <a href="#updates">Updates</a> ·
     <a href="#quick-start">Quick start</a> ·
+    <a href="docs/usage.md">Usage &amp; safety</a> ·
     <a href="#architecture">Architecture</a> ·
     <a href="#development">Development</a> ·
     <a href="CONTRIBUTING.md">Contributing</a>
@@ -51,6 +52,8 @@ Two applications work together: **CCBaga-A** owns native operations; **CCBaga-B*
 **One region selector. Four everyday actions.** Easy setup puts browser cache cleanup, fingerprint rotation, timezone/language reset and identity archiving on the same page. The sidebar keeps advanced controls in Network, Claude identities, Browser and Computer.
 
 The interface supports **English and Chinese**, with shared YAML catalogs. Switching the interface language does not change the computer or browser language.
+
+The in-app **Usage guide** explains the effect and limits of each page. Read [Usage and safety](docs/usage.md) before using identity archives, browser cleanup, proxy resources, or Claude Code maintenance. CCBaga cannot guarantee Claude account access or prevent Anthropic enforcement.
 
 ## Installation
 
