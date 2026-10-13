@@ -1,0 +1,198 @@
+name: Fork-only initial engine preparation proof
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    if: github.repository == 'rudycelekli/CCBaga' && github.event.repository.private == false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            system: Linux
+          - runner: macos-15
+            system: Darwin
+          - runner: windows-2025
+            system: Windows
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - name: Preserve exact Git blob bytes before checkout
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+          ref: d0fa5499a2aeb81620f9b303afca2987f161f665
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Capture immutable source and actual runtime
+        run: |
+          set -euo pipefail
+          mkdir proof
+          git rev-parse HEAD > proof/head.txt
+          test "$(git rev-parse HEAD)" = d0fa5499a2aeb81620f9b303afca2987f161f665
+          uname -a > proof/uname.txt
+          python --version > proof/python.txt
+      - name: Canonical Windows fixture compiler
+        if: runner.os == 'Windows'
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.98.1 --profile minimal
+          rustup default 1.98.1
+          rustc --version > proof/rustc.txt
+      - name: Immutable native baseline and fixed comparisons
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/fetch-proof.py" <<'PYSCRIPT'
+          #!/usr/bin/env python3
+          """Immutable Git-blob proof with actual-host inventory and unchanged platform controls."""
+          import ast
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import platform
+          import re
+          import subprocess
+          import sys
+          import tempfile
+          
+          BASE = '612ddd9f11a3cf2ecd64c41dc53c481cfd862679'
+          CANDIDATE = 'd0fa5499a2aeb81620f9b303afca2987f161f665'
+          FILES = {
+              'scripts/fetch-browser.py': '9c75c91888010551bf5f269a1b1d918c9cc2bb608507db34735266586c92c92e',
+              'scripts/test-fetch-browser.py': '68d5170251d84bbdf06ab3eb9935ea24271e58fa1d5c2aba1d21d015b69d9bff',
+              'scripts/CLAUDE.md': '451dc00cf5ea83c83bd85e1859ad703f3f61fb0fe53287bf290b84b394c1456a',
+              '.github/workflows/checks.yml': '4365c3efd26a6580cc03f43d0e48e92302fcf6695e40844b8788dbfbef8ac7e5',
+              '.github/workflows/CLAUDE.md': '92d4c6cffc9b0fce800b2c04e41232cf097fb88584f180990eb9ab6ab0bd7d98',
+          }
+          BASE_FETCH_HASH = '9c73fb3feac6a22a3ad4f6637750032cdfcb5729a84e95f125b06d12258ee65a'
+          PLATFORMS = {
+              'Linux': ('linux', 'test-linux.py', 6, ['install-linux.py', 'verify-linux-package.py']),
+              'Darwin': ('macos', 'test-install-apps.py', 3, ['install-apps.py', 'dev-install.py']),
+              'Windows': ('windows', 'test-windows.py', 11, ['claude-cli.ps1', 'windows-region.ps1']),
+          }
+          repository, expected_system, output = sys.argv[1:]
+          repository, output = Path(repository).resolve(), Path(output).resolve()
+          output.mkdir(parents=True, exist_ok=True)
+          receipt = {'base': BASE, 'candidate': CANDIDATE, 'actual_system': platform.system(),
+                     'platform': platform.platform(), 'python': sys.version, 'python_executable': sys.executable,
+                     'files': {}, 'runs': [], 'success': False}
+          
+          
+          def git(*arguments):
+              return subprocess.check_output(['git', '-C', str(repository), *arguments])
+          
+          
+          def blob(revision, name):
+              return git('show', revision + ':' + name)
+          
+          
+          def terminal_outcomes(log):
+              rows = re.findall(r'^(test_\w+) \(([^)]+)\) \.\.\. (ok|FAIL|ERROR|skipped[^\n]*)$', log, re.M)
+              identities = [(name, identity) for name, identity, outcome in rows]
+              assert len(identities) == len(set(identities)), log
+              return {name: outcome for name, identity, outcome in rows}
+          
+          
+          def execute(phase, directory, filename, env):
+              run = subprocess.run([sys.executable, str(directory / 'scripts' / filename), '-v'] if filename != 'test-fetch-browser.py'
+                                   else [sys.executable, str(directory / 'scripts' / filename)],
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
+              log = run.stdout.decode('utf-8')
+              (output / (phase + '-' + filename + '.log')).write_bytes(run.stdout)
+              outcomes = terminal_outcomes(log)
+              receipt['runs'].append({'phase': phase, 'test': filename, 'exit': run.returncode, 'outcomes': outcomes})
+              assert 'ERROR:' not in log and set(outcomes.values()) <= {'ok', 'FAIL'}, log
+              return run, log, outcomes
+          
+          
+          try:
+              assert platform.system() == expected_system in PLATFORMS
+              assert sys.version_info[:2] == (3, 13)
+              assert git('rev-parse', 'HEAD').decode().strip() == CANDIDATE
+              assert git('rev-parse', CANDIDATE + '^').decode().strip() == BASE
+              assert sorted(git('diff', '--name-only', BASE, CANDIDATE).decode().splitlines()) == sorted(FILES)
+              for name, digest in FILES.items():
+                  content = blob(CANDIDATE, name)
+                  assert hashlib.sha256(content).hexdigest() == digest, name
+                  assert (repository / name).read_bytes() == content, 'Checkout bytes differ from blob: ' + name
+                  receipt['files']['candidate/' + name] = digest
+              assert hashlib.sha256(blob(BASE, 'scripts/fetch-browser.py')).hexdigest() == BASE_FETCH_HASH
+              prefix, original_test, original_count, dependencies = PLATFORMS[expected_system]
+              original_source = blob(BASE, 'scripts/' + original_test)
+              original_inventory = [node.name for node in ast.walk(ast.parse(original_source))
+                                    if isinstance(node, ast.FunctionDef) and node.name.startswith('test_')]
+              assert len(original_inventory) == original_count
+              for name in [original_test, *dependencies]:
+                  assert blob(BASE, 'scripts/' + name) == blob(CANDIDATE, 'scripts/' + name), name
+              failures = {f'test_{prefix}_cleanup_failure_reports_retained_stage',
+                          f'test_{prefix}_interrupted_preparation_can_retry'}
+              controls = {f'test_{prefix}_complete_preparation', f'test_{prefix}_existing_engine_is_untouched'}
+              with tempfile.TemporaryDirectory(prefix='ccbaga-fetch-proof-') as temporary:
+                  root = Path(temporary).resolve()
+                  env = {**os.environ, 'TMPDIR': str(root), 'TEMP': str(root), 'TMP': str(root), 'PYTHONIOENCODING': 'utf-8'}
+                  original_outcomes = None
+                  for phase in ['original', 'baseline', 'fixed']:
+                      directory = root / phase
+                      (directory / 'scripts').mkdir(parents=True)
+                      names = [original_test, *dependencies]
+                      if phase != 'original':
+                          names += ['fetch-browser.py', 'test-fetch-browser.py']
+                      for name in names:
+                          revision = CANDIDATE if name == 'test-fetch-browser.py' or phase == 'fixed' else BASE
+                          content = blob(revision, 'scripts/' + name)
+                          (directory / 'scripts' / name).write_bytes(content)
+                          receipt['files'][phase + '/' + name] = hashlib.sha256(content).hexdigest()
+                      run, log, outcomes = execute(phase, directory, original_test, env)
+                      assert set(outcomes) == set(original_inventory) and set(outcomes.values()) == {'ok'}, log
+                      assert run.returncode == 0 and '\nOK\n' in log
+                      assert re.search(r'Ran ' + str(original_count) + r' tests in ', log), log
+                      if phase == 'original':
+                          original_outcomes = outcomes
+                      else:
+                          assert outcomes == original_outcomes, log
+                          run, log, outcomes = execute(phase, directory, 'test-fetch-browser.py', env)
+                          inventory = json.loads(log.splitlines()[0])
+                          assert inventory['actual_system'] == expected_system
+                          assert inventory['native_ditto'] == (expected_system == 'Darwin')
+                          assert inventory['all_platform_fixture_mode'] is False
+                          assert set(inventory['test_inventory']) == set(outcomes) == failures | controls
+                          assert len(inventory['test_inventory']) == len(outcomes) == 4
+                          assert re.search(r'Ran 4 tests in ', log), log
+                          assert all(outcomes[name] == 'ok' for name in controls), log
+                          if phase == 'baseline':
+                              assert run.returncode == 1 and 'FAILED (failures=2)' in log
+                              assert {name for name, result in outcomes.items() if result == 'FAIL'} == failures
+                              assert set(re.findall(r'^FAIL: (test_\w+)', log, re.M)) == failures
+                              assert log.count('AssertionError:') == 2, log
+                              assert 'True is not false : An interrupted copy must not publish a partial engine' in log
+                          else:
+                              assert run.returncode == 0 and '\nOK\n' in log and set(outcomes.values()) == {'ok'}
+              assert not git('status', '--porcelain', '--untracked-files=no').strip()
+              receipt['success'] = True
+          finally:
+              (output / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          PYSCRIPT
+          python "$RUNNER_TEMP/fetch-proof.py" . '${{ matrix.system }}' proof 2>&1 | tee proof/runner.log
+          git diff --check
+          git diff --exit-code
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: initial-engine-preparation-proof-${{ matrix.runner }}
+          path: proof/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 9
