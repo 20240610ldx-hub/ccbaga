@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: 可丢弃构建树、安装前缀、Linux 安装器和真实产物验收层。
-# [OUTPUT]: 安装隔离、A/B 运行保护、失败回滚、不可执行引擎、载荷缺失与引擎篡改拒绝回归。
+# [OUTPUT]: 安装隔离、A/B 运行保护、失败回滚、不可执行引擎、载荷缺失与引擎篡改拒绝及恢复目录保留回归。
 # [POS]: 离线临时目录测试，不安装到真实用户目录。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import importlib.util
@@ -101,6 +101,27 @@ class InstallTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 installer.install(self.build, self.prefix)
         self.assertEqual((self.prefix / 'bin/ccbaga-a').read_text(), 'fixture')
+
+    def test_failed_install_and_rollback_retain_previous_application(self):
+        installer.install(self.build, self.prefix)
+        app = self.prefix / 'share/ccbaga-install'
+        (self.build / 'requirement-french').write_text('replacement')
+        original_write, original_rename = Path.write_text, Path.rename
+        def fail_desktop(path, *args, **kwargs):
+            if path.name == 'ccbaga-browser.desktop':
+                raise OSError('fixture install failure')
+            return original_write(path, *args, **kwargs)
+        def fail_restore(path, destination):
+            if path.name == 'previous' and path.parent.name.startswith('.ccbaga-stage-'):
+                raise OSError('fixture rollback failure')
+            return original_rename(path, destination)
+        with patch.object(Path, 'write_text', fail_desktop), patch.object(Path, 'rename', fail_restore):
+            with self.assertRaises((OSError, RuntimeError)) as caught:
+                installer.install(self.build, self.prefix)
+        backups = list(app.parent.glob('.ccbaga-stage-*/previous'))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual((backups[0] / 'bin/requirement-french').read_text(), 'fixture')
+        self.assertIn(str(backups[0].parent), str(caught.exception))
 
     def test_exec_escaping_rejects_newlines_and_escapes_field_codes(self):
         self.assertIn('%%', installer.desktop_exec(Path('/tmp/100%/app')))

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: 本机开发/正式双应用构建，或参数指定的已挂载 DMG；固定包标识与 macOS 签名/注册工具。
-# [OUTPUT]: 核验后事务替换 /Applications 中的 A/B，移除同标识旧名副本，启动新宿主；失败恢复应用包。
+# [OUTPUT]: 核验后事务替换 /Applications 中的 A/B，移除同标识旧名副本，启动新宿主；失败恢复应用包。 回滚失败保留并报告恢复目录。
 # [POS]: 安装唯一执行层；保留隔离与用户资料；开发仅接受本机临时签名 debug 包，正式/DMG 保持 Gatekeeper 强验收。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 from pathlib import Path
@@ -59,8 +59,9 @@ def main():
     folder = Path(args.folder) if args.folder else None
     build = 'debug' if args.development else 'release'
     sources = [folder / name for name, _, _ in APPS] if folder else [ROOT / f'src-tauri/target/{build}/bundle/macos/CCBaga-A.app', ROOT / 'browser-runtime/Browser.app']
-    with tempfile.TemporaryDirectory(prefix='.ccbaga-install-', dir='/Applications') as temporary:
-        stage = Path(temporary)
+    stage = Path(tempfile.mkdtemp(prefix='.ccbaga-install-', dir='/Applications'))
+    cleanup_stage = True
+    try:
         removals = []
         for index, (source, (name, bundle_id, old_name)) in enumerate(zip(sources, APPS)):
             if identity(source) != bundle_id:
@@ -102,10 +103,17 @@ def main():
                 (stage / name).rename(target); installed.append(target)
                 verify(target, args.development); run(REGISTER, '-f', target)
         except BaseException:
-            for target in installed: shutil.rmtree(target)
-            for old, backup in reversed(moved):
-                backup.rename(old); run(REGISTER, '-f', old)
+            try:
+                for target in installed: shutil.rmtree(target)
+                for old, backup in reversed(moved):
+                    backup.rename(old); run(REGISTER, '-f', old)
+            except BaseException as rollback_error:
+                cleanup_stage = False
+                raise RuntimeError(f'Installation rollback failed; recovery stage retained at {stage}') from rollback_error
             raise
+    finally:
+        if cleanup_stage:
+            shutil.rmtree(stage)
     try: refresh_dock()
     except subprocess.CalledProcessError: print('Applications installed; Dock refresh could not complete.', file=sys.stderr)
     run('open', '-a', '/Applications/CCBaga-A.app')
