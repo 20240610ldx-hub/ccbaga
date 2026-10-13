@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: macOS 安装模式边界、开发环境过滤与可丢弃命令替身。
-# [OUTPUT]: 开发不能装外部 DMG、只接受临时签名、正式 Gatekeeper 不可绕过和凭据不传构建的回归。 回滚失败保留并报告恢复目录。
+# [OUTPUT]: 双应用目录移动前后取消、回滚失败保留备份，以及开发/正式签名和凭据隔离回归。
 # [POS]: 本机安装信任边界验收；不操作 /Applications、钥匙串或真实凭据。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import contextlib
@@ -49,7 +49,7 @@ class InstallTests(unittest.TestCase):
             self.assertFalse(any(key.startswith(('APPLE_', 'TAURI_SIGNING_PRIVATE_KEY')) for key in env))
 
 
-    def exercise_transaction(self, failure):
+    def exercise_transaction(self, failure, index=0):
         with tempfile.TemporaryDirectory(prefix='ccbaga-mac-install-') as temporary:
             root = Path(temporary).resolve()
             applications, sources = root / 'Applications', root / 'Installer'
@@ -78,17 +78,26 @@ class InstallTests(unittest.TestCase):
                     shutil.copytree(args[1], args[2])
                 return SimpleNamespace(stdout='', stderr='')
             def fail_commit_and_restore(path, destination):
-                if path.parent.name.startswith('.ccbaga-install-') and (path.name == installer.APPS[0][0] and failure != 'none' or path.name.startswith('previous-') and failure == 'rollback'):
+                staged = path.parent.name.startswith('.ccbaga-install-')
+                if staged and (path.name == installer.APPS[0][0] and failure in ['commit', 'rollback'] or path.name.startswith('previous-') and failure in ['rollback', 'cancel-rollback']):
                     raise OSError('fixture install and rollback failure')
-                return original_rename(path, destination)
+                if staged and path.name == installer.APPS[0][0] and failure == 'cancel-rollback':
+                    raise KeyboardInterrupt('fixture cancellation')
+                selected = path == applications / installer.APPS[index][0] if failure.startswith('old-') else staged and path.name == installer.APPS[index][0]
+                if selected and failure.endswith('before'):
+                    raise KeyboardInterrupt('fixture cancellation before rename')
+                result = original_rename(path, destination)
+                if selected and failure.endswith('after'):
+                    raise KeyboardInterrupt('fixture cancellation after successful rename')
+                return result
             with patch.object(installer, 'Path', Paths()), patch.object(installer, 'arguments', return_value=SimpleNamespace(folder=str(sources), development=False)), patch.object(installer, 'run', side_effect=command), patch.object(installer.tempfile, 'mkdtemp', side_effect=stage_mkdtemp), patch.object(Path, 'rename', fail_commit_and_restore), patch.object(installer, 'refresh_dock'):
                 if failure == 'none':
                     installer.main()
                 else:
-                    with self.assertRaises((OSError, RuntimeError)) as caught:
+                    with self.assertRaises((OSError, RuntimeError, KeyboardInterrupt)) as caught:
                         installer.main()
             stages = list(applications.glob('.ccbaga-install-*'))
-            if failure == 'rollback':
+            if failure in ['rollback', 'cancel-rollback']:
                 self.assertEqual(len(stages), 1)
                 for index in range(len(installer.APPS)):
                     self.assertEqual((stages[0] / f'previous-{index}.app/Contents/fixture').read_text(), 'old application')
@@ -106,6 +115,15 @@ class InstallTests(unittest.TestCase):
 
     def test_failed_install_restores_previous_apps_and_cleans_stage(self):
         self.exercise_transaction('commit')
+
+    def test_cancelled_moves_restore_both_applications(self):
+        for index in range(len(installer.APPS)):
+            for phase in ['old-before', 'old-after', 'new-before', 'new-after']:
+                with self.subTest(app=index, phase=phase):
+                    self.exercise_transaction(phase, index)
+
+    def test_cancelled_commit_and_failed_rollback_keep_both_backups(self):
+        self.exercise_transaction('cancel-rollback')
 
 if __name__ == '__main__':
     unittest.main()

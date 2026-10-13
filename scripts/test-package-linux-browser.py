@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: 真实 Linux 打包入口、可丢弃引擎树与复制/提交故障替身。
-# [OUTPUT]: 重建移除旧引擎文件、保留权限/链接/其他资源，并在暂存/提交失败保留旧构建，双重失败保留可恢复备份。
+# [OUTPUT]: 完整引擎替换、目录移动前后取消恢复、资源权限/链接和双重失败备份保留回归。
 # [POS]: 构建资源回归；非 Linux 仅使用 uname 替身选择 Linux 分支，不安装或启动引擎。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import importlib.util
@@ -128,6 +128,41 @@ class PackageTests(unittest.TestCase):
         self.assertIsInstance(caught.exception, RuntimeError)
         self.assertIn(str(previous), str(caught.exception))
         self.assertEqual((self.output / 'LICENSE.fingerprint-chromium').read_text(), 'keep license')
+
+    def test_cancelled_moves_restore_the_old_engine(self):
+        self.run_package()
+        original = Path.rename
+        target = self.output / 'LinuxBrowser'
+        for phase in ['old-before', 'old-after', 'new-before', 'new-after']:
+            with self.subTest(phase=phase):
+                def interrupt(path, destination):
+                    selected = path == target if phase.startswith('old-') else path.name == 'LinuxBrowser' and path.parent.name.startswith('.ccbaga-engine-')
+                    if selected and phase.endswith('before'):
+                        raise KeyboardInterrupt('fixture cancellation')
+                    result = original(path, destination)
+                    if selected:
+                        raise KeyboardInterrupt('fixture cancellation after successful rename')
+                    return result
+                with patch.object(Path, 'rename', interrupt), self.assertRaises(KeyboardInterrupt):
+                    package.replace_engine(self.source, self.output)
+                self.assertEqual((target / 'chrome').read_text(), 'original engine')
+                self.assertFalse(list(self.output.glob('.ccbaga-engine-*')))
+
+    def test_cancelled_commit_and_failed_restore_keep_backup(self):
+        self.run_package()
+        original = Path.rename
+        def fail(path, destination):
+            if path.parent.name.startswith('.ccbaga-engine-'):
+                if path.name == 'LinuxBrowser':
+                    raise KeyboardInterrupt('fixture cancellation')
+                if path.name == 'previous':
+                    raise OSError('fixture restore failure')
+            return original(path, destination)
+        with patch.object(Path, 'rename', fail), self.assertRaisesRegex(RuntimeError, 'rollback failed'):
+            package.replace_engine(self.source, self.output)
+        backups = list(self.output.glob('.ccbaga-engine-*/previous/chrome'))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_text(), 'original engine')
 
 
 if __name__ == '__main__':

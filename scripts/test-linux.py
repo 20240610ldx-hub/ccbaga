@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: 可丢弃构建树、安装前缀、Linux 安装器和真实产物验收层。
-# [OUTPUT]: 安装隔离、A/B 运行保护、失败回滚、不可执行引擎、载荷缺失与引擎篡改拒绝及恢复目录保留回归。
+# [OUTPUT]: 页面实际资源缺失拒绝、目录移动前后取消恢复、双重失败备份保留及载荷边界回归。
 # [POS]: 离线临时目录测试，不安装到真实用户目录。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import importlib.util
@@ -24,11 +24,16 @@ class InstallTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.build = self.root / 'build'
         self.prefix = self.root / 'prefix with spaces'
-        for name in ['requirement-french', 'browser-runtime/LinuxBrowser/chrome', 'browser-ui/browser.html', 'browser-ui/assets/browser.js']:
+        for name in ['requirement-french', 'browser-runtime/LinuxBrowser/chrome', 'browser-ui/browser.html',
+                     'browser-ui/assets/browser.js', 'browser-ui/assets/locales.js', 'browser-ui/assets/browser.css']:
             path = self.build / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('fixture')
             path.chmod(0o755)
+        (self.build / 'browser-ui/browser.html').write_text(
+            '<script type="module" src="./assets/browser.js"></script>'
+            '<link rel="modulepreload" href="./assets/locales.js">'
+            '<link rel="stylesheet" href="./assets/browser.css">')
 
     def test_install_upgrade_preserves_unrelated_user_data(self):
         data = self.prefix / 'share/ai.local.requirement-french/browser/profile/keep'
@@ -76,7 +81,7 @@ class InstallTests(unittest.TestCase):
         desktop = self.prefix / 'share/applications/ccbaga-browser.desktop'
         previous_desktop = desktop.read_bytes()
         (self.build / 'requirement-french').write_text('replacement')
-        for name in ['browser.html', 'assets/browser.js']:
+        for name in ['browser.html', 'assets/browser.js', 'assets/locales.js', 'assets/browser.css']:
             with self.subTest(missing=name):
                 resource = self.build / 'browser-ui' / name
                 original = resource.read_bytes()
@@ -123,6 +128,41 @@ class InstallTests(unittest.TestCase):
         self.assertEqual((backups[0] / 'bin/requirement-french').read_text(), 'fixture')
         self.assertIn(str(backups[0].parent), str(caught.exception))
 
+    def test_interrupted_directory_moves_restore_the_existing_installation(self):
+        installer.install(self.build, self.prefix)
+        (self.build / 'requirement-french').write_text('replacement')
+        original = Path.rename
+        app = self.prefix / 'share/ccbaga-install'
+        for phase in ['old-before', 'old-after', 'new-before', 'new-after']:
+            with self.subTest(phase=phase):
+                def interrupt(path, destination):
+                    selected = path == app if phase.startswith('old-') else path.name == 'new'
+                    if selected and phase.endswith('before'):
+                        raise KeyboardInterrupt('fixture cancellation')
+                    result = original(path, destination)
+                    if selected:
+                        raise KeyboardInterrupt('fixture cancellation after successful rename')
+                    return result
+                with patch.object(Path, 'rename', interrupt), self.assertRaises(KeyboardInterrupt):
+                    installer.install(self.build, self.prefix)
+                self.assertEqual((app / 'bin/requirement-french').read_text(), 'fixture')
+                self.assertFalse(list(app.parent.glob('.ccbaga-stage-*')))
+
+    def test_cancelled_install_and_failed_restore_retain_backup(self):
+        installer.install(self.build, self.prefix)
+        original = Path.rename
+        def interrupt_and_fail_restore(path, destination):
+            if path.name == 'new':
+                raise KeyboardInterrupt('fixture cancellation')
+            if path.name == 'previous':
+                raise OSError('fixture rollback failure')
+            return original(path, destination)
+        with patch.object(Path, 'rename', interrupt_and_fail_restore), self.assertRaisesRegex(RuntimeError, 'recovery stage'):
+            installer.install(self.build, self.prefix)
+        backups = list((self.prefix / 'share').glob('.ccbaga-stage-*/previous/bin/requirement-french'))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_text(), 'fixture')
+
     def test_exec_escaping_rejects_newlines_and_escapes_field_codes(self):
         self.assertIn('%%', installer.desktop_exec(Path('/tmp/100%/app')))
         self.assertIn('\\\\$', installer.desktop_exec(Path('/tmp/$secret/app')))
@@ -152,7 +192,7 @@ class PayloadTests(unittest.TestCase):
                 'usr/bin/requirement-french': elf,
                 'usr/lib/CCBaga-A/browser-runtime/LinuxBrowser/chrome': elf,
                 'usr/lib/CCBaga-A/browser-runtime/LICENSE.fingerprint-chromium': b'license',
-                'usr/lib/CCBaga-A/browser-ui/browser.html': b'html',
+                'usr/lib/CCBaga-A/browser-ui/browser.html': b'<script type="module" src="./assets/browser.js"></script>',
                 'usr/lib/CCBaga-A/browser-ui/assets/browser.js': b'js',
                 'usr/share/applications/ccbaga-browser.desktop': b'Exec=requirement-french --browser %U',
                 'usr/share/icons/hicolor/512x512/apps/ccbaga-browser.png': b'icon',
@@ -172,7 +212,7 @@ class PayloadTests(unittest.TestCase):
             page.unlink()
             with self.assertRaisesRegex(RuntimeError, 'UI'):
                 payload.verify(root, root / 'source-engine/chrome')
-            page.write_text('html')
+            page.write_text('<script type="module" src="./assets/browser.js"></script>')
             library = root / 'source-engine/libfixture.so'
             library.write_text('original optional library')
             (isolated.parent / library.name).write_text('modified library')
@@ -182,6 +222,27 @@ class PayloadTests(unittest.TestCase):
             isolated.write_text('modified')
             with self.assertRaisesRegex(RuntimeError, 'pinned browser'):
                 payload.verify(root, root / 'source-engine/chrome')
+
+    def test_browser_ui_rejects_external_and_missing_actual_references(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'assets').mkdir()
+            (root / 'assets/browser.js').write_text('fixture')
+            page = root / 'browser.html'
+            for source in ['https://example.invalid/upload.js', '../outside.js', '/outside.js',
+                           'assets/missing.js', '%2e%2e/outside.js']:
+                with self.subTest(source=source), self.assertRaisesRegex(RuntimeError, 'browser UI'):
+                    page.write_text(f'<script type="module" src="{source}"></script>')
+                    payload.verify_browser_ui(root)
+            outside = root.parent / (root.name + '-outside.js')
+            outside.write_text('outside fixture')
+            try:
+                (root / 'assets/external.js').symlink_to(outside)
+                page.write_text('<script type="module" src="assets/external.js"></script>')
+                with self.assertRaisesRegex(RuntimeError, 'browser UI'):
+                    payload.verify_browser_ui(root)
+            finally:
+                outside.unlink()
 
 
 if __name__ == '__main__':

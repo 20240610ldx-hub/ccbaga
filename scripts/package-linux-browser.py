@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: 固定 Linux 引擎目录与 CARGO_TARGET_DIR 的 release 资源树。
-# [OUTPUT]: 完整替换所属 LinuxBrowser 目录，保留其他资源、符号链接和可执行权限；暂存失败不改变旧引擎，回滚失败保留可恢复备份。
+# [OUTPUT]: 完整替换 LinuxBrowser；目录移动和取消均在回滚边界内，双重失败保留恢复目录。
 # [POS]: 源码/Arch 构建资源复制边界，不访问用户浏览器资料或安装目录。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 from pathlib import Path
@@ -19,13 +19,15 @@ def replace_engine(source, output):
     try:
         pending, previous = stage / 'LinuxBrowser', stage / 'previous'
         shutil.copytree(source, pending, symlinks=True)
-        if target.exists():
-            target.rename(previous)
         try:
+            if target.exists():
+                target.rename(previous)
             pending.rename(target)
         except BaseException:
             if previous.exists():
                 try:
+                    if target.exists() and not pending.exists():
+                        shutil.rmtree(target)
                     previous.rename(target)
                 except BaseException as rollback_error:
                     cleanup = False

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# [INPUT]: 已解包 Linux 安装产物、固定来源引擎及宿主版本。
+# [INPUT]: Linux 安装产物、固定来源引擎与 browser_ui 的页面实际资源引用验收。
 # [OUTPUT]: x86_64 宿主/引擎、内嵌 UI、B 桌面入口/图标和源引擎全文件/链接完整性验收。
 # [POS]: Linux 四种安装产物共用的载荷边界；只读产物，不安装或访问用户资料。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -7,6 +7,7 @@ import hashlib
 import os
 from pathlib import Path
 import sys
+from browser_ui import verify_browser_ui
 
 
 def digest(path):
@@ -31,8 +32,7 @@ def verify(root, engine):
         elif source.is_file() and (not target.is_file() or digest(target) != digest(source)):
             raise RuntimeError('Package changed a browser engine file')
     resources = root / 'usr/lib/CCBaga-A'
-    if not (resources / 'browser-ui/browser.html').is_file() or not list((resources / 'browser-ui/assets').glob('*.js')):
-        raise RuntimeError('Embedded browser UI is missing')
+    verify_browser_ui(resources / 'browser-ui')
     if not (resources / 'browser-runtime/LICENSE.fingerprint-chromium').is_file():
         raise RuntimeError('Browser license is missing')
     desktop = root / 'usr/share/applications/ccbaga-browser.desktop'
