@@ -12,7 +12,7 @@ scripts/ - 图标、签名、引擎打包、应用安装与Claude Code CLI 管�
 skills/ - Agent Skills 标准目录与 npm/npx 通用安装，MIT/兼容声明和全部脚本独立交付；AI 收集用户资料、运行本机预检与经确认的远端部署，应用只提供安装提示词；见其 CLAUDE.md
 packaging/ - 社区 Linux 构建配方；见其 CLAUDE.md
 assets/ - 两张压缩品牌图、五项 LobeHub AI SVG 与极客像素安装盘背景，分别供图标/README 和 DMG 布局使用；见其 CLAUDE.md
-docs/ - 英文仓库封面与 Linux/Windows 开发说明；见其 CLAUDE.md
+docs/ - 英文仓库封面、Linux/Windows 开发说明与双语使用/账号风险指南；见其 CLAUDE.md
 vendor/ - cromma-web 同款组件库副本，主题、原语与 Pika 图标自包含；见其 CLAUDE.md
 </directory>
 <config>

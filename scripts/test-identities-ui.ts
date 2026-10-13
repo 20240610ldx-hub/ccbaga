@@ -1,6 +1,6 @@
 /**
  * [INPUT]: Node.js 标准管道、已锁定 playwright-core、固定引擎、Vite 与 tests/ 的虚构 Tauri IPC。
- * [OUTPUT]: 工牌顺序/数量、横滚弹簧/视差、双语、保留选项与确认/删除/失败/恢复的真实 DOM 交互验收。
+ * [OUTPUT]: 工牌顺序/数量、横滚弹簧/视差、双语本地身份范围提示、保留选项与确认/删除/失败/恢复的真实 DOM 交互验收。
  * [POS]: 发布前无头行为回归；无截图、无真实账号/文件修改，不加载原生宿主，不允许外网请求。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -34,7 +34,7 @@ try{
  await page.getByText('fixture@example.invalid',{exact:true}).waitFor();
  assert.equal(await cards.count(),42);assert.equal(await cards.first().getByRole('heading').innerText(),'空身份');
  assert.equal(await page.locator('.identity-switcher').count(),0);
- assert.match(await cards.first().innerText(),/新账户登录时务必选择/);checks++;
+ assert.match(await cards.first().innerText(),/不会删除服务器端记录/);checks++;
  const geometry=await cards.evaluateAll(nodes=>nodes.slice(0,3).map(node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};}));
  assert.equal(geometry[0].y,geometry[2].y);assert(geometry[2].x+geometry[2].width<1040-150);assert(Math.abs(geometry[0].width/geometry[0].height-54/85.6)<.01);checks++;
  const current=page.locator('.identity-card.current');
@@ -78,7 +78,7 @@ try{
  await dialog.getByRole('button',{name:'确认直接删除'}).click();await renamed.waitFor({state:'detached'});
  assert.equal(await page.evaluate(()=>(window as any).identityFixture.state.current.present),true);checks++;
  await page.evaluate(()=>{(window as any).identityFixture.language('en');});
- await cards.first().getByRole('button',{name:'Use empty identity'}).waitFor();assert.match(await cards.first().innerText(),/new account/);checks++;
+ await cards.first().getByRole('button',{name:'Use empty identity'}).waitFor();assert.match(await cards.first().innerText(),/server records/);checks++;
  await page.evaluate(()=>{(window as any).identityFixture.setFailure('identities_switch');});
  await cards.first().getByRole('button',{name:'Use empty identity'}).click();
  await page.getByRole('dialog').getByRole('button',{name:'Archive & switch'}).click();

@@ -1,9 +1,12 @@
 /**
- * [INPUT]: 共享双语目录和应用各页面的实际操作边界。
- * [OUTPUT]: 可从侧栏打开的使用说明、安全提示、账号风险与申诉指引。
+ * [INPUT]: 共享双语目录、页面实际边界、带生效日期的官方资料及原生剪贴板。
+ * [OUTPUT]: 双语操作/账号风险说明、故障与封禁区分、官方来源和仓库文档链接复制。
  * [POS]: CCBaga-A 的帮助页；只解释本地行为和官方公开规则，不诊断或改变服务器账号状态。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
+import { useState } from 'react';
+import { Button } from 'cromma-ui';
+import { invoke } from '@tauri-apps/api/core';
 import { useI18n } from './i18n';
 
 function List({ items }: { items: string[] }) {
@@ -11,7 +14,14 @@ function List({ items }: { items: string[] }) {
 }
 
 export function HelpPanel() {
-    const { t } = useI18n();
+    const { t, locale } = useI18n();
+    const [copied, setCopied] = useState(''), [error, setError] = useState('');
+    const guideUrl = `https://github.com/liseami/CCBaga/blob/main/docs/${locale === 'zh' ? 'usage.zh.md' : 'usage.md'}`;
+    async function copyGuide() {
+        setError('');
+        try { await invoke('copy_result', { text: guideUrl }); setCopied(guideUrl); }
+        catch (e) { setError(String(e)); }
+    }
     return <section className="system-page help-page">
         <div className="cleanup-title"><h1>{t('使用说明')}</h1></div>
         <div className="help-lede">
@@ -24,7 +34,7 @@ export function HelpPanel() {
                 <List items={[
                     t('地区选择只准备本机和浏览器的语言、时区与区域设置，不会改变公网 IP，也不会让不受支持的地区变为受支持。'),
                     t('清理浏览器缓存会保留登录、书签和密码；“清空站点数据”会删除独立浏览器的 Cookie、站点存储与恢复会话，且不可撤销。'),
-                    t('切换浏览器指纹会关闭并重新启动 CCBaga-B，请先保存未完成的浏览器工作。'),
+                    t('切换浏览器指纹会关闭并重启 CCBaga-B，更新种子、语言和时区，并清空显式浏览器代理以跟随 TUN；请先保存工作并核验新出口。'),
                     t('暂存 Claude 身份会先停止已识别的 Claude 进程；未保存的任务可能被中断。')
                 ]} />
             </article>
@@ -54,23 +64,39 @@ export function HelpPanel() {
                 ]} />
             </article>
         </div>
+        <article className="help-card">
+            <h2>{t('CLI 维护与应用更新')}</h2>
+            <List items={[
+                t('CLI 卸载或重装会先结束已识别的 Claude 进程；只维护程序，保留身份保险库与个人资料。重装需联网，失败后可能留下部分安装状态，请检查日志。'),
+                t('更新只有在你选择安装后执行。Windows 安装包更新 A/B；macOS 应用内更新只更新 A，B 需完整 DMG；Linux 使用安装包或包管理器。')
+            ]} />
+        </article>
         <article className="help-card help-risk" role="note">
             <h2>{t('Claude 账号风险与封禁说明')}</h2>
             <p>{t('使用 CCBaga 不能保证 Claude 账号不被警告、限流、暂停或终止。Anthropic 的公开规则和帮助中心允许其根据 Usage Policy、Consumer Terms 和 Supported Regions Policy 采取这些措施；项目无法预测风控结果，也不代表 Anthropic。')}</p>
             <List items={[
-                t('公开规则明确禁止共享账号或凭据、未经授权的代理或转售、自动化注册或垃圾行为、为规避检测而使用多个账号、绕过封禁，以及绕过登录或安全限制。'),
+                t('官方条款与政策禁止共享账号或凭据、违规内容、自动化注册或垃圾行为、恶意多账号规避检测、绕过封禁或安全限制。自动访问需使用 API 或取得明确许可；请核对适用于你的产品的现行规则。'),
                 t('支持地区由 Anthropic 单独定义；本机切换语言、时区、指纹、代理或出口，不会把不受支持的实体或所在地变成受支持。'),
-                t('X 和其他社区中的封禁案例多为个人叙述，通常缺少完整的地区、支付、账号和工具链证据；它们不能证明某个 IP、关键词、指纹或 CCBaga 本身导致封禁。')
+                t('社交媒体个案不能单独确定你的封禁原因或概率；本工具也不能诊断账号。请以官方账号提示和申诉复核为准。'),
+                t('政策有生效日期：2026 年 10 月发布的 Usage Policy 更新将于 11 月 12 日生效；使用前请查看适用版本。')
             ]} />
         </article>
         <article className="help-card">
             <h2>{t('如果账号被限制')}</h2>
             <List items={[
                 t('先保存页面提示、时间、登录方式和相关工单，不要把密码、Cookie、令牌或完整支付资料交给第三方。'),
-                t('按 Anthropic 帮助中心指引，用受影响的账号登录 claude.ai，在受限页面提交申诉；符合条件时也可从同一页面导出数据或删除账号。'),
+                t('普通登录错误、限额或服务故障不等于封禁。若明确显示账号暂停或终止，用受影响账号登录 claude.ai/restricted 申诉；组织暂停则使用该组织的 Request a review。导出范围以页面为准。'),
                 t('不要通过新账号、共享账号或第三方中转规避封禁；申诉是否通过、处理多久和可导出哪些数据都由 Anthropic 决定。')
             ]} />
-            <p className="help-source-note">{t('官方依据：Anthropic Usage Policy、Supported countries and regions、Safeguards warnings and appeals。仓库版来源与更新时间见 docs/usage.md。')}</p>
+            <p className="help-source-note">{t('说明核对于 2026-10-12；官方规则可能更新。以下链接可选中复制，完整使用文档包含具体出处和生效日期。')}</p>
+            <ul className="help-sources">{[
+                ['Usage Policy', 'https://www.anthropic.com/legal/aup'],
+                ['Consumer Terms', 'https://www.anthropic.com/legal/consumer-terms'],
+                ['Supported countries and regions', 'https://www.anthropic.com/supported-countries'],
+                ['Safeguards warnings and appeals', 'https://support.claude.com/en/articles/8241253-safeguards-warnings-and-appeals']
+            ].map(([label, url]) => <li key={url}><strong>{label}</strong><code>{url}</code></li>)}</ul>
+            <Button variant="secondary" size="small" onClick={() => void copyGuide()}>{copied === guideUrl ? t('已复制') : t('复制使用文档链接')}</Button>
+            {error && <p role="alert">{t(error)}</p>}
         </article>
     </section>;
 }

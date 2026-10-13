@@ -1,7 +1,7 @@
 /**
  * [INPUT]: index.css 的系统字体、Cromma UI 控件、Laper 最新 LandingRailLayout/LineworkTokens/HeroDotBackground 几何与 Cromma 控件令牌。
  * [OUTPUT]: 黑白斜纹外框与点阵标题、极简侧栏、满宽细线内容网格、紧凑执行结果、有叠层厚度与当前身份挂孔绿光的身份横向卡片、当前账号信息、折叠保留策略/暂存确认、CLI 管理、三步网络入口、AI 分段/安装提示词与主程序更新布局，实测通过页面的整页绿色背景和大对勾。
- * [POS]: 应用布局层；信息只分标题、操作和结果，删除装饰文案与重复说明区；按钮边缘、内高光、阴影和悬停效果沿用 Cromma UI。
+ * [POS]: 应用布局层；操作页保持紧凑，帮助页与首页提示解释实际操作和账号边界；按钮边缘、内高光、阴影和悬停效果沿用 Cromma UI。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 :root {
@@ -300,6 +300,7 @@ h3 { margin: 0; font-size: 13px; font-weight: 500; }
 
 /* ----- 使用说明：把操作后果、账号边界和申诉路径集中在可扫描的帮助页 ----- */
 .help-page { padding-bottom: 36px; }
+.help-page { user-select: text; }
 .help-page > .cleanup-title { margin-bottom: var(--landing-band); }
 .help-lede { max-width: 920px; margin: 0 auto; padding: 20px 28px; border: 1px solid var(--landing-line); background: var(--muted); }
 .help-lede strong { display: block; font-size: 14px; font-weight: 550; line-height: 1.6; }
@@ -316,6 +317,12 @@ h3 { margin: 0; font-size: 13px; font-weight: 500; }
 .help-risk h2 { color: #8d3023; }
 .help-risk > p, .help-risk .help-list { color: #754d46; }
 .help-source-note { padding-top: 16px; border-top: 1px solid var(--landing-line); font-size: 11px !important; }
+.help-page > .help-card { max-width: 920px; margin-inline: auto; }
+.help-sources { display: grid; gap: 12px; list-style: none; margin: 16px 0; padding: 0; }
+.help-sources strong { font-size: 11px; font-weight: 550; }
+.help-sources code { display: block; margin-top: 4px; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; color: var(--muted-foreground); }
+.quick-account-note { width: 100%; max-width: 580px; margin: 0 auto; padding: 14px 16px; border: 1px solid #e3c2b9; background: #fff6f2; font-size: 12px; line-height: 1.7; color: #754d46; }
+.quick-account-note > button { margin-left: 8px; }
 @media(max-width:800px) {
   .help-grid { grid-template-columns: 1fr; }
   .help-grid .help-card:nth-child(even) { border-left: 0; }

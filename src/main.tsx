@@ -28,7 +28,7 @@ function App() {
     const {t}=useI18n();
     const [emptyRequested,setEmptyRequested]=useState(false);
     const [page, setPage] = useState<Page>('quick'), [revision, setRevision] = useState(0), [advancedBusy, setAdvancedBusy] = useState(false), [updateBusy, setUpdateBusy] = useState(false);
-    const quick = useQuickActions(() => setPage('quick'), () => setRevision(v => v + 1),()=>{setEmptyRequested(true);setRevision(v=>v+1);setPage("cleaner");});
+    const quick = useQuickActions(() => setPage('quick'), () => setRevision(v => v + 1),()=>{setEmptyRequested(true);setRevision(v=>v+1);setPage("cleaner");},()=>setPage("help"));
     const locked = quick.busy || advancedBusy || updateBusy;
     return <><div className="drag-strip" onMouseDown={e => { if (e.button === 0)
         void getCurrentWindow().startDragging(); }}/><div className="app-shell"><aside className="app-sidebar">

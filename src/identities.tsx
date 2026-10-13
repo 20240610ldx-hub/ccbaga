@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 原生身份命令、保留策略、Motion 弹簧/浏览器媒体订阅、共享确认窗/进度与 CLI 维护。
  * [OUTPUT]: 空/当前/暂存身份的竖式立体工牌，顶部绿光标记当前状态；弹簧横滚、悬停视差（操作区冻结动态）、账号显示与永久删除 Alert 警告（默认取消、需勾选确认）。
- * [POS]: 身份管理 GUI；只呈现脱敏元数据，身份正文留在原生保险库。
+ * [POS]: 身份管理 GUI；空身份明确仅管理本地工作区；只呈现脱敏元数据，身份正文留在原生保险库。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 import {useEffect, useRef, useState, useSyncExternalStore, type ReactNode} from 'react';
@@ -117,7 +117,7 @@ export function IdentityPanel({onBusy, initialEmpty=false}: {onBusy?: (busy:bool
    <div className="identity-card-rail" ref={rail} tabIndex={0} role="region" aria-label={t('身份')}>
     <IdentityCard className={`identity-card empty${current?.present===false?' selected':''}`} label={current?.present===false?`${t('空身份')} · ${t('当前身份')}`:t('空身份')}>
      <div className="identity-card-head"><div className="identity-avatar" aria-hidden="true">∅</div></div>
-     <h3>{t('空身份')}</h3><p className="identity-empty-note">{t('相当于没有痕迹。新账户登录时务必选择。')}</p>
+     <h3>{t('空身份')}</h3><p className="identity-empty-note">{t('暂存当前本地身份，留出新的工作区；不会删除服务器端记录。')}</p>
      <div className="identity-card-footer"><Button variant="secondary" size="small" disabled={blocked} onClick={()=>choose('empty')}>{t('使用空身份')}</Button></div>
     </IdentityCard>
     {(loading||current?.present)&&<IdentityCard className="identity-card current" label={t('当前身份')}>

@@ -1,6 +1,6 @@
 <!--
-[INPUT]: 已实现功能、开发配置、跨平台 PR 回归、双应用使用方式与 MIT/第三方许可边界。
-[OUTPUT]: 面向公开仓库的英文产品首页、安装与开发入口、架构和贡献导航。
+[INPUT]: 已实现功能、开发配置、跨平台 PR 回归、双应用使用方式、双语使用/风险说明与 MIT/第三方许可边界。
+[OUTPUT]: 面向公开仓库的英文产品首页、安装、双语使用说明、开发入口、架构和贡献导航。
 [POS]: 项目公开入口，连接产品功能、使用说明与模块导航。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 -->
@@ -53,7 +53,7 @@ Two applications work together: **CCBaga-A** owns native operations; **CCBaga-B*
 
 The interface supports **English and Chinese**, with shared YAML catalogs. Switching the interface language does not change the computer or browser language.
 
-The in-app **Usage guide** explains the effect and limits of each page. Read [Usage and safety](docs/usage.md) before using identity archives, browser cleanup, proxy resources, or Claude Code maintenance. CCBaga cannot guarantee Claude account access or prevent Anthropic enforcement.
+The in-app **Usage guide** explains the effect and limits of each page. Read [Usage and safety](docs/usage.md) ([简体中文](docs/usage.zh.md)) before using identity archives, browser cleanup, proxy resources, or Claude Code maintenance. CCBaga cannot guarantee Claude account access or prevent Anthropic enforcement.
 
 ## Installation
 
