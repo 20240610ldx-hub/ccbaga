@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# [INPUT]: 已构建 NSIS 安装器、固定引擎逐文件哈希与空白 GitHub Windows runner；临时目录先解析 8.3 短路径别名。
+# [INPUT]: NSIS 安装器、固定引擎哈希、browser_ui 资源引用验收与空白 GitHub Windows runner。
 # [OUTPUT]: 当前用户安装、实际 A/B 回环启动、升级、卸载和用户资产保留的运行验收。
 # [POS]: 只在可丢弃 CI runner 执行安装；拒绝已有应用资料，不读取开发者用户数据。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+from browser_ui import verify_browser_ui
 
 ROOT=Path(__file__).resolve().parent.parent
 
@@ -66,7 +67,9 @@ def main():
             if not engine.is_dir():engine=folder/'WindowsBrowser'
             actual={p.relative_to(engine).as_posix():hashlib.file_digest(p.open('rb'),'sha256').hexdigest() for p in engine.rglob('*') if p.is_file()}
             assert actual==manifest,'Installed Chromium payload differs from the verified upstream engine'
-            assert any(folder.rglob('browser.html')),'Missing embedded browser page'
+            pages=list(folder.rglob('browser.html'))
+            assert len(pages)==1,'Expected exactly one embedded browser page'
+            verify_browser_ui(pages[0].parent)
             assert any(folder.rglob('browser.ico')),'Missing companion icon'
             assert any(folder.rglob('LICENSE.lobehub.txt')),'Missing icon license'
             return engine

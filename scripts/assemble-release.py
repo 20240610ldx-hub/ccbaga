@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# [INPUT]: 各平台验收产物、内部 SHA-256 清单与 macOS/Windows 更新签名。
+# [INPUT]: 各平台验收产物、完整覆盖目标版本的内部 SHA-256 清单与 macOS/Windows 更新签名。
 # [OUTPUT]: 六个完整安装器、一个 macOS 更新归档、合并 latest.json 和总校验清单的明确公开文件列表。
 # [POS]: 发布任务的白名单装配层；内部签名文件、引擎地图和公证记录留在 CI，不混入下载列表。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -15,12 +15,20 @@ OUT=ROOT/'releases'
 def main():
     version=os.environ['RELEASE_VERSION']
     if not re.fullmatch(r'\d+\.\d+\.\d+',version):raise SystemExit('Invalid release version')
-    for name in ['SHA256SUMS','Linux-SHA256SUMS','Arch-SHA256SUMS','Windows-SHA256SUMS']:
+    installers=[f'CCBaga-{version}-macos-arm64.dmg',f'CCBaga-{version}-windows-x86_64-setup.exe',*[f'CCBaga-{version}-linux-x86_64.{ext}' for ext in ['deb','rpm','AppImage','pkg.tar.zst']]]
+    archive=f'CCBaga-{version}-macos-arm64.app.tar.gz'
+    required={'SHA256SUMS':{installers[0],archive,archive+'.sig','latest.json'},
+              'Linux-SHA256SUMS':set(installers[2:5]),'Arch-SHA256SUMS':{installers[5]},
+              'Windows-SHA256SUMS':{installers[1]}}
+    for name,artifacts in required.items():
+        verified=set()
         for line in (OUT/name).read_text(encoding='utf-8').splitlines():
             digest,filename=line.split('  ',1)
             if Path(filename).name!=filename or not re.fullmatch(r'[0-9a-f]{64}',digest):raise SystemExit('Unsafe digest entry')
             with (OUT/filename).open('rb') as stream:
                 if hashlib.file_digest(stream,'sha256').hexdigest()!=digest:raise SystemExit('Artifact digest mismatch')
+            verified.add(filename)
+        if not artifacts <= verified:raise SystemExit('Missing verified artifact in '+name)
     manifest=json.loads((OUT/'latest.json').read_text(encoding='utf-8'))
     windows=json.loads((OUT/'latest-windows.json').read_text(encoding='utf-8'))
     if manifest['version']!=version or windows['version']!=version:raise SystemExit('Mixed release versions')
@@ -33,7 +41,6 @@ def main():
         if entry['url']!=url or entry['signature']!=(OUT/(filename+'.sig')).read_text(encoding='utf-8').strip():raise SystemExit('Updater URL/signature mismatch')
     manifest['notes']='macOS updates CCBaga-A; Windows updates both applications. Save unfinished browser work before updating.'
     (OUT/'latest.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
-    installers=[f'CCBaga-{version}-macos-arm64.dmg',f'CCBaga-{version}-windows-x86_64-setup.exe',*[f'CCBaga-{version}-linux-x86_64.{ext}' for ext in ['deb','rpm','AppImage','pkg.tar.zst']]]
     public=installers+[expected['darwin-aarch64'],'latest.json']
     digests=[]
     for filename in public:

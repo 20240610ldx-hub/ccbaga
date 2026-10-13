@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# [INPUT]: 实际生成的 DMG、macOS 只读挂载和签名工具、ds-store 背景元数据读取。
+# [INPUT]: 实际 DMG、macOS 签名/挂载、ds-store 与 browser_ui 的实际资源引用验收。
 # [OUTPUT]: 包内双应用名称/标识/入口契约、严格签名/Gatekeeper、Applications 链接和背景完整性校验；失败退出。
 # [POS]: 公证前的最终载荷验收，防止 Finder 布局设置破坏已签名应用。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 from ds_store import DSStore
+from browser_ui import verify_browser_ui
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -45,6 +46,8 @@ def main():
                     raise SystemExit(f'Unexpected name or executable for {name}')
                 run('codesign', '--verify', '--deep', '--strict', app)
                 run('spctl', '--assess', '--type', 'execute', app)
+                if name == 'CCBaga-A.app':
+                    verify_browser_ui(app / 'Contents/Resources/browser-ui')
                 print(f'DMG payload verified: {name}', flush=True)
         finally:
             run('hdiutil', 'detach', mount)
