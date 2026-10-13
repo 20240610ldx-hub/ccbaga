@@ -60,6 +60,11 @@ class InstallTests(unittest.TestCase):
                     (app / 'Contents').mkdir(parents=True)
                     (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier': bundle_id}))
                     (app / 'Contents/fixture').write_text(content)
+                    if name == installer.APPS[0][0]:
+                        ui = app / 'Contents/Resources/browser-ui'
+                        (ui / 'assets').mkdir(parents=True)
+                        (ui / 'browser.html').write_text('<script type="module" src="./assets/browser.js"></script>')
+                        (ui / 'assets/browser.js').write_text('fixture')
             class Paths:
                 def __call__(self, value):
                     return applications if str(value) == '/Applications' else Path(value)

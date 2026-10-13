@@ -31,7 +31,7 @@ def replace_engine(source, output):
                     previous.rename(target)
                 except BaseException as rollback_error:
                     cleanup = False
-                    raise RuntimeError(f'Browser build rollback failed; previous engine retained at {previous}') from rollback_error
+                    raise RuntimeError(f'Browser build rollback failed; recovery stage retained at {stage}; inspect {target} and {previous}') from rollback_error
             raise
     finally:
         if cleanup:

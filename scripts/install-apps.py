@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# [INPUT]: 本机开发/正式双应用构建，或参数指定的已挂载 DMG；固定包标识与 macOS 签名/注册工具。
+# [INPUT]: 双应用构建/挂载 DMG、macOS 签名/注册与 browser_ui 的实际页面资源验收。
 # [OUTPUT]: 核验后替换固定 A/B；目录移动后中断也按磁盘状态恢复，双重失败保留恢复目录。
 # [POS]: 安装唯一执行层；保留隔离与用户资料；开发仅接受本机临时签名 debug 包，正式/DMG 保持 Gatekeeper 强验收。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -14,6 +14,7 @@ import sys
 import tempfile
 import time
 from urllib.parse import unquote, urlparse
+from browser_ui import verify_browser_ui
 ROOT = Path(__file__).resolve().parent.parent
 APPS = [('CCBaga-A.app', 'ai.local.requirement-french', 'CC清理器.app'),
         ('CCBaga-B.app', 'ai.local.requirement-french.browser', 'CC浏览器.app')]
@@ -69,6 +70,8 @@ def main():
             pending = stage / name
             run('ditto', source, pending)
             verify(pending, args.development)
+            if index == 0:
+                verify_browser_ui(pending / 'Contents/Resources/browser-ui')
             for base in [Path('/Applications'), Path.home() / 'Applications']:
                 for candidate in [base / name, base / old_name]:
                     if candidate.exists():

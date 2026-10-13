@@ -1,6 +1,6 @@
 # [INPUT]: Vite 生成的浏览器页面、入口脚本、预加载模块与样式资源目录。
-# [OUTPUT]: verify_browser_ui 在修改安装或发布载荷前验证页面实际引用的本地文件。
-# [POS]: Linux 安装预检与四格式载荷验收的共同资源边界；只读，不执行页面或脚本。
+# [OUTPUT]: verify_browser_ui 和只读 CLI 验证页面实际引用的本地文件。
+# [POS]: 三平台安装/发布载荷与构建 CI 共用的资源边界；不执行页面或脚本。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 from html.parser import HTMLParser
 from pathlib import Path
@@ -47,3 +47,8 @@ def verify_browser_ui(folder):
                 raise ValueError('Missing or external browser resource')
     except (OSError, ValueError) as error:
         raise RuntimeError('Embedded browser UI resources missing or invalid') from error
+
+
+if __name__ == '__main__':
+    import sys
+    verify_browser_ui(sys.argv[1])

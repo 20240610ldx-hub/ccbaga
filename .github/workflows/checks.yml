@@ -76,6 +76,8 @@ jobs:
         run: bun test
       - name: Frontend build
         run: bun run build
+      - name: Browser UI resource references
+        run: python scripts/browser_ui.py dist
       - name: Skill npm installation
         run: bun scripts/test-skill-install.ts
       - name: Network Skill offline tests
