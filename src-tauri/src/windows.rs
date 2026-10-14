@@ -1,5 +1,5 @@
-// [INPUT]: Windows 当前用户 SID、时区、注册表状态、系统工具与受限进程接口。
-// [OUTPUT]: Windows 平台 JSON 桥；支持时区/语言/区域/定位状态、Win32 剪贴板、当前用户文件所有权和安全进程接口。
+// [INPUT]: Windows 当前用户 SID、时区、注册表状态、系统工具、受限进程接口与待传 Win32 名称 API 的文件路径。
+// [OUTPUT]: Windows 平台 JSON 桥；支持时区/语言/区域/定位状态、Win32 剪贴板、当前用户文件所有权、绝对路径的 \\?\ verbatim 长路径转换和安全进程接口。
 // [POS]: 仅原生识别与用户触发的系统操作；不含网络客户端，不向 UI 输出进程参数或代理秘密。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use serde_json::{json, Value};
@@ -177,9 +177,53 @@ pub(super) fn current_sid() -> Option<&'static Vec<u8>> {
     SID.get_or_init(|| unsafe { process_sid(GetCurrentProcess()) })
         .as_ref()
 }
-pub fn owned(path: &std::path::Path) -> bool {
+// Win32 名称 API 对普通路径有 MAX_PATH(260) 限制；绝对且不含相对段的路径把
+// 分隔符统一为反斜杠后转为 \\?\ verbatim 形式再补 NUL，其余路径原样返回。
+pub fn wide_path(path: &std::path::Path) -> Vec<u16> {
     use std::os::windows::ffi::OsStrExt;
-    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+    // verbatim 路径不做规范化；正斜杠必须先统一为反斜杠。
+    for c in wide.iter_mut() {
+        if *c == b'/' as u16 {
+            *c = b'\\' as u16;
+        }
+    }
+    let backslash = |c: &u16| *c == b'\\' as u16;
+    let has_prefix = |text: &str| wide.starts_with(&text.encode_utf16().collect::<Vec<u16>>());
+    let disk = wide.len() >= 3
+        && matches!(wide[0], 0x41..=0x5A | 0x61..=0x7A)
+        && wide[1] == ':' as u16
+        && wide[2] == '\\' as u16;
+    let unc = !disk && wide.len() >= 2 && backslash(&wide[0]) && backslash(&wide[1]);
+    if (disk || unc) && !has_prefix(r"\\?\") && !has_prefix(r"\\.\") {
+        let dot = [b'.' as u16];
+        let dotdot = [b'.' as u16, b'.' as u16];
+        let mut segments = wide.split(backslash);
+        // verbatim 不做规范化；盘符段或 UNC 前两个空段之后必须全是普通段。
+        if unc {
+            segments.next();
+            segments.next();
+        } else {
+            segments.next();
+        }
+        if segments.all(|segment| {
+            !segment.is_empty() && segment != dot.as_slice() && segment != dotdot.as_slice()
+        }) {
+            let mut verbatim: Vec<u16> = r"\\?\".encode_utf16().collect();
+            if unc {
+                verbatim.extend(r"UNC\".encode_utf16());
+                verbatim.extend_from_slice(&wide[2..]);
+            } else {
+                verbatim.extend_from_slice(&wide);
+            }
+            wide = verbatim;
+        }
+    }
+    wide.push(0);
+    wide
+}
+pub fn owned(path: &std::path::Path) -> bool {
+    let wide = wide_path(path);
     unsafe {
         let mut owner = std::ptr::null_mut();
         let mut descriptor = std::ptr::null_mut();
@@ -207,8 +251,7 @@ pub fn owned(path: &std::path::Path) -> bool {
 }
 #[cfg(test)]
 pub(crate) fn fixture_owner(path: &std::path::Path) {
-    use std::os::windows::ffi::OsStrExt;
-    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let wide = wide_path(path);
     let mut owner = current_sid().expect("test user SID").clone();
     assert_eq!(
         unsafe {
@@ -229,17 +272,11 @@ pub fn preserve_file_permissions(
     source: &std::path::Path,
     target: &std::path::Path,
 ) -> Result<(), String> {
-    use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Security::Authorization::SetNamedSecurityInfoW;
     use windows_sys::Win32::Security::{
         DACL_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
     };
-    let wide = |path: &std::path::Path| {
-        path.as_os_str()
-            .encode_wide()
-            .chain(Some(0))
-            .collect::<Vec<u16>>()
-    };
+    let wide = |path: &std::path::Path| wide_path(path);
     let source = wide(source);
     let target = wide(target);
     unsafe {

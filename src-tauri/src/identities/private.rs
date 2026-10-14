@@ -1,6 +1,6 @@
 // [INPUT]: 标准库文件系统、当前用户身份与 Windows ACL API。
-// [OUTPUT]: 私有目录/文件、链接与所有权检查、同步原子写入。
-// [POS]: 身份保险库的磁盘边界；Windows 创建时明确用户所有者/DACL，既有文件仍拒绝所有者变化。
+// [OUTPUT]: 私有目录/文件、链接与所有权检查、同步原子写入与超过 MAX_PATH 的 Win32 名称调用。
+// [POS]: 身份保险库的磁盘边界；Windows 创建时明确用户所有者/DACL，既有文件仍拒绝所有者变化；Win32 名称调用统一走 verbatim 路径以越过 MAX_PATH。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use std::{fs, io::Write, path::Path};
 #[cfg(windows)]
@@ -11,7 +11,6 @@ fn windows_create<T>(
         *const windows_sys::Win32::Security::SECURITY_ATTRIBUTES,
     ) -> Result<T, String>,
 ) -> Result<T, String> {
-    use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::{
         Foundation::LocalFree,
         Security::{Authorization::*, *},
@@ -30,7 +29,7 @@ fn windows_create<T>(
         },
     };
     let mut acl = std::ptr::null_mut();
-    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let wide: Vec<u16> = crate::windows::wide_path(path);
     unsafe {
         if SetEntriesInAclW(1, &entry, std::ptr::null(), &mut acl) != 0 {
             return Err("无法保护身份文件权限。".into());
@@ -100,7 +99,6 @@ pub fn protect(path: &Path) -> Result<(), String> {
     }
     #[cfg(windows)]
     {
-        use std::os::windows::ffi::OsStrExt;
         use windows_sys::Win32::{
             Foundation::LocalFree,
             Security::{
@@ -121,7 +119,7 @@ pub fn protect(path: &Path) -> Result<(), String> {
                 ptstrName: sid.as_ptr() as *mut u16,
             },
         };
-        let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+        let wide: Vec<u16> = crate::windows::wide_path(path);
         let mut acl = std::ptr::null_mut();
         unsafe {
             if SetEntriesInAclW(1, &entry, std::ptr::null(), &mut acl) != 0 {

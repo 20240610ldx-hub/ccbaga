@@ -1,5 +1,5 @@
 // [INPUT]: 身份保险库与临时文件系统样本。
-// [OUTPUT]: SQLite 策略持久化、完整认证归档与真实阶段/局部完成计数/回滚事件回归，不读取真实 Claude 凭据。
+// [OUTPUT]: SQLite 策略持久化、完整认证归档、真实阶段/局部完成计数/回滚事件与 Windows 超长暂存路径回归，不读取真实 Claude 凭据。
 // [POS]: 身份管理的离线验证入口；平台真实登入需用户验收。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -395,4 +395,50 @@ fn missing_master_key_never_replaces_a_retired_registered_archive() {
     assert!(!vault.join("key.bin").exists());
     assert!(retired.exists());
     std::fs::remove_dir_all(folder).unwrap();
+}
+#[test]
+#[cfg(windows)]
+fn windows_long_stage_paths_round_trip_beyond_max_path() {
+    // .stage-{32 位 ID}\data\{n}\ 前缀比源路径长约 50 个字符；内部路径足够长时
+    // 解包目标超过 MAX_PATH(260)，回归 \\?\ verbatim 创建路径。
+    let folder = canonicalize(std::env::temp_dir())
+        .unwrap()
+        .join(format!("baga-longpath-{}", new_id().unwrap()));
+    let home = folder.join("home");
+    let vault = folder.join("vault");
+    let deep = "l".repeat(110);
+    let session = format!("{}.jsonl", "s".repeat(23));
+    let project = home.join(".claude").join("projects").join(&deep);
+    private::directory(&project).unwrap();
+    fixture_write(project.join(&session), "long path fixture").unwrap();
+    fixture_write(
+        home.join(".claude.json"),
+        r#"{"oauthAccount":{"accountUuid":"long-path-fixture"}}"#,
+    )
+    .unwrap();
+    let home_path = project.join(&session);
+    let stage_path = vault
+        .join(format!(".stage-{}", "0".repeat(32)))
+        .join("data")
+        .join("0")
+        .join(&deep)
+        .join(&session);
+    assert!(home_path.to_string_lossy().len() < 260);
+    assert!(stage_path.to_string_lossy().len() >= 260);
+    let mut store = store::Store::open(&vault, &home).unwrap();
+    let reporter = Reporter::channel(None);
+    store
+        .switch("empty", "长路径", &Policy::default(), &reporter)
+        .unwrap();
+    assert!(!home_path.exists());
+    let saved = store.records().into_iter().find(|r| !r.empty).unwrap();
+    store
+        .switch(&saved.id, "恢复", &Policy::default(), &reporter)
+        .unwrap();
+    assert_eq!(
+        std::fs::read(&home_path).unwrap(),
+        b"long path fixture".to_vec()
+    );
+    drop(store);
+    std::fs::remove_dir_all(&folder).unwrap();
 }
