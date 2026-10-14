@@ -14,7 +14,7 @@ import '../src/index.css';
 import '../src/style.css';
 const id=(number:number)=>number.toString(16).padStart(32,'0');
 const user={present:true,display_name:'Fixture user',email:'fixture@example.invalid',organization:'Fixture team',unavailable:false};
-const state:IdentityState={active:'current',recovery:null,running:true,current:{...user},records:Array.from({length:40},(_,n)=>({id:id(n+1),name:`Identity ${n+1}`,saved_at:1780000000000+n,bytes:2048,policy:{...defaultPolicy}}))};
+const state:IdentityState={active:id(1),recovery:null,running:true,current:{...user},records:Array.from({length:40},(_,n)=>({id:id(n+1),name:`Identity ${n+1}`,saved_at:1780000000000+n,bytes:2048,policy:{...defaultPolicy}}))};
 const commands:{command:string;args:any}[]=[];
 let fail='';
 const fixture={commands,state,language:setLocale,setFailure:(command:string)=>{fail=command;},recover:()=>{state.recovery=id(1);}};
@@ -24,10 +24,10 @@ mockIPC((command,args:any)=>{
  if(fail===command){fail='';throw Error('fixture operation failed');}
  if(command==='identities_read')return structuredClone(state);
  if(command==='claude_cli_read')return {method:'',path:'',version:''};
- if(command==='cleaner_stop'){state.running=false;return {running:false};}
+ if(command==='identities_stop'){state.running=false;return {running:false};}
  if(command==='identities_switch'){
   if(args.recover){state.recovery=null;state.current={...user};return structuredClone(state);}
-  if(state.current.present)state.records.push({id:id(1000+commands.length),name:args.currentName,saved_at:1780000010000+commands.length,bytes:4096,policy:{...args.policy}});
+  if(state.current.present){const existing=state.records.find(row=>row.id===state.active);if(existing){existing.saved_at=1780000010000+commands.length;existing.policy={...args.policy};}else state.records.push({id:id(1000+commands.length),name:args.currentName,saved_at:1780000010000+commands.length,bytes:4096,policy:{...args.policy}});}
   state.active=args.targetId;
   state.current=args.targetId==='empty'?{present:false,display_name:null,email:null,organization:null,unavailable:false}:{...user,display_name:state.records.find(row=>row.id===args.targetId)!.name};
   return structuredClone(state);

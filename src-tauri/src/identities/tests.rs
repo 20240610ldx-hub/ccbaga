@@ -26,6 +26,7 @@ fn database_metadata_and_recovery_are_transactional() {
         bytes: 22,
         policy: Policy::default(),
         empty: false,
+        account_key: None,
     };
     db.pending(&record, "empty").unwrap();
     assert_eq!(db.get("recovery").unwrap(), Some(record.id.clone()));
@@ -95,7 +96,7 @@ fn empty_identity_and_saved_identity_preserve_user_choices() {
     let with_skills = store
         .records()
         .into_iter()
-        .find(|r| r.name == "包含技能")
+        .find(|r| r.id == id)
         .unwrap();
     store
         .switch(&with_skills.id, "空身份", &choice, &reporter)

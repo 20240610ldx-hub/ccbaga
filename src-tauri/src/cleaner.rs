@@ -1,5 +1,5 @@
 // [INPUT]: Claude 白名单、所选文件夹发现、配置变换、原子写入、官方原生 CLI 版本路径及 macOS/Linux/Windows 白名单路径边界。
-// [OUTPUT]: 全机/文件夹元数据扫描、旧组织发现、实时 Claude 进程检查与结束全部已识别进程；CLI 安装管理共用互斥锁与进程核验。
+// [OUTPUT]: 全机/文件夹元数据扫描、旧组织发现、实时 Claude 进程检查与结束全部已识别进程；CLI 和身份管理共用互斥锁与精确进程停止函数，身份调用不触发文件扫描。
 // [POS]: 白名单与进程共用边界；身份操作由 identities 编排，历史直接清理只编译进测试。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use crate::native;
@@ -639,30 +639,35 @@ pub async fn cleaner_scan(
     state.active.store(false, Ordering::SeqCst);
     result
 }
+pub(crate) fn stop_processes() -> Result<usize, String> {
+    let mut targets = std::collections::HashSet::new();
+    // 主进程退出期间辅助进程可能重生；每轮重新识别，最多三轮，不扩大到其他 Node/MCP/终端。
+    for _ in 0..3 {
+        let current = processes()?;
+        if current.is_empty() {
+            break;
+        }
+        for target in &current {
+            targets.insert(target.pid);
+            signal_same_process(target, 15)?;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(800));
+        for target in processes()? {
+            targets.insert(target.pid);
+            signal_same_process(&target, 9)?;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    if running()? { return Err("仍有 Claude 进程在运行。".into()); }
+    Ok(targets.len())
+}
 #[tauri::command]
 pub async fn cleaner_stop(app: tauri::AppHandle) -> Result<Scan, String> {
     let state = app.state::<Cleaner>();
     state.enter()?;
     let worker = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let mut targets = std::collections::HashSet::new();
-        // 主进程退出期间辅助进程可能重生；每轮重新识别，最多三轮，不扩大到其他 Node/MCP/终端。
-        for _ in 0..3 {
-            let current = processes()?;
-            if current.is_empty() {
-                break;
-            }
-            for target in &current {
-                targets.insert(target.pid);
-                signal_same_process(target, 15)?;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(800));
-            for target in processes()? {
-                targets.insert(target.pid);
-                signal_same_process(&target, 9)?;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(200));
-        }
+        let count = stop_processes()?;
         let plan = worker.state::<Cleaner>().plan.lock().unwrap().clone();
         let mut scan = scan_scope(
             plan.as_ref().map(|p| p.folder.as_str()),
@@ -672,7 +677,7 @@ pub async fn cleaner_stop(app: tauri::AppHandle) -> Result<Scan, String> {
         scan.message = if scan.running {
             "仍有 Claude 进程在运行。".into()
         } else {
-            format!("已结束 {} 个 Claude 进程，可以清理。", targets.len())
+            format!("已结束 {} 个 Claude 进程，可以清理。", count)
         };
         *worker.state::<Cleaner>().plan.lock().unwrap() = Some(scan.clone());
         Ok(scan)

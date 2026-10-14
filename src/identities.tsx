@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 原生身份命令、保留策略、Motion 弹簧/浏览器媒体订阅、共享确认窗/进度与 CLI 维护。
- * [OUTPUT]: 空/当前/暂存身份的竖式立体工牌，顶部绿光标记当前状态；弹簧横滚、悬停视差（操作区冻结动态）、账号显示与永久删除 Alert 警告（默认取消、需勾选确认）。
+ * [OUTPUT]: 空/当前/暂存身份的竖式立体工牌（当前账号不重复显示已暂存副本），顶部绿光标记当前状态；弹簧横滚、悬停视差（操作区冻结动态）、账号显示与永久删除 Alert 警告（默认取消、需勾选确认）。
  * [POS]: 身份管理 GUI；只呈现脱敏元数据，身份正文留在原生保险库。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -12,7 +12,7 @@ import {invoke} from '@tauri-apps/api/core';
 import {useI18n} from './i18n';
 import {AppDialog} from './dialog';
 import {CleanupActivity, useCleanupActivity} from './cleaner-activity';
-import {formatBytes, type Scan} from './cleaner-model';
+import {formatBytes} from './cleaner-model';
 import {ClaudeCliPanel} from './claude-cli-panel';
 import {defaultPolicy, policyRows, type Identity, type IdentityState} from './identity-model';
 type Target = Identity | 'empty' | 'recovery';
@@ -34,6 +34,7 @@ export function IdentityPanel({onBusy, initialEmpty=false}: {onBusy?: (busy:bool
  const locked=busy||cliBusy||!!review||!!rename||!!deletion;
  const active=state?.records.find(row=>row.id===state.active);
  const current=state?.current;
+ const saved=state?.records.filter(row=>!current?.present||row.id!==state.active)??[];
  const currentName=current?.display_name||current?.email?.split('@')[0]||active?.name||t('当前身份');
  const blocked=locked||loading||!state||!!state?.recovery;
  const kept=policyRows.filter(([key])=>policy[key]).map(([,label])=>t(label));
@@ -76,8 +77,7 @@ export function IdentityPanel({onBusy, initialEmpty=false}: {onBusy?: (busy:bool
   setReview(target);setError('');
  }
  async function stop() {
-  const result=await invoke<Scan>('cleaner_stop');
-  if(result.running)throw new Error('仍有 Claude 进程在运行。');
+  await invoke('identities_stop');
  }
  async function change() {
   if(!review||busy)return;
@@ -113,7 +113,7 @@ export function IdentityPanel({onBusy, initialEmpty=false}: {onBusy?: (busy:bool
   <header className="cleanup-title"><h1>{t('Claude 身份管理')}</h1><Button variant="secondary" size="small" disabled={locked||loading} leftIcon={<Refresh aria-hidden size={16} className={loading?'spin':''}/>} onClick={()=>void read()}>{t('刷新')}</Button></header>
   {error&&<p role="alert" className="cleanup-feedback error">{t(error)}</p>}
   {state?.recovery&&<div className="identity-recovery" role="alert"><strong>{t('有一次身份切换尚未完成')}</strong><Button size="small" variant="ink" disabled={locked||loading} onClick={()=>choose('recovery')}>{t('恢复原身份')}</Button></div>}
-    <section className="identity-library"><div className="identity-section-head"><h2>{t('身份')}</h2><span className="identity-count">{state?.records.length||0} {t('暂存身份')}</span></div>
+    <section className="identity-library"><div className="identity-section-head"><h2>{t('身份')}</h2><span className="identity-count">{saved.length} {t('暂存身份')}</span></div>
    <div className="identity-card-rail" ref={rail} tabIndex={0} role="region" aria-label={t('身份')}>
     <IdentityCard className={`identity-card empty${current?.present===false?' selected':''}`} label={current?.present===false?`${t('空身份')} · ${t('当前身份')}`:t('空身份')}>
      <div className="identity-card-head"><div className="identity-avatar" aria-hidden="true">∅</div></div>
@@ -127,8 +127,8 @@ export function IdentityPanel({onBusy, initialEmpty=false}: {onBusy?: (busy:bool
      {(current?.email||current?.display_name)&&<span className="identity-account-source">Claude Code</span>}
      <div className="identity-card-footer"><Button variant="secondary" size="small" disabled={blocked} onClick={()=>choose('empty')}>{t('暂存')}</Button><Button variant="ghost" size="small" disabled={blocked} onClick={()=>confirmDelete('current')}>{t('直接删除')}</Button></div>
     </IdentityCard>}
-    {state?.records.map(row=><IdentityCard className={`identity-card${state.active===row.id?' selected':''}`} key={row.id}>
-     <div className="identity-card-head"><div className="identity-avatar" aria-hidden="true">{Array.from(row.name)[0]?.toUpperCase()}</div>{row.id===state.active&&<span className="identity-card-badge">{t('上次使用')}</span>}<span className="identity-size">{formatBytes(row.bytes)}</span></div>
+    {saved.map(row=><IdentityCard className="identity-card" key={row.id}>
+     <div className="identity-card-head"><div className="identity-avatar" aria-hidden="true">{Array.from(row.name)[0]?.toUpperCase()}</div><span className="identity-size">{formatBytes(row.bytes)}</span></div>
      <h3>{row.name}</h3><time>{new Date(row.saved_at).toLocaleString(locale==='zh'?'zh-CN':'en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</time>
      <div className="identity-card-footer"><Button variant="secondary" size="small" disabled={blocked} onClick={()=>choose(row)}>{t('切换')}</Button><Button variant="ghost" size="small" disabled={blocked} onClick={()=>{setRename(row);setRenameValue(row.name);}}>{t('重命名')}</Button><Button variant="ghost" size="small" disabled={blocked} onClick={()=>confirmDelete(row)}>{t('删除')}</Button></div>
     </IdentityCard>)}

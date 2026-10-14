@@ -14,6 +14,8 @@ Open **Guide** in the sidebar. The page supports English and Chinese.
 | Computer | Adjust time zone, language and region separately. Permission, a restart or sign-out may be required. This does not change your public IP. |
 | Network | Choose an AI tool and give it the copied prompt to install the Skill. The AI handles connection details and asks before remote deployment. The app does not collect SSH keys or perform deployment. |
 
+Recognized accounts update the same saved identity instead of creating another copy. The current account appears once. See [local identity storage](identity-storage.md) for retention choices, archive size and recovery behavior.
+
 Claude Code maintenance uninstalls or reinstalls the CLI program while retaining configuration, identities and project files.
 
 ## Data boundaries

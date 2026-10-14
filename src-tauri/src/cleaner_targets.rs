@@ -1,5 +1,5 @@
 // [INPUT]: 当前用户目录、Windows 实际 AppData、Claude 清理白名单与可选组织编号。
-// [OUTPUT]: 分类清理目标、完整目录元数据统计及受限旧组织文件匹配。
+// [OUTPUT]: 分类清理目标、完整目录元数据统计及受限旧组织文件匹配，包含官方文档确认的会话附件/计划/任务/快照。
 // [POS]: 清理发现边界；不跟随链接，不遍历项目仓库，不读取凭据内容。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -132,6 +132,15 @@ pub(super) fn definitions(root: &Path) -> Vec<Target> {
         ("history.jsonl", "Code 输入历史"),
         ("file-history", "Code 文件历史"),
         ("debug", "Code 调试日志"),
+        ("plans", "Code 会话计划"),
+        ("image-cache", "Code 会话图片"),
+        ("uploads", "Code 会话附件"),
+        ("session-env", "Code 会话环境"),
+        ("tasks", "Code 会话任务"),
+        ("shell-snapshots", "Code 终端快照"),
+        ("feedback-bundles", "Code 反馈归档"),
+        ("feedback/drafts", "Code 反馈草稿"),
+        ("dev-mods", "Code 会话扩展"),
     ] {
         result.push(target(
             root,

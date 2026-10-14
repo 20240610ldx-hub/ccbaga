@@ -12,7 +12,7 @@ scripts/ - 图标、签名、引擎打包、应用安装与Claude Code CLI 管�
 skills/ - Agent Skills 标准目录与 npm/npx 通用安装，MIT/兼容声明和全部脚本独立交付；AI 收集用户资料、运行本机预检与经确认的远端部署，应用只提供安装提示词；见其 CLAUDE.md
 packaging/ - 社区 Linux 构建配方；见其 CLAUDE.md
 assets/ - 两张压缩品牌图、五项 LobeHub AI SVG 与极客像素安装盘背景，分别供图标/README 和 DMG 布局使用；见其 CLAUDE.md
-docs/ - 英文仓库封面、操作速查与 Linux/Windows 开发说明；见其 CLAUDE.md
+docs/ - 英文仓库封面、操作速查、身份存储/迁移/性能边界与 Linux/Windows 开发说明；见其 CLAUDE.md
 vendor/ - cromma-web 同款组件库副本，主题、原语与 Pika 图标自包含；见其 CLAUDE.md
 </directory>
 <config>
@@ -32,8 +32,8 @@ NOTICE.md - 第三方引擎、组件与图标的授权边界
 法则：侧栏傻瓜设置置顶，分隔线后网络环境、Claude 身份管理、浏览器环境、电脑环境，再分隔使用说明；BAGA! 品牌和黑白 Laper 斜纹/点阵壳，完整侧栏边框，底部更新与界面语言。YAML 中英文独立于系统/指纹语言，运行包嵌入前端，不依赖开发服务。
 身份契约：默认范围同时覆盖 Claude Code 与 Claude Desktop；用户逐类选择保留在工作区或随身份暂存。登录/本地标识始终随身份；Skills、插件、MCP、个人设置、项目记录、会话历史和缓存分别选择，实际项目源码不扫描。空身份是把已选择的当前状态从 Claude 默认工作目录移开，保存可恢复身份后留出空工作区，不宣称抹除服务端记录或对同用户程序隐身。
 身份显示：只读默认 .claude.json 中 oauthAccount 的 displayName/emailAddress/organizationName 白名单；UI 不接收令牌。Desktop 仅元数据候选检测，未知或不可读账号明确标注，不宣称当前账号已通过服务端验证。
-保险库：app_data_dir/identity-vault 与 Claude 工作目录分离；bundled SQLite 保存名称、策略、归档编号/大小/时间与恢复日志，不保存凭据正文；FULL 同步、数据库事务。自定义 BAGAID01 容器用 tar/gzip 压缩、ring AES-256-GCM 认证帧和独立归档密钥，保险库主密钥只在受保护本机 key.bin 中；POSIX 0700/0600、Windows 创建时明确用户所有者/独占 DACL。普通解压工具不能直接读取，但本机同用户/管理员不是绝对隔离边界。
-切换：用户确认结束 Claude 进程；完整读取与归档验收成功后才改工作区。SQLite 与文件系统通过持久恢复状态协调；失败回滚，崩溃可恢复，恢复前也存下现状。复用所有权、链接、元数据快照和白名单检查；只合并所选 JSON 键，保留其他项目/MCP/设置。macOS 用户确认后在原生层保存默认 Code/Desktop 钥匙串正文，不经 UI、argv 或网络；不自动修改其他配置目录的账号。Linux/Windows 使用文件凭据；真实登录可能因服务端失效而需重新授权。
+保险库：app_data_dir/identity-vault 与 Claude 工作目录分离；bundled SQLite 保存名称、策略、归档代次/大小/时间、本机 HMAC 账号索引与恢复日志，不保存凭据正文；FULL 同步、数据库事务。BAGAID01 容器用 tar/Zstandard 压缩（旧 tar/gzip 只读兼容）、ring AES-256-GCM 认证帧和独立归档密钥，保险库主密钥只在受保护本机 key.bin 中；POSIX 0700/0600、Windows 创建时明确用户所有者/独占 DACL。普通解压工具不能直接读取，但本机同用户/管理员不是绝对隔离边界。
+切换：同一 Code 账号 UUID/组织（缺失时邮箱/组织）更新同一槽位；名称和令牌刷新不生成新卡片。当前账号只显示当前卡片，无最近使用副本。不可变归档代次完整验证后，与恢复标记一起更新 SQLite 指针，提交后回收旧代次；未知账号不猜测合并，恢复前检查点独立保存。用户确认结束 Claude 进程；完整读取与归档验收成功后才改工作区。SQLite 与文件系统通过持久恢复状态协调；失败回滚，崩溃可恢复，恢复前也存下现状。复用所有权、链接、元数据快照和白名单检查；只合并所选 JSON 键，保留其他项目/MCP/设置。macOS 用户确认后在原生层保存默认 Code/Desktop 钥匙串正文，不经 UI、argv 或网络；不自动修改其他配置目录的账号。Linux/Windows 使用文件凭据；真实登录可能因服务端失效而需重新授权。
 直接删除：AlertDialog 警告默认聚焦取消，提示不可撤销/不新增备份，用户勾选并独立确认后按保留策略移除当前本地身份，不创建新归档；已有暂存身份不受影响。删除暂存卡片仅移除选定加密文件与 SQLite 记录，双资源失败留下可回收标记；不把普通文件删除宣称为物理安全擦除。
 浏览器与系统：缓存操作保留登录/书签/密码；换指纹先退出 B，再随机种子和目标地区语言/时区，显式代理留空跟随 TUN。真实设备版本/CPU、出口服务备援、回环令牌/回报时间与绿色核验仍沿用原边界，不伪造 IP/坐标或未测结果。系统修改显式授权并读回；未知定位保持未知。
 网络：GUI 仅固定 VPS/家宽/Skill 入口与五项 AI 的双语 npm 安装/运行提示词。SSH/三文件/家宽资料和确认部署归独立 Skill；私密资料留在 Git/Skill 外，后续严格主机指纹验证，订阅私密交付后引导 TUN 开/系统代理关。供应商设置唯一来源 skills/ccbaga-network/providers.json，完整原始地址由回归锁定。

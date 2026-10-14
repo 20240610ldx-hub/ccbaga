@@ -32,8 +32,10 @@ try{
  await page.goto(base+'/tests/identities.html');
  const cards=page.locator('.identity-card');
  await page.getByText('fixture@example.invalid',{exact:true}).waitFor();
- assert.equal(await cards.count(),42);assert.equal(await cards.first().getByRole('heading').innerText(),'空身份');
+ assert.equal(await cards.count(),41);assert.equal(await cards.first().getByRole('heading').innerText(),'空身份');
  assert.equal(await page.locator('.identity-switcher').count(),0);
+ assert.equal(await page.getByText('上次使用',{exact:true}).count(),0);
+ assert.equal(await cards.filter({has:page.getByRole('heading',{name:'Identity 1',exact:true})}).count(),0);
  assert.match(await cards.first().innerText(),/新账户登录时务必选择/);checks++;
  const geometry=await cards.evaluateAll(nodes=>nodes.slice(0,3).map(node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};}));
  assert.equal(geometry[0].y,geometry[2].y);assert(geometry[2].x+geometry[2].width<1040-150);assert(Math.abs(geometry[0].width/geometry[0].height-54/85.6)<.01);checks++;
@@ -66,10 +68,12 @@ try{
  assert.equal(await page.locator('.identity-card.current').count(),0);
  const request=await page.evaluate(()=>((window as any).identityFixture.commands as any[]).find(row=>row.command==='identities_switch').args);
  assert.equal(request.policy.skills,false);assert.equal(request.targetId,'empty');assert.equal(request.currentName,'First archive');checks++;
- const target=cards.filter({has:page.getByRole('heading',{name:'Identity 3',exact:true})});
+ const target=page.locator('.identity-card:not(.current)').filter({has:page.getByRole('heading',{name:'Identity 3',exact:true})});
  await target.getByRole('button',{name:'切换',exact:true}).click();
  await page.getByRole('dialog').getByRole('button',{name:'确认暂存并切换'}).click();await page.getByText('Fixture team',{exact:true}).waitFor();checks++;
- await target.getByRole('button',{name:'重命名',exact:true}).click();
+ assert.equal(await target.count(),0);checks++;
+ const other=page.locator('.identity-card:not(.current)').filter({has:page.getByRole('heading',{name:'Identity 4',exact:true})});
+ await other.getByRole('button',{name:'重命名',exact:true}).click();
  await page.getByRole('dialog').getByRole('textbox',{name:'身份名称'}).fill('Renamed fixture');
  await page.getByRole('dialog').getByRole('button',{name:'保存',exact:true}).click();
  const renamed=cards.filter({has:page.getByRole('heading',{name:'Renamed fixture',exact:true})});await renamed.waitFor();

@@ -2,9 +2,14 @@
 // [OUTPUT]: 当前/空/已保存身份、有界账号显示信息、用户保留选项、确认后的切换/恢复/重命名/直接删除命令。
 // [POS]: GUI 身份管理的原生入口；不提供凭据读取、任意文件或网络接口。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+mod archive;
+mod catalog;
 mod codec;
+mod compression;
 mod credentials;
 mod database;
+#[cfg(test)]
+mod optimization_tests;
 pub(crate) mod private;
 mod profile;
 mod store;
@@ -100,7 +105,8 @@ fn state(app: &tauri::AppHandle) -> Result<State, String> {
     let db = database::Database::open(&vault(app)?)?;
     Ok(State {
         records: db.records()?.into_iter().filter(|r| !r.empty).collect(),
-        active: db.get("active")?.unwrap_or_else(|| "current".into()),
+        active: catalog::current_id(&vault(app)?, &crate::cleaner::identity::root()?, &db)?
+            .unwrap_or_else(|| "current".into()),
         recovery: db.get("recovery")?,
         running: crate::cleaner::identity::processes_running()?,
         current: profile::read(&crate::cleaner::identity::root()?),
@@ -111,6 +117,18 @@ pub async fn identities_read(app: tauri::AppHandle) -> Result<State, String> {
     tauri::async_runtime::spawn_blocking(move || state(&app))
         .await
         .map_err(|_| "身份列表读取被中断。".to_string())?
+}
+#[tauri::command]
+pub async fn identities_stop(app: tauri::AppHandle) -> Result<(), String> {
+    let cleaner = app.state::<crate::cleaner::Cleaner>();
+    cleaner.enter()?;
+    let result = tauri::async_runtime::spawn_blocking(crate::cleaner::stop_processes)
+        .await
+        .map_err(|_| "结束进程被中断，请刷新。".to_string())
+        .and_then(|r| r)
+        .map(|_| ());
+    cleaner.leave();
+    result
 }
 #[tauri::command]
 pub async fn identities_switch(
