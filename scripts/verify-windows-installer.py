@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: NSIS 安装器、固定引擎哈希、browser_ui 资源验收、Skill Windows 私有文件权限层与空白 GitHub Windows runner。
-# [OUTPUT]: 当前测试用户所有的私密样本、UTF-8 诊断与当前用户安装、实际 A/B 回环启动、升级、卸载和资产保留验收。
+# [OUTPUT]: 当前用户私密样本、UTF-8 诊断与安装/实际 A/B 回环/升级/卸载/资产保留验收；仅沙箱缓存拒绝清理交由一次性 runner 销毁。
 # [POS]: 只在可丢弃 CI runner 执行安装；拒绝已有应用资料，不读取开发者用户数据。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import ctypes
@@ -151,7 +151,14 @@ def main():
             raise
         finally:
             stop()
-            shutil.rmtree(data)
+            try:
+                shutil.rmtree(data)
+            except PermissionError as error:
+                # 只允许 Chromium 沙箱缓存留给一次性 runner 销毁；其他清理错误仍失败。
+                cache=data/'browser/profile/Default/Cache'
+                if not error.filename or not Path(error.filename).is_relative_to(cache):
+                    raise
+                print('CI sandbox cache cleanup deferred to disposable runner teardown.')
             shutil.rmtree(claude)
             trace.unlink(missing_ok=True)
 
