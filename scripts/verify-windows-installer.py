@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# [INPUT]: NSIS 安装器、固定引擎哈希、browser_ui 资源引用验收与空白 GitHub Windows runner。
-# [OUTPUT]: UTF-8 诊断与当前用户安装、实际 A/B 回环启动、升级、卸载和用户资产保留的运行验收。
+# [INPUT]: NSIS 安装器、固定引擎哈希、browser_ui 资源验收、Skill Windows 私有文件权限层与空白 GitHub Windows runner。
+# [OUTPUT]: 当前测试用户所有的私密样本、UTF-8 诊断与当前用户安装、实际 A/B 回环启动、升级、卸载和资产保留验收。
 # [POS]: 只在可丢弃 CI runner 执行安装；拒绝已有应用资料，不读取开发者用户数据。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import ctypes
@@ -57,6 +57,12 @@ def main():
         skill=home/'.claude/skills/personal/SKILL.md';skill.parent.mkdir(parents=True);skill.write_text('keep-skill',encoding='utf-8')
         settings=home/'.claude/settings.json';settings.write_text('{"keep":true}',encoding='utf-8')
         profile=data/'browser/profile/Default/personal-data';profile.parent.mkdir(parents=True);profile.write_bytes(b'keep-profile')
+        # ----- 只修正刚创建的 CI 样本；管理员 token 的默认所有者不能冒充用户 SID -----
+        sys.path.insert(0,str(ROOT/'skills/ccbaga-network/scripts'))
+        import windows as private_files
+        for sample in (data,claude):
+            for path in [sample,*sample.rglob('*')]:
+                private_files.protect(path)
         env={k:v for k,v in os.environ.items() if not k.startswith(('APPLE_','TAURI_SIGNING_PRIVATE_KEY'))}
         env.update(CC_CLI_USER_DIR=str(home),HTTPS_PROXY='http://secret-marker.invalid:1')
         def powershell(command,extra=None,quiet=True):
