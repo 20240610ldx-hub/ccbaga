@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 原生层返回的脱敏清理快照。
  * [OUTPUT]: 分类、预设选择、跨平台路径父子去重、子项排除、重新扫描选择映射与规模格式化。
- * [POS]: 身份页复用规模格式化；旧清理快照选择仅保留纯逻辑回归。
+ * [POS]: 身份页残留扫描/清理的脱敏契约，复用既有快照选择与路径去重规则。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 export type Item = {id:string;path:string;title:string;group:string;risk:string;impact:string;bytes:number;files:number;exact:boolean;keys:string[]};

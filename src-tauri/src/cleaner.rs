@@ -1,6 +1,6 @@
 // [INPUT]: Claude 白名单、所选文件夹发现、配置变换、原子写入、官方原生 CLI 版本路径及 macOS/Linux/Windows 白名单路径边界。
-// [OUTPUT]: 全机/文件夹元数据扫描、旧组织发现、实时 Claude 进程检查与结束全部已识别进程；CLI 和身份管理共用互斥锁与精确进程停止函数，身份调用不触发文件扫描。
-// [POS]: 白名单与进程共用边界；身份操作由 identities 编排，历史直接清理只编译进测试。
+// [OUTPUT]: 全机/文件夹元数据扫描、文件残留专用快照与选择清理、实时 Claude 进程检查与停止；CLI、身份和残留操作共用互斥锁。
+// [POS]: 白名单与进程共用边界；身份由 identities 编排，残留入口仅允许文件操作且不访问钥匙串。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use crate::native;
 use crate::progress::{Progress, Reporter};
@@ -30,9 +30,10 @@ mod file_io;
 mod folder;
 #[path = "cleaner_targets.rs"]
 mod targets;
-#[cfg(test)]
 #[path = "cleaner_transaction.rs"]
 mod transaction;
+#[path = "cleaner_residue.rs"]
+pub(crate) mod residue;
 #[path = "cleaner_identity.rs"]
 pub(crate) mod identity;
 #[cfg(test)]
@@ -45,7 +46,7 @@ extern "C" {
     fn getuid() -> u32;
     fn kill(pid: i32, signal: i32) -> i32;
 }
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 enum Operation {
     Delete,
     Edit(config::EditKind),
@@ -138,6 +139,7 @@ pub struct Scan {
 #[derive(Default)]
 pub struct Cleaner {
     plan: Mutex<Option<Scan>>,
+    residue_plan: Mutex<Option<Scan>>,
     active: AtomicBool,
 }
 impl Cleaner {
@@ -763,8 +765,7 @@ fn identity(item: &Item, root: &Path) -> Result<(), String> {
 
     Ok(())
 }
-#[cfg(test)]
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct CleanResult {
     cleaned: usize,
     errors: Vec<String>,

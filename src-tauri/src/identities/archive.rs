@@ -1,5 +1,5 @@
 // [INPUT]: 白名单身份源、SQLite 账号目录、Zstandard/旧 gzip 与认证加密流。
-// [OUTPUT]: 新身份复用未绑定空浏览器资料编号以保持首次种子； 完整验证的不可变归档代次和短期解包工作区；新代次验证后才交给目录事务。
+// [OUTPUT]: 不可变归档代次与短期解包区，逐源完成/压缩落盘/完整归档验收的真实局部进度；首身份复用空浏览器编号。
 // [POS]: 保险库的数据格式边界，与 store 的工作区切换事务分离，旧 gzip 归档保持可读。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::{
@@ -214,13 +214,42 @@ impl Store {
         reuse: bool,
     ) -> Result<(Record, Stage), String> {
         self.stopped()?;
+        reporter.log("validate", "running", "正在检查当前身份文件。", 0, None);
         let sources = identity::sources(&self.home, policy)?;
-        let fingerprints = sources
-            .iter()
-            .map(|s| identity::fingerprint(&s.path))
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut fingerprints = Vec::with_capacity(sources.len());
+        for (index, source) in sources.iter().enumerate() {
+            fingerprints.push(identity::fingerprint(&source.path)?);
+            reporter.log(
+                "validate",
+                "running",
+                "已检查身份文件快照。",
+                index + 1,
+                Some(sources.len()),
+            );
+        }
+        reporter.log(
+            "validate",
+            "ok",
+            "当前身份文件快照已完整检查。",
+            sources.len(),
+            Some(sources.len()),
+        );
+        reporter.log(
+            "credentials",
+            "running",
+            "正在保存所选本地登录凭据。",
+            0,
+            None,
+        );
         let credentials = self.snapshot_keys()?;
         super::credentials::clear(&credentials, policy)?;
+        reporter.log(
+            "credentials",
+            "ok",
+            "本地登录凭据已读取并核验。",
+            1,
+            Some(1),
+        );
         let account_key = if reuse {
             super::catalog::live_key(&self.home, &self.key)?
         } else {
@@ -261,15 +290,15 @@ impl Store {
                 codec::Seal::new(private::create(&pending)?, &self.key).map_err(problem)?;
             let buffered = BufWriter::with_capacity(64 * 1024, output);
             let mut tar = tar::Builder::new(compression::encode(buffered).map_err(problem)?);
+            reporter.log(
+                "archive",
+                "running",
+                "正在压缩暂存身份文件。",
+                0,
+                Some(manifest.sources.len()),
+            );
             for (n, source) in manifest.sources.iter().enumerate() {
                 self.stopped()?;
-                reporter.log(
-                    "archive",
-                    "running",
-                    "正在压缩暂存身份。",
-                    n,
-                    Some(manifest.sources.len()),
-                );
                 let archive_path = PathBuf::from(format!("data/{n}"));
                 if !source.keys.is_empty() {
                     let text = fs::read_to_string(&source.path).map_err(problem)?;
@@ -295,23 +324,71 @@ impl Store {
                     let mut file = fs::File::open(&source.path).map_err(problem)?;
                     tar.append_file(archive_path, &mut file).map_err(problem)?;
                 }
+                reporter.log(
+                    "archive",
+                    "running",
+                    "已写入身份归档文件。",
+                    n + 1,
+                    Some(manifest.sources.len()),
+                );
             }
             append(
                 &mut tar,
                 Path::new("manifest.json"),
                 &serde_json::to_vec(&manifest).map_err(problem)?,
             )?;
+            reporter.log(
+                "archive",
+                "ok",
+                "身份文件已写入压缩流。",
+                manifest.sources.len(),
+                Some(manifest.sources.len()),
+            );
+            reporter.log(
+                "compress",
+                "running",
+                "正在完成压缩、认证加密与落盘。",
+                0,
+                None,
+            );
             let encoder = tar.into_inner().map_err(problem)?;
             let buffered = encoder.finish().map_err(problem)?;
             let seal = buffered.into_inner().map_err(problem)?;
             let file = seal.finish().map_err(problem)?;
             file.sync_all().map_err(problem)?;
             drop(file);
-            for (source, stamp) in manifest.sources.iter().zip(&manifest.fingerprints) {
+            reporter.log("compress", "ok", "压缩归档已完整落盘。", 1, Some(1));
+            reporter.log(
+                "validate",
+                "running",
+                "正在复核身份源文件。",
+                0,
+                Some(manifest.sources.len()),
+            );
+            for (index, (source, stamp)) in manifest
+                .sources
+                .iter()
+                .zip(&manifest.fingerprints)
+                .enumerate()
+            {
                 if identity::fingerprint(&source.path)? != *stamp {
                     return Err("身份数据发生变化；未切换身份。".into());
                 }
+                reporter.log(
+                    "validate",
+                    "running",
+                    "已复核身份源文件。",
+                    index + 1,
+                    Some(manifest.sources.len()),
+                );
             }
+            reporter.log(
+                "validate",
+                "ok",
+                "身份源文件已完整复核。",
+                manifest.sources.len(),
+                Some(manifest.sources.len()),
+            );
             self.stopped()?;
             fs::rename(&pending, &destination).map_err(problem)?;
             private::sync_parent(&destination);
@@ -335,7 +412,15 @@ impl Store {
                 empty: manifest.sources.is_empty() && manifest.credentials.is_empty(),
                 account_key: Some(account_key.unwrap_or_default()),
             };
+            reporter.log(
+                "verify_archive",
+                "running",
+                "正在解包并验收认证归档。",
+                0,
+                None,
+            );
             let stage = self.load(&record)?;
+            reporter.log("verify_archive", "ok", "认证归档已完整验收。", 1, Some(1));
             Ok((record, stage))
         })();
         if result.is_err() {

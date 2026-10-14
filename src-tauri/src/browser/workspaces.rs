@@ -1,5 +1,5 @@
 // [INPUT]: 身份 SQLite 绑定、独立浏览器根目录、受限配置和用户确认后的切换事务。
-// [OUTPUT]: 每身份独占资料/配置选择、初始稳定种子、安全退出/重开与崩溃时启动阻断。
+// [OUTPUT]: 每身份独占资料/配置选择、初始稳定种子、安全退出/重开与崩溃时启动阻断；退出成功与随后同步各自发出真实阶段事件。
 // [POS]: 身份与浏览器的协调边界；资料不压缩、不复制、不合并 Cookie，失败状态如实返回。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -156,8 +156,10 @@ pub(super) fn transition(
         let _ = refresh_launch_args(app);
         return Err(error);
     }
+    reporter.log("browser", "ok", "关联浏览器已退出。", 1, Some(1));
     let result = action();
     let finish = (|| {
+        reporter.log("browser", "running", "正在同步关联浏览器资料。", 0, None);
         refresh_launch_args(app)?;
         if (result.is_ok() && database(&root)?.browser_link()?.enabled) || was_running {
             launch_locked(app, reporter)?;

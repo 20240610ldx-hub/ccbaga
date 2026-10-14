@@ -1,6 +1,6 @@
 // [INPUT]: macOS Objective-C / Linux Rust / Windows Rust 的本地清理、授权与剪贴板接口。
 // [OUTPUT]: 辅助功能权限、剪贴板复制、钥匙串解锁、脱敏凭据发现及用户确认的原生身份凭据暂存/恢复，不将正文交给 UI。
-// [POS]: 清理与电脑设置的平台桥接边界；公共 JSON 解码供独立 system 桥复用。
+// [POS]: 清理与电脑设置的平台桥接边界；不提供旧批量凭据删除包装，公共 JSON 解码供独立 system 桥复用。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use serde::Deserialize;
 use std::ffi::{c_char, CStr, CString};
@@ -16,7 +16,6 @@ extern "C" {
     fn rf_free(value: *mut c_char);
     fn rf_claude_pids() -> *mut c_char;
     fn rf_credentials_list() -> *mut c_char;
-    fn rf_credentials_remove(reference: *const c_char) -> *mut c_char;
     fn rf_keychain_unlock() -> *mut c_char;
     fn rf_identity_snapshot() -> *mut c_char;
     fn rf_identity_remove(json: *const c_char) -> *mut c_char;
@@ -42,12 +41,6 @@ pub fn unlock_keychain() -> Result<String, String> {
     }
     Ok(decode::<ResultMessage>(unsafe { rf_keychain_unlock() })?.message)
 }
-pub fn remove_credential(reference: &str) -> Result<(), String> {
-    let reference = CString::new(reference).map_err(|_| "凭据编号无效。")?;
-    let _: serde_json::Value = decode(unsafe { rf_credentials_remove(reference.as_ptr()) })?;
-    Ok(())
-}
-
 pub(crate) fn decode<T: serde::de::DeserializeOwned>(ptr: *mut c_char) -> Result<T, String> {
     if ptr.is_null() {
         return Err("系统操作失败。".into());

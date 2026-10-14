@@ -230,7 +230,7 @@ fn updating_an_archive_commits_the_new_generation_with_its_recovery_marker() {
         old.archive
     );
     s.db.pending(&new, "empty").unwrap();
-    s.clear(&store::Store::selected(&stage, &p)).unwrap();
+    s.clear(&store::Store::selected(&stage, &p), &r, "clear").unwrap();
     drop(stage);
     drop(s);
     let mut s = store::Store::open(&f.vault, &f.home).unwrap();

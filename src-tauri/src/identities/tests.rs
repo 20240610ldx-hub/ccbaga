@@ -1,5 +1,5 @@
 // [INPUT]: 身份保险库与临时文件系统样本。
-// [OUTPUT]: SQLite 策略持久化及完整认证归档回归，不读取真实 Claude 凭据。
+// [OUTPUT]: SQLite 策略持久化、完整认证归档与真实阶段/局部完成计数/回滚事件回归，不读取真实 Claude 凭据。
 // [POS]: 身份管理的离线验证入口；平台真实登入需用户验收。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -11,6 +11,41 @@ fn fixture_write(path: impl AsRef<std::path::Path>, bytes: impl AsRef<[u8]>) -> 
     private::write(path.as_ref(), bytes.as_ref())?;
     assert_eq!(canonicalize(path.as_ref()).unwrap(), path.as_ref(), "fixture must use canonical paths");
     Ok(())
+}
+#[test]
+fn operation_progress_tracks_completed_sources_and_explicit_rollback() {
+    let folder = canonicalize(std::env::temp_dir()).unwrap().join(format!("baga-progress-{}", new_id().unwrap()));
+    let home = folder.join("home");
+    private::directory(&home.join(".claude/cache")).unwrap();
+    fixture_write(home.join(".claude/cache/entry"), "fixture").unwrap();
+    fixture_write(home.join(".claude.json"), r#"{"oauthAccount":{"accountUuid":"fixture-account"}}"#).unwrap();
+    let mut store = store::Store::open(&folder.join("vault"), &home).unwrap();
+    let reporter = Reporter::channel(None);
+    store.switch("empty", "Fixture", &Policy::default(), &reporter).unwrap();
+    let events = reporter.events().into_iter().map(|event| serde_json::to_value(event).unwrap()).collect::<Vec<_>>();
+    let position = |stage: &str, status: &str| events.iter().position(|event| event["stage"] == stage && event["status"] == status).unwrap();
+    assert!(position("compress", "running") < position("compress", "ok"));
+    assert!(position("compress", "ok") < position("verify_archive", "running"));
+    assert!(position("verify_archive", "running") < position("verify_archive", "ok"));
+    assert!(position("verify_archive", "ok") < position("clear", "running"));
+    assert!(position("clear", "ok") < position("commit", "ok"));
+    assert!(position("commit", "ok") < position("verify", "ok"));
+    let completed = events.iter().find(|event| event["stage"] == "archive" && event["status"] == "ok").unwrap();
+    let total = completed["total"].as_u64().unwrap();
+    assert!(total >= 2);
+    assert_eq!(completed["current"].as_u64(), Some(total));
+    let archived = events.iter().filter(|event| event["stage"] == "archive" && event["status"] == "running" && event["current"].as_u64().unwrap_or(0) > 0).map(|event| event["current"].as_u64().unwrap()).collect::<Vec<_>>();
+    assert_eq!(archived, (1..=total).collect::<Vec<_>>());
+    let target = store.records().into_iter().find(|record| !record.empty).unwrap().id;
+    store.fail_after_clear = true;
+    let failed = Reporter::channel(None);
+    assert!(store.switch(&target, "Empty", &Policy::default(), &failed).is_err());
+    let events = failed.events();
+    assert!(events.iter().any(|event| event.stage() == "rollback" && event.status() == "running"));
+    assert!(events.iter().any(|event| event.stage() == "rollback" && event.status() == "ok"));
+    assert!(!events.iter().any(|event| event.stage() == "verify" && event.status() == "ok"));
+    drop(store);
+    std::fs::remove_dir_all(folder).unwrap();
 }
 #[test]
 fn database_metadata_and_recovery_are_transactional() {
@@ -131,7 +166,7 @@ fn interrupted_switch_can_recover_and_preserves_pre_recovery_state() {
     let (saved, stage) = store.save("原身份", &Policy::default(), &reporter).unwrap();
     store.db.pending(&saved, "empty").unwrap();
     store
-        .clear(&store::Store::selected(&stage, &Policy::default()))
+        .clear(&store::Store::selected(&stage, &Policy::default()), &reporter, "clear")
         .unwrap();
     fixture_write(
         home.join(".claude/history.jsonl"),

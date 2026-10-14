@@ -8,7 +8,7 @@ server.rs: 仅向带随机令牌的回环 context 提供绑定身份的名称/�
 windows.rs: Windows 引擎和共同资料/回环会话编排；用户点击后注册完整默认浏览器协议，不改写默认关联；B 启动项进入同一宿主，CI 启动阶段只记录固定字符串；CI 实际核验注册命令/两个协议，前后默认关联必须不变。
 tests.rs: 模块共用临时目录样本，验证代理/资料边界、缓存隔离与地区核验；本机 HTTP 样本复现 429 并核验备援解析，Windows 使用真实 junction 样本验证拒绝跨资料目录；不触碰现有账号数据。
 linux.rs: Linux libexec 隔离引擎（兼容源码/Arch 的资源目录），带双布局路径回归，与宿主驱动的 CCBaga-B 启动项；处理 --browser 链接、同资料重连、显式 xdg-mime 注册并核验 HTTP/HTTPS；定位状态未知的桌面禁止完整机器对齐，修改前停止；Linux UA 不提供内核版本，不用 UA 值伪装内核核验。
-workspaces.rs: 以 SQLite 绑定统一解析 macOS/Linux/Windows 资料与配置；用户确认后正常退出/切换/重开，持久阻断文件防止恢复前打开错误资料；删除关联资料单独确认。
+workspaces.rs: 以 SQLite 绑定统一解析 macOS/Linux/Windows 资料与配置；正常退出成功后才报告退出完成，身份动作结束再开始资料同步/重开阶段；持久阻断文件防止恢复前打开错误资料，删除关联资料单独确认。
 launch.rs: 已持有浏览器互斥锁时复用的同步启动核心；身份联动与手动启动走同一参数、资料和进程验证。
 workspace_tests.rs: 临时数据库清理前明确释放句柄以兼容 Windows；临时 Cookie/缓存/配置与种子隔离、手动换指纹持久化、旧资料保留及恢复阻断回归。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md

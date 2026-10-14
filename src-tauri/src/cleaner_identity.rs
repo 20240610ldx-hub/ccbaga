@@ -1,4 +1,4 @@
-// [INPUT]: Cleaner 白名单、完整目录快照、用户保留策略与 JSON 配置。
+// [INPUT]: Cleaner 白名单、共享 Code 登录键常量、完整目录快照、用户保留策略与 JSON 配置。
 // [OUTPUT]: 受限身份目标与配置身份键的提取/清空/恢复，保留工作区未选择的个人资产及桌面身份路径元数据检测。
 // [POS]: 身份保险库复用原有路径边界；不扫描项目源码、Shell 或系统代理配置。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -12,7 +12,7 @@ pub(crate) struct Source {
     pub keys: Vec<String>,
 }
 pub(crate) fn credential_keys(policy: &Policy) -> Vec<String> {
-    let mut keys = vec!["claudeAiOauth".into(), "trustedDeviceToken".into()];
+    let mut keys = config::CREDENTIAL_KEYS.iter().map(|key| (*key).into()).collect::<Vec<String>>();
     if !policy.mcp {
         keys.extend(
             [

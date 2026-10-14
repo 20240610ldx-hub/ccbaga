@@ -1,6 +1,6 @@
-// [INPUT]: 有效全机/目录清理快照、原子配置写入与原生凭据删除，以及进度通道。
-// [OUTPUT]: 仅测试构建的可丢弃样本删除与快照保护回归；不注册生产命令。
-// [POS]: 历史清理边界回归；生产身份写入由 identities/store.rs 先归档后切换。
+// [INPUT]: 已限定文件范围的完整清理快照、原子配置写入、实时进程复核与进度通道。
+// [OUTPUT]: 文件删除与窄配置改写；预检失败零删除，执行中失败停止后续项目并报告已完成数量。
+// [POS]: 文件残留与隔离样本回归共用引擎；拒绝钥匙串操作，身份归档仍由 identities/store.rs 编排。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
 
@@ -21,8 +21,25 @@ pub(super) fn perform_items(
     check_running: impl Fn() -> Result<bool, String>,
     reporter: &Reporter,
 ) -> Result<CleanResult, String> {
-    for item in items {
+    reporter.log(
+        "validate",
+        "running",
+        "正在复核所选文件快照。",
+        0,
+        Some(items.len()),
+    );
+    for (index, item) in items.iter().enumerate() {
+        if matches!(item.operation, Operation::Keychain(_)) {
+            return Err("文件清理不支持钥匙串操作。".into());
+        }
         identity(item, root)?;
+        reporter.log(
+            "validate",
+            "running",
+            "所选文件快照已复核。",
+            index + 1,
+            Some(items.len()),
+        );
     }
     reporter.log(
         "validate",
@@ -57,7 +74,7 @@ pub(super) fn perform_items(
                     };
                     result.map_err(|_| "直接删除失败；此项目可能部分删除，请重新扫描。".to_string())
                 }
-                Operation::Keychain(reference) => native::remove_credential(reference),
+                Operation::Keychain(_) => Err("文件清理不支持钥匙串操作。".into()),
                 Operation::Edit(kind) => {
                     let meta = fs::metadata(path).map_err(|_| "无法读取配置属性。")?;
                     let text = fs::read_to_string(path).map_err(|_| "无法读取配置。")?;

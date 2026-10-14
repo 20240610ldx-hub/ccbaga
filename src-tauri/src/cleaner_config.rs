@@ -1,16 +1,18 @@
 // [INPUT]: 有大小限制的配置原文及用户选择的清理类型。
-// [OUTPUT]: 脱敏键名预览与只修改指定配置的替换文本。
+// [OUTPUT]: 脱敏键名预览与只修改指定配置的替换文本；文件凭据只移除 Code 登录键，保留 MCP/插件秘密。
 // [POS]: 清理的配置变换边界；不执行 shell，不返回密钥或代理地址。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use serde_json::Value;
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum EditKind {
     Account,
+    Credentials,
     Settings,
     Shell,
     Npm,
     Git,
 }
+pub(super) const CREDENTIAL_KEYS: &[&str] = &["claudeAiOauth", "trustedDeviceToken"];
 fn sensitive_key(key: &str) -> bool {
     matches!(
         key.to_ascii_uppercase().as_str(),
@@ -46,12 +48,20 @@ pub(super) const ACCOUNT_KEYS: &[&str] = &[
 ];
 pub(super) fn transform(text: &str, kind: EditKind) -> Result<(String, Vec<String>), String> {
     let mut names = Vec::new();
-    if matches!(kind, EditKind::Account | EditKind::Settings) {
+    if matches!(
+        kind,
+        EditKind::Account | EditKind::Credentials | EditKind::Settings
+    ) {
         let mut data: Value =
             serde_json::from_str(text).map_err(|_| "配置不是有效 JSON，拒绝修改。")?;
         let object = data.as_object_mut().ok_or("配置顶层必须是 JSON 对象。")?;
-        if matches!(kind, EditKind::Account) {
-            for key in ACCOUNT_KEYS {
+        if matches!(kind, EditKind::Account | EditKind::Credentials) {
+            let keys = if matches!(kind, EditKind::Account) {
+                ACCOUNT_KEYS
+            } else {
+                CREDENTIAL_KEYS
+            };
+            for key in keys {
                 if object.remove(*key).is_some() {
                     names.push((*key).into());
                 }

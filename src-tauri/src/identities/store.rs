@@ -1,5 +1,5 @@
 // [INPUT]: SQLite 目录、用户策略、白名单源、已验收归档代次、认证加密与平台凭据桥。
-// [OUTPUT]: 已验证身份归档、先暂存后切换、持久恢复记录、原位配置合并及明确的直接删除。
+// [OUTPUT]: 已验证身份归档、先暂存后切换、持久恢复记录、原位配置合并、直接删除与清除/恢复/凭据/提交/回滚真实进度。
 // [POS]: 身份的文件事务；SQLite 与文件系统由恢复日志协调，不能假装是同一原子事务。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::{
@@ -202,25 +202,54 @@ impl Store {
             })
             .collect()
     }
-    pub(super) fn clear(&self, sources: &[(usize, Source)]) -> Result<(), String> {
-        for (_, source) in sources {
+    pub(super) fn clear(
+        &self,
+        sources: &[(usize, Source)],
+        reporter: &Reporter,
+        phase: &str,
+    ) -> Result<(), String> {
+        reporter.log(
+            phase,
+            "running",
+            "正在清除所选工作区文件。",
+            0,
+            Some(sources.len()),
+        );
+        for (index, (_, source)) in sources.iter().enumerate() {
             self.stopped()?;
             if !identity::allowed(&self.home, source) {
                 return Err("身份路径超出允许范围。".into());
             }
-            if fs::symlink_metadata(&source.path).is_err() {
-                continue;
+            match fs::symlink_metadata(&source.path) {
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(problem(error)),
+                Ok(_) => {
+                    private::parents(source.path.parent().unwrap())?;
+                    private::safe(&source.path)?;
+                    if !source.keys.is_empty() {
+                        identity::apply_config(source, &serde_json::json!({}))?;
+                    } else if source.path.is_dir() {
+                        fs::remove_dir_all(&source.path).map_err(problem)?;
+                    } else {
+                        fs::remove_file(&source.path).map_err(problem)?;
+                    }
+                }
             }
-            private::parents(source.path.parent().unwrap())?;
-            private::safe(&source.path)?;
-            if !source.keys.is_empty() {
-                identity::apply_config(source, &serde_json::json!({}))?;
-            } else if source.path.is_dir() {
-                fs::remove_dir_all(&source.path).map_err(problem)?;
-            } else {
-                fs::remove_file(&source.path).map_err(problem)?;
-            }
+            reporter.log(
+                phase,
+                "running",
+                "已清除工作区文件。",
+                index + 1,
+                Some(sources.len()),
+            );
         }
+        reporter.log(
+            phase,
+            "ok",
+            "所选工作区文件已清除。",
+            sources.len(),
+            Some(sources.len()),
+        );
         Ok(())
     }
     fn restore(
@@ -228,8 +257,17 @@ impl Store {
         stage: &Stage,
         sources: &[(usize, Source)],
         policy: &Policy,
+        reporter: &Reporter,
+        phase: &str,
     ) -> Result<(), String> {
-        for (n, source) in sources {
+        reporter.log(
+            phase,
+            "running",
+            "正在恢复身份文件。",
+            0,
+            Some(sources.len()),
+        );
+        for (index, (n, source)) in sources.iter().enumerate() {
             self.stopped()?;
             private::parents(source.path.parent().unwrap())?;
             if source.path.exists() {
@@ -270,9 +308,31 @@ impl Store {
                     output.sync_all().map_err(problem)?;
                 }
             }
+            reporter.log(
+                phase,
+                "running",
+                "已恢复身份文件。",
+                index + 1,
+                Some(sources.len()),
+            );
         }
+        reporter.log(
+            phase,
+            "ok",
+            "所选身份文件已恢复。",
+            sources.len(),
+            Some(sources.len()),
+        );
         self.stopped()?;
-        self.keys(&stage.manifest.credentials, true, policy)
+        let phase = if phase == "rollback" {
+            phase
+        } else {
+            "credentials"
+        };
+        reporter.log(phase, "running", "正在恢复本地登录凭据。", 0, None);
+        self.keys(&stage.manifest.credentials, true, policy)?;
+        reporter.log(phase, "ok", "本地登录凭据已恢复。", 1, Some(1));
+        Ok(())
     }
     pub fn delete(&mut self, id: &str, policy: &Policy, reporter: &Reporter) -> Result<(), String> {
         if self.db.get("recovery")?.is_some() {
@@ -301,10 +361,23 @@ impl Store {
                 None,
             );
             let selected: Vec<_> = sources.into_iter().enumerate().collect();
-            self.clear(&selected)
-                .and_then(|_| self.keys(&credentials, false, policy))
+            self.clear(&selected, reporter, "clear")
+                .and_then(|_| {
+                    reporter.log(
+                        "credentials",
+                        "running",
+                        "正在清除所选本地登录凭据。",
+                        0,
+                        None,
+                    );
+                    self.keys(&credentials, false, policy)?;
+                    reporter.log("credentials", "ok", "所选本地登录凭据已清除。", 1, Some(1));
+                    Ok(())
+                })
                 .map_err(|_| "直接删除未完成；部分数据可能已删除，请刷新检查。".to_string())?;
+            reporter.log("commit", "running", "正在保存空身份状态。", 0, Some(1));
             self.db.complete("empty")?;
+            reporter.log("commit", "ok", "空身份状态已保存。", 1, Some(1));
         } else {
             let record = self.record(id)?;
             if !super::catalog::archive_name(&record.archive) {
@@ -340,20 +413,39 @@ impl Store {
         if self.db.get("recovery")?.is_some() {
             return Err("请先恢复未完成的身份切换。".into());
         }
+        reporter.log("validate", "running", "正在核对当前身份。", 0, None);
         let live_key = super::catalog::live_key(&self.home, &self.key)?;
+        reporter.log("validate", "ok", "当前本地身份已核对。", 1, Some(1));
         if target != "empty" && live_key.is_some() && self.record(target)?.account_key == live_key {
             // 当前账号仍是最新状态；避免用自己的旧快照覆盖当前刷新过的登录。
+            reporter.log("commit", "running", "正在保存当前身份选择。", 0, Some(1));
             self.db.complete(target)?;
             self.db.compact()?;
             let _ = self.collect_generations();
+            reporter.log("commit", "ok", "当前身份选择已保存。", 1, Some(1));
+            reporter.log("verify", "ok", "当前身份已经是所选身份。", 1, Some(1));
             return Ok(());
         }
         let incoming = if target == "empty" {
             None
         } else {
-            Some(self.load(&self.record(target)?)?)
+            reporter.log(
+                "verify_archive",
+                "running",
+                "正在验收目标身份归档。",
+                0,
+                None,
+            );
+            let stage = self.load(&self.record(target)?)?;
+            reporter.log(
+                "verify_archive",
+                "ok",
+                "目标身份归档已完整验收。",
+                1,
+                Some(1),
+            );
+            Some(stage)
         };
-        reporter.log("archive", "running", "正在验证并暂存当前身份。", 0, None);
         let (record, outgoing) = self.save(name, policy, reporter)?;
         let previous = self.db.get("active")?.unwrap_or_else(|| "current".into());
         self.db.pending(&record, target)?;
@@ -365,48 +457,108 @@ impl Store {
         let mut mutated = false;
         let result: Result<(), String> = (|| {
             self.stopped()?;
-            reporter.log("switch", "running", "暂存已验证，正在切换身份。", 0, None);
-            for (source, stamp) in outgoing
+            reporter.log(
+                "validate",
+                "running",
+                "正在复核切换前的工作区文件。",
+                0,
+                Some(outgoing.manifest.sources.len()),
+            );
+            for (index, (source, stamp)) in outgoing
                 .manifest
                 .sources
                 .iter()
                 .zip(&outgoing.manifest.fingerprints)
+                .enumerate()
             {
                 if identity::fingerprint(&source.path)? != *stamp {
                     return Err("身份数据发生变化；未切换身份。".into());
                 }
+                reporter.log(
+                    "validate",
+                    "running",
+                    "已复核切换前的工作区文件。",
+                    index + 1,
+                    Some(outgoing.manifest.sources.len()),
+                );
             }
+            reporter.log(
+                "validate",
+                "ok",
+                "切换前工作区文件已完整复核。",
+                outgoing.manifest.sources.len(),
+                Some(outgoing.manifest.sources.len()),
+            );
             mutated = true;
-            self.clear(&current)?;
+            self.clear(&current, reporter, "clear")?;
             #[cfg(test)]
             if self.fail_after_clear {
                 return Err("fixture rollback".into());
             }
+            reporter.log(
+                "credentials",
+                "running",
+                "正在清除当前本地登录凭据。",
+                0,
+                None,
+            );
             self.keys(&outgoing.manifest.credentials, false, policy)?;
+            reporter.log("credentials", "ok", "当前本地登录凭据已清除。", 1, Some(1));
             if let Some(stage) = incoming.as_ref() {
-                self.restore(stage, &next, policy)?;
+                self.restore(stage, &next, policy, reporter, "restore")?;
             }
+            reporter.log(
+                "commit",
+                "running",
+                "正在提交身份与浏览器选择。",
+                0,
+                Some(1),
+            );
             self.db.complete(target)?;
+            reporter.log("commit", "ok", "身份与浏览器选择已提交。", 1, Some(1));
             Ok(())
         })();
         if let Err(error) = result {
             if !mutated {
+                reporter.log(
+                    "rollback",
+                    "running",
+                    "身份未修改，正在撤销切换记录。",
+                    0,
+                    Some(1),
+                );
                 self.db.complete(&previous)?;
+                reporter.log("rollback", "ok", "原身份选择已保留。", 1, Some(1));
                 return Err(error);
             }
+            reporter.log("rollback", "running", "切换失败，正在恢复原身份。", 0, None);
             if self.stopped().is_ok() {
                 let rollback = (|| {
-                    self.clear(&current)?;
-                    self.clear(&next)?;
+                    self.clear(&current, reporter, "rollback")?;
+                    self.clear(&next, reporter, "rollback")?;
                     let live = self.snapshot_keys()?;
                     self.keys(&live, false, &outgoing.manifest.policy)?;
-                    self.restore(&outgoing, &current, &outgoing.manifest.policy)?;
+                    self.restore(
+                        &outgoing,
+                        &current,
+                        &outgoing.manifest.policy,
+                        reporter,
+                        "rollback",
+                    )?;
                     self.db.complete(&record.id)
                 })();
                 if rollback.is_ok() {
+                    reporter.log("rollback", "ok", "已恢复切换前的身份。", 1, Some(1));
                     return Err(format!("{error} 已恢复切换前的身份。"));
                 }
             }
+            reporter.log(
+                "rollback",
+                "error",
+                "自动恢复未完成，原身份已暂存。",
+                0,
+                None,
+            );
             return Err(format!("{error} 原身份已暂存，请使用恢复操作。"));
         }
         self.db.compact()?;
@@ -424,12 +576,41 @@ impl Store {
     pub fn recover(&mut self, name: &str, reporter: &Reporter) -> Result<(), String> {
         let id = self.db.get("recovery")?.ok_or("没有需要恢复的身份事务。")?;
         let record = self.record(&id)?;
+        reporter.log(
+            "verify_archive",
+            "running",
+            "正在验收待恢复的身份归档。",
+            0,
+            None,
+        );
         let outgoing = self.load(&record)?;
+        reporter.log(
+            "verify_archive",
+            "ok",
+            "待恢复的身份归档已验收。",
+            1,
+            Some(1),
+        );
         let target = self.db.get("target")?.unwrap_or_else(|| "empty".into());
         let incoming = if target == "empty" {
             None
         } else {
-            Some(self.load(&self.record(&target)?)?)
+            reporter.log(
+                "verify_archive",
+                "running",
+                "正在验收未完成的目标归档。",
+                0,
+                None,
+            );
+            let stage = self.load(&self.record(&target)?)?;
+            reporter.log(
+                "verify_archive",
+                "ok",
+                "未完成的目标归档已验收。",
+                1,
+                Some(1),
+            );
+            Some(stage)
         };
         self.stopped()?;
         reporter.log("switch", "running", "正在恢复未完成的身份切换。", 0, None);
@@ -437,16 +618,52 @@ impl Store {
         let (checkpoint, current_stage) =
             self.save_checkpoint(name, &outgoing.manifest.policy, reporter)?;
         self.db.remember(&checkpoint)?;
-        self.clear(&Self::selected(&current_stage, &outgoing.manifest.policy))?;
+        self.clear(
+            &Self::selected(&current_stage, &outgoing.manifest.policy),
+            reporter,
+            "clear",
+        )?;
         let current = Self::selected(&outgoing, &outgoing.manifest.policy);
-        self.clear(&current)?;
+        self.clear(&current, reporter, "clear")?;
         if let Some(stage) = incoming.as_ref() {
-            self.clear(&Self::selected(stage, &outgoing.manifest.policy))?;
+            self.clear(
+                &Self::selected(stage, &outgoing.manifest.policy),
+                reporter,
+                "clear",
+            )?;
         }
         let live = self.snapshot_keys()?;
+        reporter.log(
+            "credentials",
+            "running",
+            "正在清除待恢复工作区的登录凭据。",
+            0,
+            None,
+        );
         self.keys(&live, false, &outgoing.manifest.policy)?;
-        self.restore(&outgoing, &current, &outgoing.manifest.policy)?;
+        reporter.log(
+            "credentials",
+            "ok",
+            "待恢复工作区的登录凭据已清除。",
+            1,
+            Some(1),
+        );
+        self.restore(
+            &outgoing,
+            &current,
+            &outgoing.manifest.policy,
+            reporter,
+            "restore",
+        )?;
+        reporter.log(
+            "commit",
+            "running",
+            "正在提交恢复后的身份选择。",
+            0,
+            Some(1),
+        );
         self.db.complete(&record.id)?;
+        reporter.log("commit", "ok", "恢复后的身份选择已提交。", 1, Some(1));
         reporter.log("verify", "ok", "原身份已恢复。", 1, Some(1));
         Ok(())
     }

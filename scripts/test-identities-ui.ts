@@ -1,6 +1,6 @@
 /**
  * [INPUT]: Node.js 标准管道、已锁定 playwright-core、固定引擎、Vite 与 tests/ 的虚构 Tauri IPC。
- * [OUTPUT]: 默认勾选/关闭确认取消与工牌顺序/数量、横滚弹簧/视差、双语、保留选项与确认/删除/失败/恢复的真实 DOM 交互验收。
+ * [OUTPUT]: 工牌、浏览器/网络、残留清理与真实 Channel 阶段动画的 DOM 验收，覆盖双语、默认取消及失败重扫。
  * [POS]: 发布前无头行为回归；无截图、无真实账号/文件修改，不加载原生宿主，不允许外网请求。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -13,6 +13,8 @@ import {chromium} from 'playwright-core';
 import {testBrowserVerification} from './test-browser-verification.ts';
 import {testBrowserProfiles} from './test-browser-profiles.ts';
 import {testNetworkDiagnostics} from './test-network-diagnostics.ts';
+import {testClaudeResidue} from './test-claude-residue.ts';
+import {testIdentityOperation} from './test-identity-operation.ts';
 const engine=process.platform==='darwin'?'Browser.app/Contents/MacOS/Chromium':process.platform==='win32'?'WindowsBrowser/chrome.exe':'LinuxBrowser/chrome';
 const server=await createServer({server:{host:'127.0.0.1',port:0,strictPort:false,watch:{ignored:['**/src-tauri/**','**/browser-runtime/**','**/releases/**','**/dist/**']}},optimizeDeps:{include:['@tauri-apps/api/mocks']}});
 await server.listen();
@@ -125,6 +127,8 @@ try{
  assert.equal(errors.length,0,errors.join('\n'));
  checks+=await testBrowserVerification(browser,base);
  checks+=await testNetworkDiagnostics(browser,base);
+ checks+=await testClaudeResidue(browser,base);
+ checks+=await testIdentityOperation(browser,base);
  checks+=await testBrowserProfiles(resolve('browser-runtime',engine),base,temporary,env);
  console.log(`${checks} identity, browser and network UI simulation checks passed; no native commands or user data used.`);
 }finally{await browser.close();await server.close();await rm(temporary,{recursive:true,force:true});}

@@ -1,5 +1,5 @@
 // [INPUT]: 当前用户目录、Windows 实际 AppData、Claude 清理白名单与可选组织编号。
-// [OUTPUT]: 分类清理目标、完整目录元数据统计及受限旧组织文件匹配，包含官方文档确认的会话附件/计划/任务/快照。
+// [OUTPUT]: 分类清理目标、无条目截断的目标发现与读取警告、完整目录元数据统计及受限旧组织文件匹配。
 // [POS]: 清理发现边界；不跟随链接，不遍历项目仓库，不读取凭据内容。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -31,11 +31,30 @@ fn target(
     }
 }
 fn desktop_storage(root: &Path, desktop: &Path) -> Vec<Target> {
-    ["Local Storage", "Session Storage", "IndexedDB", "Network", "Cookies", "Cookies-journal", "Service Worker", "WebStorage", "Sessions"]
-        .into_iter().map(|name| Target {
-            path: desktop.join(name),
-            ..target(root, "", "Desktop 会话与登录存储", "desktop", "login", "清除本地登录数据库与网页状态；保留桌面配置、MCP 和其他个人文件。")
-        }).collect()
+    [
+        "Local Storage",
+        "Session Storage",
+        "IndexedDB",
+        "Network",
+        "Cookies",
+        "Cookies-journal",
+        "Service Worker",
+        "WebStorage",
+        "Sessions",
+    ]
+    .into_iter()
+    .map(|name| Target {
+        path: desktop.join(name),
+        ..target(
+            root,
+            "",
+            "Desktop 会话与登录存储",
+            "desktop",
+            "login",
+            "清除本地登录数据库与网页状态；保留桌面配置、MCP 和其他个人文件。",
+        )
+    })
+    .collect()
 }
 #[cfg(target_os = "windows")]
 fn win_dir(root: &Path, variable: &str, fallback: &str) -> PathBuf {
@@ -49,8 +68,32 @@ fn win_dir(root: &Path, variable: &str, fallback: &str) -> PathBuf {
     }
     root.join(fallback)
 }
+fn entries(path: &Path, warnings: &mut Vec<String>) -> Vec<fs::DirEntry> {
+    let directory = match fs::read_dir(path) {
+        Ok(entries) => entries,
+        Err(error) => {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                warnings.push(format!("目录无法完整检查：{}：{error}", path.display()));
+            }
+            return Vec::new();
+        }
+    };
+    directory
+        .filter_map(|entry| match entry {
+            Ok(entry) => Some(entry),
+            Err(error) => {
+                warnings.push(format!("目录无法完整检查：{}：{error}", path.display()));
+                None
+            }
+        })
+        .collect()
+}
 pub(super) fn definitions(root: &Path) -> Vec<Target> {
+    definitions_with_warnings(root).0
+}
+pub(super) fn definitions_with_warnings(root: &Path) -> (Vec<Target>, Vec<String>) {
     let mut result = Vec::new();
+    let mut warnings = Vec::new();
     for (name, title) in [
         ("cache", "Code 缓存"),
         ("stats-cache.json", "使用统计缓存"),
@@ -111,18 +154,16 @@ pub(super) fn definitions(root: &Path) -> Vec<Target> {
             "Desktop 崩溃缓存",
         ),
     ] {
-        if let Ok(entries) = fs::read_dir(root.join(parent)) {
-            for entry in entries.flatten().take(20_000) {
-                if entry.file_name().to_string_lossy().starts_with(prefix) {
-                    result.push(target(
-                        root,
-                        &format!("{parent}/{}", entry.file_name().to_string_lossy()),
-                        title,
-                        "cache",
-                        "safe",
-                        "仅移除 Claude 的缓存或崩溃记录。",
-                    ));
-                }
+        for entry in entries(&root.join(parent), &mut warnings) {
+            if entry.file_name().to_string_lossy().starts_with(prefix) {
+                result.push(target(
+                    root,
+                    &format!("{parent}/{}", entry.file_name().to_string_lossy()),
+                    title,
+                    "cache",
+                    "safe",
+                    "仅移除 Claude 的缓存或崩溃记录。",
+                ));
             }
         }
     }
@@ -189,22 +230,24 @@ pub(super) fn definitions(root: &Path) -> Vec<Target> {
             "重置桌面端登录和本地状态；服务器上的对话不会被删除。",
         ));
     }
-    for relative in ["Library/Application Support/Claude", "Library/Application Support/Claude-3p", "Library/Application Support/com.anthropic.claudefordesktop"] {
+    for relative in [
+        "Library/Application Support/Claude",
+        "Library/Application Support/Claude-3p",
+        "Library/Application Support/com.anthropic.claudefordesktop",
+    ] {
         result.extend(desktop_storage(root, &root.join(relative)));
     }
-    if let Ok(entries) = fs::read_dir(root.join("Library/Preferences/ByHost")) {
-        for entry in entries.flatten().take(20_000) {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with("com.anthropic.claudefordesktop") && name.ends_with(".plist") {
-                result.push(target(
-                    root,
-                    &format!("Library/Preferences/ByHost/{name}"),
-                    "Desktop 设备偏好",
-                    "desktop",
-                    "login",
-                    "重置桌面端在这台设备上的偏好设置。",
-                ));
-            }
+    for entry in entries(&root.join("Library/Preferences/ByHost"), &mut warnings) {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with("com.anthropic.claudefordesktop") && name.ends_with(".plist") {
+            result.push(target(
+                root,
+                &format!("Library/Preferences/ByHost/{name}"),
+                "Desktop 设备偏好",
+                "desktop",
+                "login",
+                "重置桌面端在这台设备上的偏好设置。",
+            ));
         }
     }
     // ----- 既有备份也是删除目标，不创建新的备份 -----
@@ -221,19 +264,17 @@ pub(super) fn definitions(root: &Path) -> Vec<Target> {
             "永久删除此目录中的既有备份与旧清理记录，不保留恢复副本。",
         ));
     }
-    if let Ok(entries) = fs::read_dir(root) {
-        for entry in entries.flatten().take(20_000) {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with(".claude.json.backup.") || name == ".claude.json.backup" {
-                result.push(target(
-                    root,
-                    &name,
-                    "Code 历史配置备份",
-                    "backups",
-                    "backup",
-                    "永久删除旧配置备份，避免其中残留账号与认证信息。",
-                ));
-            }
+    for entry in entries(root, &mut warnings) {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with(".claude.json.backup.") || name == ".claude.json.backup" {
+            result.push(target(
+                root,
+                &name,
+                "Code 历史配置备份",
+                "backups",
+                "backup",
+                "永久删除旧配置备份，避免其中残留账号与认证信息。",
+            ));
         }
     }
     for relative in [
@@ -347,7 +388,7 @@ pub(super) fn definitions(root: &Path) -> Vec<Target> {
     }
     result.sort_by(|a, b| a.path.cmp(&b.path));
     result.dedup_by(|a, b| a.path == b.path);
-    result
+    (result, warnings)
 }
 
 #[cfg(target_os = "linux")]
@@ -371,7 +412,12 @@ pub(super) fn measure(path: &Path) -> Result<(u64, usize, Vec<u8>), String> {
     let mut hash = Sha256::new();
     let (mut bytes, mut files) = (0u64, 0usize);
     while let Some(path) = pending.pop() {
-        let failure = |error: std::io::Error| format!("目录无法完整读取：{}：{error}。请检查权限、退出 Claude 后重新扫描。", path.display());
+        let failure = |error: std::io::Error| {
+            format!(
+                "目录无法完整读取：{}：{error}。请检查权限、退出 Claude 后重新扫描。",
+                path.display()
+            )
+        };
         let meta = fs::symlink_metadata(&path).map_err(failure)?;
         hash.update(path.as_os_str().as_encoded_bytes());
         hash.update([0]);
@@ -407,8 +453,10 @@ pub(super) fn measure(path: &Path) -> Result<(u64, usize, Vec<u8>), String> {
             files += 1;
         } else if meta.is_dir() && !linked(&meta) {
             let entries = fs::read_dir(&path).map_err(failure)?;
-            let mut children = entries.map(|entry| entry.map(|e| e.path()))
-                .collect::<Result<Vec<_>, _>>().map_err(failure)?;
+            let mut children = entries
+                .map(|entry| entry.map(|e| e.path()))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(failure)?;
             children.sort();
             pending.extend(children);
         }

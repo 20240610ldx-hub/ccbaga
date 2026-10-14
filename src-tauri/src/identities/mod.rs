@@ -1,5 +1,5 @@
 // [INPUT]: SQLite 身份目录、加密压缩保险库、Cleaner 全局事务锁与 Tauri 进度通道。
-// [OUTPUT]: 当前/空/已保存身份、有界账号显示信息、用户保留选项、浏览器联动确认及确认后的切换/恢复/重命名/直接删除命令。
+// [OUTPUT]: 当前/空/已保存身份、有界账号显示信息、用户保留选项、浏览器联动确认及真实阶段进度的停止/切换/恢复/删除命令。
 // [POS]: GUI 身份管理的原生入口；不提供凭据读取、任意文件或网络接口。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 mod archive;
@@ -131,14 +131,29 @@ pub async fn identities_read(app: tauri::AppHandle) -> Result<State, String> {
         .map_err(|_| "身份列表读取被中断。".to_string())?
 }
 #[tauri::command]
-pub async fn identities_stop(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn identities_stop(
+    app: tauri::AppHandle,
+    webview: tauri::Webview,
+    on_progress: Option<tauri::ipc::JavaScriptChannelId>,
+) -> Result<(), String> {
+    // Channel 本身不实现 Deserialize；官方可反序列化 ID 在当前 WebView 上绑定后可兼容无通道旧调用。
+    let on_progress = on_progress.map(|id| id.channel_on(webview));
     let cleaner = app.state::<crate::cleaner::Cleaner>();
     cleaner.enter()?;
-    let result = tauri::async_runtime::spawn_blocking(crate::cleaner::stop_processes)
-        .await
-        .map_err(|_| "结束进程被中断，请刷新。".to_string())
-        .and_then(|r| r)
-        .map(|_| ());
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let reporter = Reporter::channel(on_progress);
+        reporter.log("stop", "running", "正在结束已识别的 Claude 进程。", 0, None);
+        let result = crate::cleaner::stop_processes();
+        match &result {
+            Ok(count) => reporter.log("stop", "ok", "Claude 进程已结束。", *count, Some(*count)),
+            Err(error) => reporter.log("stop", "error", error, 0, None),
+        }
+        result
+    })
+    .await
+    .map_err(|_| "结束进程被中断，请刷新。".to_string())
+    .and_then(|r| r)
+    .map(|_| ());
     cleaner.leave();
     result
 }
