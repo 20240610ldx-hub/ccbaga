@@ -42,8 +42,12 @@ export function reselectIds(items:Item[], ids:string[], next:Item[]):string[] {
   return next.filter(i=>paths.has(i.path)).map(i=>i.id);
 }
 export function formatBytes(bytes:number):string {
-  if(!bytes)return '0 B';
+  if(!(bytes>0))return '0 B';
   const units=['B','KB','MB','GB','TB'];
-  const index=Math.min(Math.floor(Math.log(bytes)/Math.log(1024)),units.length-1);
-  return `${(bytes/1024**index).toLocaleString('zh-CN',{maximumFractionDigits:index<2?0:1})} ${units[index]}`;
+  const digits=(index:number)=>index<2?0:1;
+  const round=(index:number)=>{const scale=10**digits(index);return Math.round(bytes/1024**index*scale)/scale;};
+  let index=Math.min(Math.max(Math.floor(Math.log(bytes)/Math.log(1024)),0),units.length-1);
+  // 四舍五入进位到 1024 时升一档，避免显示 “1,024 KB”
+  while(index<units.length-1&&round(index)>=1024)index++;
+  return `${round(index).toLocaleString('zh-CN',{maximumFractionDigits:digits(index)})} ${units[index]}`;
 }
