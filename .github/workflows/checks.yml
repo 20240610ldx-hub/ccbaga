@@ -12,7 +12,8 @@ permissions:
   contents: read
 concurrency:
   group: checks-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # PR 淘汰旧检查；main 让在途检查完成并保存原生缓存，避免 UI 迭代反复冷编译。
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   checks:
     name: Checks (${{ matrix.platform }})

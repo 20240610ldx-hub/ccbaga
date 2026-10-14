@@ -983,3 +983,14 @@
 "Claude Code 回滚未完成，恢复文件保留在原生程序目录旁。": "Rollback is incomplete. Recovery files were retained beside the native program directory."
 "无法暂存原程序，未开始重装。": "Could not stage the previous program. Reinstallation has not started."
 "Claude Code 已重装，但旧程序回收失败。": "Claude Code was reinstalled, but the previous program could not be removed."
+
+"Claude 出口": "Claude Egress"
+"检测成功": "Check successful"
+"检测失败": "Check failed"
+"待检测": "Not checked"
+"开始检测": "Run check"
+"重新检测": "Check again"
+"未完成": "Incomplete"
+"部分检测未返回结果，请重试。": "Some checks did not return a result. Try again."
+
+"检测结果无效，请重试。": "Invalid check results. Try again."

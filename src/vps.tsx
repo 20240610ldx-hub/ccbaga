@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 固定资源入口、服务规格、Claude 核心域名分流诊断、Cromma Tabs/Textarea、双语提示词与原生剪贴板。
- * [OUTPUT]: Laper 满宽细线三步入口与斜纹分隔、固定服务只读连通性列表（连接对端不等于出口）、五项 AI 图标分段与双语提示词一键复制。
+ * [OUTPUT]: Laper 满宽细线三步入口与斜纹分隔、Claude 出口四态检测、汇总成功/失败和逐域原因（连接对端不等于出口）、五项 AI 图标分段与双语提示词一键复制。
  * [POS]: 网络资源与分流诊断；应用不收集密钥或执行远端部署，诊断仅进行只读网络连通性探测。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -21,12 +21,18 @@ export type DomainDiagnosis = {
     message: string;
 };
 
+const claudeDomains=['claude.ai','api.anthropic.com','downloads.claude.ai'] as const;
 export function VpsPanel() {
     const {t,locale}=useI18n();
     const [selected,setSelected]=useState('generic'), [copied,setCopied]=useState(''), [error,setError]=useState('');
     const [guide,setGuide]=useState<'dmit'|'webshare'|null>(null);
     const [diagnosing,setDiagnosing]=useState(false);
     const [diagnostics,setDiagnostics]=useState<DomainDiagnosis[]|null>(null);
+    const [diagnosticsError,setDiagnosticsError]=useState('');
+    const results=claudeDomains.map(domain=>diagnostics?.find(item=>item.domain===domain));
+    const passed=results.filter(item=>item?.ok).length;
+    const phase=diagnosing?'checking':diagnosticsError?'failed':diagnostics?(passed===claudeDomains.length?'passed':'failed'):'idle';
+    const statusText=phase==='checking'?'检测中':phase==='passed'?'检测成功':phase==='failed'?'检测失败':'待检测';
     const prompt=installationPrompt(selected,locale);
 
     async function open(provider:'dmit'|'webshare'|'skill') {
@@ -42,13 +48,18 @@ export function VpsPanel() {
     }
 
     async function runDiagnostics() {
+        if(diagnosing)return;
         setDiagnosing(true);
         setError('');
+        setDiagnostics(null);
+        setDiagnosticsError('');
         try {
             const results = await invoke<DomainDiagnosis[]>('network_diagnose_domains');
+            if(!Array.isArray(results))throw new Error('检测结果无效，请重试。');
             setDiagnostics(results);
+            if(claudeDomains.some(domain=>!results.some(item=>item.domain===domain)))setDiagnosticsError('部分检测未返回结果，请重试。');
         } catch (e) {
-            setError(String(e));
+            setDiagnosticsError(String(e));
         } finally {
             setDiagnosing(false);
         }
@@ -62,24 +73,25 @@ export function VpsPanel() {
             <div className="network-step-actions"><Button variant={provider==='dmit'?'info':provider==='webshare'?'success':'secondary'} size="small" leftIcon={provider==='dmit'?<ServerIcon size={15} aria-hidden="true"/>:provider==='webshare'?<HomeIcon size={15} aria-hidden="true"/>:undefined} onClick={()=>void open(provider)}>{t(label)}</Button>{provider!=='skill'&&<Button variant="secondary" size="small" round aria-label={t(provider==='dmit'?'VPS 帮助':'家宽帮助')} onClick={()=>setGuide(provider)}>?</Button>}</div>
         </li>)}</ol>
         <div className="landing-section-band" aria-hidden="true"/>
-        <section className="domain-diagnostics" aria-labelledby="diagnostics-title">
+        <section className="domain-diagnostics" aria-labelledby="diagnostics-title" data-status={phase} aria-busy={diagnosing}>
             <div className="domain-diagnostics-header">
-                <div className="domain-diagnostics-title-group">
-                    <h2 id="diagnostics-title">{t('服务连接')}</h2>
-
-                </div>
-                <Button variant="secondary" size="small" disabled={diagnosing} leftIcon={<Refresh aria-hidden size={15} className={diagnosing?'spin':''} />} onClick={()=>void runDiagnostics()}>{diagnosing?t('诊断中'):diagnostics?t('重新诊断'):t('开始诊断')}</Button>
+                <h2 id="diagnostics-title">{t('Claude 出口')}</h2>
+                <Button variant="secondary" size="small" disabled={diagnosing} leftIcon={<Refresh aria-hidden size={15} className={diagnosing?'spin':''}/>} onClick={()=>void runDiagnostics()}>{diagnosing?t('检测中'):phase==='idle'?t('开始检测'):t('重新检测')}</Button>
             </div>
-            {diagnostics&&<ul className="domain-diagnostics-list">{diagnostics.map(item=><li key={item.domain} className={'domain-diagnostics-item ' + (item.ok?'ok':'fail')}>
-                <div className="domain-item-info">
-                    <span className="domain-name">{item.domain}</span>
-                    {item.ip&&<span className="domain-ip" title={t('连接对端，不代表出口 IP')}>{item.ip}</span>}
-                </div>
-                <div className="domain-item-status">
-                    {item.latency_ms!==null&&<span className="domain-latency">{item.latency_ms + ' ms'}</span>}
-                    <span className={'domain-badge ' + (item.ok?'badge-ok':'badge-fail')}>{item.status_code?('HTTP ' + item.status_code + ' · ' + t(item.message)):t(item.message)}</span>
-                </div>
-            </li>)}</ul>}
+            <div className={`domain-outcome ${phase}`} role="status" aria-live="polite">
+                <span className="domain-outcome-symbol" aria-hidden="true">{phase==='passed'?'✓':phase==='failed'?'×':phase==='checking'?'◌':'·'}</span>
+                <strong>{t(statusText)}</strong>
+                {diagnostics&&!diagnosticsError&&<span>{t('已通过 {v0} / {v1} 项',{v0:passed,v1:claudeDomains.length})}</span>}
+                {diagnosticsError&&<p>{t(diagnosticsError)}</p>}
+            </div>
+            <ul className="domain-diagnostics-list">{claudeDomains.map((domain,index)=>{
+                const item=results[index];
+                const status=diagnosing?'checking':item?item.ok?'passed':'failed':phase==='failed'?'failed':'idle';
+                return <li key={domain} className={`domain-diagnostics-item ${status}`}>
+                    <div className="domain-item-info"><span className="domain-name">{domain}</span>{item&&<span className="domain-detail">{item.status_code?`HTTP ${item.status_code} · `:''}{t(item.message)}</span>}{item?.ip&&<span className="domain-ip" title={t('连接对端，不代表出口 IP')}>{item.ip}</span>}</div>
+                    <div className="domain-item-status">{item?.latency_ms!=null&&<span className="domain-latency">{item.latency_ms} ms</span>}<span className={`domain-badge ${status}`}><span aria-hidden="true">{status==='passed'?'✓':status==='failed'?'×':status==='checking'?'◌':'·'}</span>{t(status==='checking'?'检测中':item?item.ok?'检测成功':'检测失败':phase==='failed'?'未完成':'待检测')}</span></div>
+                </li>;
+            })}</ul>
         </section>
         <div className="landing-section-band" aria-hidden="true"/>
         <section className="skill-install" aria-labelledby="skill-install-title">

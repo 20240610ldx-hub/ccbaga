@@ -11,6 +11,7 @@ import {tmpdir} from 'node:os';
 import {createServer} from 'vite';
 import {chromium} from 'playwright-core';
 import {testBrowserVerification} from './test-browser-verification.ts';
+import {testNetworkDiagnostics} from './test-network-diagnostics.ts';
 const engine=process.platform==='darwin'?'Browser.app/Contents/MacOS/Chromium':process.platform==='win32'?'WindowsBrowser/chrome.exe':'LinuxBrowser/chrome';
 const server=await createServer({server:{host:'127.0.0.1',port:0,strictPort:false,watch:{ignored:['**/src-tauri/**','**/browser-runtime/**','**/releases/**','**/dist/**']}},optimizeDeps:{include:['@tauri-apps/api/mocks']}});
 await server.listen();
@@ -104,5 +105,6 @@ try{
  await current.waitFor({state:'detached'});assert.equal(await page.evaluate(()=>(window as any).identityFixture.state.records.length),count);checks++;
  assert.equal(errors.length,0,errors.join('\n'));
  checks+=await testBrowserVerification(browser,base);
- console.log(`${checks} identity and browser UI simulation checks passed; no native commands or user data used.`);
+ checks+=await testNetworkDiagnostics(browser,base);
+ console.log(`${checks} identity, browser and network UI simulation checks passed; no native commands or user data used.`);
 }finally{await browser.close();await server.close();await rm(temporary,{recursive:true,force:true});}

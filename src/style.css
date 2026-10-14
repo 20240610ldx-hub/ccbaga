@@ -307,20 +307,32 @@ h3 { margin: 0; font-size: 13px; font-weight: 500; }
 .network-step-number { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--foreground); font: 12px ui-monospace,monospace; }
 .network-step-actions { display: flex; align-items: center; gap: 10px; }
 .network-step button { max-width: 100%; white-space: normal; text-align: center; }
-.domain-diagnostics { display: grid; gap: 16px; padding: 30px; }
+.domain-diagnostics { display: grid; gap: 14px; padding: 24px 30px; }
 .domain-diagnostics-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.domain-diagnostics-title-group h2 { font-size: 17px; font-weight: 500; margin: 0; }
-.domain-diagnostics-note { margin: 4px 0 0; font-size: 12px; color: var(--muted-foreground); line-height: 1.5; }
-.domain-diagnostics-list { display: grid; gap: 10px; list-style: none; padding: 0; margin: 0; }
-.domain-diagnostics-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); }
-.domain-item-info { display: flex; flex-direction: column; gap: 2px; }
-.domain-name { font-size: 14px; font-weight: 500; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-.domain-ip { font-size: 11px; color: var(--muted-foreground); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-.domain-item-status { display: flex; align-items: center; gap: 12px; }
-.domain-latency { font-size: 12px; color: var(--muted-foreground); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-.domain-badge { font-size: 12px; padding: 3px 8px; border-radius: 4px; font-weight: 500; }
-.domain-badge.badge-ok { background: rgba(34, 197, 94, 0.12); color: #16a34a; }
-.domain-badge.badge-fail { background: rgba(239, 68, 68, 0.12); color: #dc2626; }
+.domain-diagnostics-header h2 { font-size: 17px; font-weight: 500; }
+.domain-outcome { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 12px 16px; border: 1px solid var(--landing-line); background: #f7f7f5; color: var(--muted-foreground); border-radius: 8px; font-size: 12px; }
+.domain-outcome strong { font-size: 13px; font-weight: 500; }
+.domain-outcome-symbol { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid currentColor; border-radius: 50%; font-size: 18px; line-height: 1; }
+.domain-outcome > p { flex-basis: 100%; padding-left: 36px; line-height: 1.6; overflow-wrap: anywhere; user-select: text; }
+.domain-outcome.passed { background: #eaf7ee; border-color: #bddfc7; color: #16703c; }
+.domain-outcome.failed { background: #fff0ee; border-color: #efc3bd; color: #b42318; }
+.domain-outcome.checking { background: #fff8df; border-color: #e7d79e; color: #986400; }
+.domain-outcome.checking .domain-outcome-symbol { animation: tool-spin 1.4s linear infinite; }
+.domain-diagnostics-list { display: grid; gap: 0; list-style: none; padding: 0; margin: 0; border: 1px solid var(--landing-line); border-radius: 8px; overflow: hidden; }
+.domain-diagnostics-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--landing-line); background: var(--panel); }
+.domain-diagnostics-item:last-child { border-bottom: 0; }
+.domain-item-info { display: grid; gap: 4px; min-width: 0; }
+.domain-name { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.domain-detail { font-size: 11px; line-height: 1.5; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.domain-diagnostics-item.failed .domain-detail { color: #b42318; }
+.domain-ip { font: 10px ui-monospace, monospace; color: var(--muted-foreground); }
+.domain-item-status { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px 12px; flex-shrink: 0; }
+.domain-latency { font: 11px ui-monospace, monospace; color: var(--muted-foreground); }
+.domain-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 4px 8px; border-radius: 5px; white-space: nowrap; color: var(--muted-foreground); background: var(--muted); }
+.domain-badge.passed { background: #eaf7ee; color: #16703c; }
+.domain-badge.failed { background: #fff0ee; color: #b42318; }
+.domain-badge.checking { background: #fff8df; color: #986400; }
+@media (prefers-reduced-motion: reduce) { .domain-outcome.checking .domain-outcome-symbol { animation: none; } }
 .skill-install { display: grid; gap: 20px; padding: 30px; }
 .skill-install h2 { font-size: 17px; font-weight: 500; }
 .coding-tabs { display: flex; width: 100%; border: 1px solid var(--landing-line); border-radius: 8px; padding: 4px; background: #f4f4f2; }
