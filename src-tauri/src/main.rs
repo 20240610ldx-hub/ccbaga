@@ -156,7 +156,8 @@ fn main() {
             browser::browser_default_read,
             browser::browser_set_default,
             browser::browser_rotate,
-            network_links::network_open_resource
+            network_links::network_open_resource,
+            network_links::network_diagnose_domains
         ])
         .build(tauri::generate_context!())
         .expect("无法启动 CCBaga-A")

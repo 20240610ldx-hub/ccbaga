@@ -1,15 +1,15 @@
 // [INPUT]: 平台内嵌 claude-cli.sh/ps1、当前用户平台环境、清理事务互斥锁及真实进度通道。
 // [OUTPUT]: Claude Code CLI 只读安装状态、一键卸载/重装与版本核验，配置和个人资产不在删除范围。
-// [POS]: 本机程序安装边界；白名单动作由原生层限定，进程未退出时拒绝修改，输出不暴露包管理器原始诊断。
+// [POS]: 本机程序安装边界；白名单动作由原生层限定，进程未退出时拒绝修改，输出不暴露包管理器原始诊断；测试脚本替身仅在 cfg(test) 中注入，不接受安装器环境变量。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use crate::{
     cleaner::Cleaner,
     progress::{Progress, Reporter},
 };
 use serde::Serialize;
+use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
-use std::io::Write;
 use std::{
     io::{BufRead, BufReader, Read},
     path::PathBuf,
@@ -28,7 +28,20 @@ pub struct CliStatus {
     path: String,
     version: String,
 }
-fn execute(mut command: Command, log: Arc<Reporter>, seconds: u64) -> Result<CliStatus, String> {
+fn execute(command: Command, log: Arc<Reporter>, seconds: u64) -> Result<CliStatus, String> {
+    execute_script(
+        command,
+        log,
+        seconds,
+        SCRIPT.trim_start_matches('\u{feff}').to_owned(),
+    )
+}
+fn execute_script(
+    mut command: Command,
+    log: Arc<Reporter>,
+    seconds: u64,
+    script: String,
+) -> Result<CliStatus, String> {
     #[cfg(unix)]
     command.process_group(0);
     let mut child = command
@@ -38,11 +51,18 @@ fn execute(mut command: Command, log: Arc<Reporter>, seconds: u64) -> Result<Cli
         .spawn()
         .map_err(|_| "无法启动 Claude Code 安装任务。")?;
     #[cfg(windows)]
-    let job = match crate::windows::ChildJob::attach(&child) { Ok(job) => job, Err(error) => { let _ = child.kill(); let _ = child.wait(); return Err(error); } };
+    let job = match crate::windows::ChildJob::attach(&child) {
+        Ok(job) => job,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
+    };
     let mut stdin = child.stdin.take().unwrap();
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
-    let writer = std::thread::spawn(move || stdin.write_all(SCRIPT.trim_start_matches('\u{feff}').as_bytes()));
+    let writer = std::thread::spawn(move || stdin.write_all(script.as_bytes()));
     let output = std::thread::spawn(move || {
         let mut result = CliStatus::default();
         let mut completed = false;
@@ -106,12 +126,13 @@ fn execute(mut command: Command, log: Arc<Reporter>, seconds: u64) -> Result<Cli
     let result = output.join().map_err(|_| "Claude Code 安装任务被中断。")?;
     let errors = errors.join().map_err(|_| "Claude Code 安装任务被中断。")?;
     if !status?.success() {
-        // 只显示脚本自有的固定错误文案，不泄漏 shell/npm/Homebrew 输出中的配置或凭据。
-        let message = errors.lines().find(|line| {
+        // 优先最后的回滚结论，仅显示脚本自有固定错误文案，不泄漏 shell/npm/Homebrew 输出中的配置或凭据。
+        let message = errors.lines().rev().find(|line| {
             line.starts_with("Claude Code ")
                 || line.starts_with("npm ")
                 || line.starts_with("Homebrew ")
                 || line.starts_with("无法读取 ")
+                || line.starts_with("无法暂存原程序")
                 || line.starts_with("发现未识别的 ")
                 || line.starts_with("仍有其他 ")
         });
@@ -134,11 +155,12 @@ fn command(action: &str) -> Result<Command, String> {
         let user_dir = std::env::var_os("USERPROFILE")
             .or_else(|| std::env::var_os("HOME"))
             .ok_or("无法定位用户目录。")?;
-        let root = dunce::canonicalize(PathBuf::from(user_dir))
-            .map_err(|_| "无法读取用户目录。")?;
+        let root =
+            dunce::canonicalize(PathBuf::from(user_dir)).map_err(|_| "无法读取用户目录。")?;
         use std::os::windows::process::CommandExt;
-        let shell = PathBuf::from(std::env::var_os("SystemRoot").ok_or("无法定位 Windows 系统目录。")?)
-            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        let shell =
+            PathBuf::from(std::env::var_os("SystemRoot").ok_or("无法定位 Windows 系统目录。")?)
+                .join("System32/WindowsPowerShell/v1.0/powershell.exe");
         let mut command = Command::new(shell);
         command.creation_flags(0x08000000)
             .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command"])
@@ -148,16 +170,16 @@ fn command(action: &str) -> Result<Command, String> {
     }
     #[cfg(not(windows))]
     {
-    let root = std::fs::canonicalize(PathBuf::from(
-        std::env::var_os("HOME").ok_or("无法定位用户目录。")?,
-    ))
-    .map_err(|_| "无法读取用户目录。")?;
-    let mut command = Command::new("/bin/zsh");
-    command
-        .args(["-ilc", "source /dev/stdin", "cctool-cli", action])
-        .env("CC_CLI_USER_DIR", root)
-        .current_dir("/");
-    Ok(command)
+        let root = std::fs::canonicalize(PathBuf::from(
+            std::env::var_os("HOME").ok_or("无法定位用户目录。")?,
+        ))
+        .map_err(|_| "无法读取用户目录。")?;
+        let mut command = Command::new("/bin/zsh");
+        command
+            .args(["-ilc", "source /dev/stdin", "cctool-cli", action])
+            .env("CC_CLI_USER_DIR", root)
+            .current_dir("/");
+        Ok(command)
     }
 }
 #[tauri::command]
@@ -232,10 +254,18 @@ mod tests {
             path
         }
         fn run(&self, action: &str) -> Result<CliStatus, String> {
+            self.run_script(action, SCRIPT.into())
+        }
+        fn run_script(&self, action: &str, script: String) -> Result<CliStatus, String> {
             let mut command = Command::new("/bin/zsh");
             command
                 .env_clear()
-                .args(["-fc", "PATH=\"$CC_TEST_BIN\"; source /dev/stdin", "fixture", action])
+                .args([
+                    "-fc",
+                    "PATH=\"$CC_TEST_BIN\"; source /dev/stdin",
+                    "fixture",
+                    action,
+                ])
                 .env("HOME", &self.0)
                 .env("ZDOTDIR", &self.0)
                 .env("LANG", "en_US.UTF-8")
@@ -244,7 +274,7 @@ mod tests {
                 .env("CC_TEST_ROOT", self.0.join("lib/node_modules"))
                 .env("CC_TEST_BINARY", self.0.join("fake-cli"))
                 .env("CC_TEST_BIN", self.0.join("bin"));
-            execute(command, Arc::new(Reporter::channel(None)), 10)
+            execute_script(command, Arc::new(Reporter::channel(None)), 10, script)
         }
     }
     impl Drop for Fixture {
@@ -274,6 +304,63 @@ mod tests {
         let custom = fixture.executable(".local/bin/claude", "#!/bin/sh\nexit 0\n");
         assert!(fixture.run("uninstall").unwrap_err().contains("自定义"));
         assert!(custom.exists());
+    }
+    #[test]
+    fn native_reinstall_restores_original_and_preserves_backup_if_rollback_is_blocked() {
+        for mode in ["install-failure", "invalid-version", "blocked-rollback"] {
+            let fixture = Fixture::new();
+            fixture.file(".claude/settings.json", "keep");
+            let original = "#!/bin/sh\nprintf '2.0.0 (Claude Code)\\n'\n";
+            let binary = fixture.executable(".local/share/claude/versions/2.0.0", original);
+            fs::create_dir_all(fixture.0.join(".local/bin")).unwrap();
+            symlink(&binary, fixture.0.join(".local/bin/claude")).unwrap();
+            fixture.executable(
+                "bin/curl",
+                "#!/bin/sh\n/bin/cat \"$CC_CLI_USER_DIR/fixture-installer\"\n",
+            );
+            let installer = match mode {
+                "install-failure" => "#!/bin/bash\nexit 1\n",
+                "invalid-version" => "#!/bin/bash\nmkdir -p \"$CC_CLI_USER_DIR/.local/share/claude/versions\"\nexit 0\n",
+                _ => "#!/bin/bash\n/bin/ln -s \"$CC_CLI_USER_DIR/outside\" \"$CC_CLI_USER_DIR/.local/share/claude\"\nexit 1\n",
+            };
+            fixture.file("fixture-installer", installer);
+            fixture.file("outside/keep", "outside intact");
+            let script = SCRIPT.replace("/usr/bin/curl", "\"$CC_CLI_USER_DIR/bin/curl\"");
+            let error = fixture.run_script("reinstall", script).unwrap_err();
+            if mode == "blocked-rollback" {
+                assert!(error.contains("恢复文件保留"));
+                assert!(!error.contains("已恢复原程序"));
+                let backup = fs::read_dir(fixture.0.join(".local/share"))
+                    .unwrap()
+                    .filter_map(Result::ok)
+                    .find(|e| {
+                        e.file_name()
+                            .to_string_lossy()
+                            .starts_with(".claude-reinstall.")
+                    })
+                    .unwrap()
+                    .path();
+                assert_eq!(
+                    fs::read_to_string(backup.join("program/versions/2.0.0")).unwrap(),
+                    original
+                );
+            } else {
+                assert!(error.contains("已恢复原程序"), "{error}");
+                assert_eq!(fs::read_to_string(&binary).unwrap(), original);
+                assert_eq!(
+                    fs::read_link(fixture.0.join(".local/bin/claude")).unwrap(),
+                    binary
+                );
+            }
+            assert_eq!(
+                fs::read_to_string(fixture.0.join("outside/keep")).unwrap(),
+                "outside intact"
+            );
+            assert_eq!(
+                fs::read_to_string(fixture.0.join(".claude/settings.json")).unwrap(),
+                "keep"
+            );
+        }
     }
     #[test]
     fn npm_reinstall_verifies_version_and_uninstall_is_real() {

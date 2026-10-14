@@ -7,11 +7,12 @@ sign-browser.py: 内层 Mach-O → Helper 应用 → Framework → 浏览器外�
 test-release-env.py: 伪造凭据环境导入真实发布入口，断言 Apple/更新私钥不进入构建子进程环境，不加载真实密钥，并验证票据网络重试不绕过无效/持续失败。
 test-sign-browser.py: 临时伪引擎树验证叶子到容器的签名顺序、最小 JIT 授权与符号链接不重复遍历。
 windows-region.ps1: 当前用户 International 首选语言/显示语言偏好与区域格式设置；PowerShell 5.1 泛型列表保留其他语言/输入法、复核持久化，当前会话未生效时明确报告需重新登录。
-claude-cli.ps1: Windows 官方 CLI 程序管理与真实完成协议；原生重装先下载、严格 UTF-8 解码字节响应并解析官方安装器，再卸载旧程序；下载/内容异常保留旧程序，安装失败使用固定脱敏文案，保留配置和项目，不执行 VPS 配置。
+claude-cli.ps1: Windows 唯一目录暂存/逐文件哈希回滚与失败保留恢复文件；Windows 官方 CLI 程序管理与真实完成协议；原生重装先下载、严格 UTF-8 解码字节响应并解析官方安装器，再卸载旧程序；下载/内容异常保留旧程序，安装失败使用固定脱敏文案，保留配置和项目，不执行 VPS 配置。
 package-browser.ps1: Windows 固定引擎前置核验，不打包用户资料或私钥。
 test-skill-install.ts: Agent Skills metadata/完整公开文件与 npm skills 1.7.2 的四项真实安装；临时 HOME 和缓存，关闭统计，验证共享目录、完整文件与无 symlink。
+test-browser-verification.ts: 复用隔离 Playwright 引擎，真实 browser.html 的三态背景/波纹、原因、重测和双语 DOM 回归；虚构本机 HTTP 回报，无截图/真实账号。
 test-identities-ui.ts: Node.js 标准管道 + 固定引擎 + playwright-core 的隔离 DOM 模拟；40 个虚构账号验证当前槽位去重/无最近使用卡片、竖式工牌、弹簧/视差、Alert 安全默认、双语、保留选择与切换/删除/失败/恢复，临时 HOME/XDG，不调用真实 IPC、不截图或外连。
-test-windows.py: Windows 原生/npm/WinGet 程序隔离样本的卸载重装；离线原生安装器字节/文本响应、下载/解析失败保留旧程序、安装失败不报告成功与自定义启动器拒绝；CI 实际语言/区域写入、输入法保留和完整还原。
+test-windows.py: Windows 原生/npm/WinGet 程序隔离样本的卸载重装；离线原生安装器字节/文本响应、安装/版本失败恢复哈希、junction 阻断回滚保留备份、下载/解析失败保留旧程序、安装失败不报告成功与自定义启动器拒绝；CI 实际语言/区域写入、输入法保留和完整还原。
 fetch-browser.py: 固定上游引擎与 SHA-256，核验版本/架构；在目标旁完整复制后公开三平台引擎，失败清理暂存目录，清理失败报告路径；干净 CI 检出不依赖维护者本机引擎。
 test-fetch-browser.py: 三平台真实临时文件树与显式下载/摘要/平台工具替身，回归复制失败后可重试、完整资源/权限/链接、既有引擎不变与清理失败路径；不下载或运行真实引擎。
 release-macos.py: 外部凭据与可选 CC_RELEASE_VERSION 驱动三阶段公证装订，票据服务网络错误最多重试三次、其他验证失败立即阻断；明确将原生构建目录 Browser.app 暂存为交付名 CCBaga-B.app，再由 dmgbuild 无头写入 Finder 布局；装订后的宿主单独归档并签名绑定版本，更新私钥仅传给签名子进程；Apple 凭据不进入构建、DMG 或更新签名子进程，公证工具只通过明确参数接收其认证输入；官方更新器回归核验后生成公开 latest.json；产物和哈希记录写入被忽略的 releases/。
@@ -23,7 +24,7 @@ dev-install.py: 本机 Apple Silicon 快速 debug/custom-protocol 构建、临�
 test-install-apps.py: 两个应用在移动前后取消及取消后恢复失败的真实目录样本；临时双应用事务成功、正常回滚与双重失败恢复目录回归；安装模式信任边界与环境隔离的离线回归，不操作真实应用或密钥。
 install-apps.sh: bun install:apps 兼容入口，只转交统一安装层。
 install-apps.py: 替换前复用 browser_ui 的实际引用预检；根据磁盘状态恢复移动前后取消的双应用，不依赖移动后内存记账；回滚失败保留并报告恢复目录；正式包严格签名/Gatekeeper；--development 仅本机 debug/临时签名，拒绝外部 DMG；验收后的事务替换、同标识旧名迁移与失败回滚；保留隔离和资料，正常退出后安装、只刷新相关 Dock 项并启动宿主。
-claude-cli.sh: 原生宿主内嵌的只读安装检查与官方 CLI 卸载/重装，使用登录终端 PATH，发现 nvm/全局 npm、Homebrew 双通道与原生版本；只卸载程序，保护自定义启动器与配置资产，重装沿用已识别包管理器并核验版本。
+claude-cli.sh: 唯一私有目录移动暂存原生程序/链接，捕获失败恢复，失败保留备份；不接受环境安装器注入。原生宿主内嵌的只读安装检查与官方 CLI 卸载/重装，使用登录终端 PATH，发现 nvm/全局 npm、Homebrew 双通道与原生版本；只卸载程序，保护自定义启动器与配置资产，重装沿用已识别包管理器并核验版本。
 browser_ui.py: HTMLParser 验证浏览器入口实际引用的脚本、预加载模块和样式，限定本地资源边界；Mac/Linux 安装预检、三平台正式载荷与构建 CI 共用函数/只读 CLI，不执行网页。
 install-linux.py: 共用实际 UI 引用预检；目录移动前后取消同样回滚，双重失败保留恢复目录；Linux 用户前缀安装并保留资料；替换前拒绝不可执行的浏览器引擎、不完整浏览器页面/脚本、自定义启动器、链接父目录与整个安装目录下仍运行的 A/B，失败回滚，双重失败保留恢复目录。
 test-linux.py: 浏览器入口/共享模块/样式缺失与外部链接拒绝、四种移动取消及取消后恢复失败保留备份；临时构建验证安装隔离、B 运行保护、不可执行引擎/缺失页面或脚本保留旧安装、桌面写入回滚、Exec 引用与载荷缺失/引擎篡改拒绝；双重失败保留恢复目录；不访问用户资料。

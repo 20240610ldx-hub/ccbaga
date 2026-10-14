@@ -1,6 +1,6 @@
 #!/bin/zsh
 # [INPUT]: 宿主限定的 read/uninstall/reinstall 动作、当前登录终端 PATH 与真实用户目录 CC_CLI_USER_DIR。
-# [OUTPUT]: Claude Code 安装状态标记与官方卸载/重装；仅删除 CLI 程序，保留配置、技能、会话和项目。
+# [OUTPUT]: Claude Code 安装状态标记与官方卸载/重装；仅删除 CLI 程序，保留配置、技能、会话和项目；原生重装可捕获失败时恢复原文件。
 # [POS]: 宿主内嵌的本机包管理边界；兼容原生、Homebrew 和终端/nvm 全局 npm，多重安装先去重。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 set -eu
@@ -74,6 +74,42 @@ if [[ "$action" == reinstall && ${#npm_commands} == 0 && ${#casks} == 0 ]]; then
   installer=$(/usr/bin/curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --max-time 60 https://claude.ai/install.sh 2>/dev/null) || fail 'Claude Code 官方安装器下载失败，请检查网络后重试。'
   [[ "$installer" == '#!'* && ${#installer} -lt 65536 ]] || fail 'Claude Code 官方安装器内容无效，已停止操作。'
 fi
+native_backup=''
+rollback_native() {
+  [[ -n "$native_backup" && -d "$native_backup" && ! -L "$native_backup" ]] || return 1
+  step '正在回滚恢复先前的 Claude Code 原生程序。'
+  # 拒绝跟随安装器留下的外部链接；恢复失败保留唯一备份，绝不假报成功。
+  [[ ! -L "$native_dir" && "${native_dir:A}" == "$native_dir" && "${launcher:h:A}" == "${launcher:h}" && ! -d "$launcher" ]] || return 1
+  if [[ -d "$native_backup/program" ]]; then
+    [[ ! -e "$native_dir" ]] || /bin/rm -rf "$native_dir" || return 1
+    /bin/mv "$native_backup/program" "$native_dir" || return 1
+  fi
+  if [[ -L "$native_backup/launcher" ]]; then
+    [[ ! -e "$launcher" && ! -L "$launcher" ]] || /bin/rm -f "$launcher" || return 1
+    /bin/mv "$native_backup/launcher" "$launcher" || return 1
+  fi
+  [[ -x "$launcher" && "${launcher:A}" == "$native_dir"/versions/* ]] || return 1
+  /bin/rmdir "$native_backup" || return 1
+  native_backup=''
+  return 0
+}
+TRAPEXIT() {
+  local result=$?
+  if (( result )) && [[ -n "$native_backup" ]]; then
+    if rollback_native; then
+      print -u2 -r -- 'Claude Code 操作失败，已恢复原程序。'
+    else
+      print -u2 -r -- 'Claude Code 回滚未完成，恢复文件保留在原生程序目录旁。'
+    fi
+  fi
+  return $result
+}
+if [[ "$action" == reinstall && $native == 1 ]]; then
+  native_backup=$(umask 077; /usr/bin/mktemp -d "${native_dir:h}/.claude-reinstall.XXXXXX") || fail '无法暂存原程序，未开始重装。'
+  # 同卷移动保留原文件与链接；任何后续可捕获失败均由 EXIT 恢复。
+  [[ ! -e "$launcher" && ! -L "$launcher" ]] || /bin/mv "$launcher" "$native_backup/launcher"
+  [[ ! -d "$native_dir" ]] || /bin/mv "$native_dir" "$native_backup/program"
+fi
 step '正在卸载 Claude Code CLI。'
 for npm in "$npm_commands[@]"; do
   PATH="${npm:h}:$PATH" "$npm" uninstall -g "$package" >/dev/null 2>&1 || fail 'npm 卸载失败，请检查安装目录权限。'
@@ -119,9 +155,13 @@ else
   method=native
 fi
 step '正在核验 Claude Code CLI 版本。'
-[[ -n "$cli" && -x "$cli" ]] || fail 'Claude Code 重装后未找到可执行程序。'
-version=$(DISABLE_AUTOUPDATER=1 "$cli" --version 2>/dev/null) || fail 'Claude Code 重装后的版本核验失败。'
-[[ "$version" == *'Claude Code'* ]] || fail 'Claude Code 重装后的版本信息无效。'
+if [[ -z "$cli" || ! -x "$cli" ]] || ! version=$(DISABLE_AUTOUPDATER=1 "$cli" --version 2>/dev/null) || [[ "$version" != *'Claude Code'* ]]; then
+  fail 'Claude Code 重装后的版本核验失败。'
+fi
+if [[ -n "$native_backup" ]]; then
+  /bin/rm -rf "$native_backup" || fail 'Claude Code 已重装，但旧程序回收失败。'
+  native_backup=''
+fi
 print -r -- "CC_CLI_METHOD=$method"
 print -r -- "CC_CLI_PATH=$cli"
 print -r -- "CC_CLI_VERSION=$version"

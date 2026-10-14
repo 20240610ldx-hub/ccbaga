@@ -10,6 +10,7 @@ import {mkdtemp,mkdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {createServer} from 'vite';
 import {chromium} from 'playwright-core';
+import {testBrowserVerification} from './test-browser-verification.ts';
 const engine=process.platform==='darwin'?'Browser.app/Contents/MacOS/Chromium':process.platform==='win32'?'WindowsBrowser/chrome.exe':'LinuxBrowser/chrome';
 const server=await createServer({server:{host:'127.0.0.1',port:0,strictPort:false,watch:{ignored:['**/src-tauri/**','**/browser-runtime/**','**/releases/**','**/dist/**']}},optimizeDeps:{include:['@tauri-apps/api/mocks']}});
 await server.listen();
@@ -36,7 +37,7 @@ try{
  assert.equal(await page.locator('.identity-switcher').count(),0);
  assert.equal(await page.getByText('上次使用',{exact:true}).count(),0);
  assert.equal(await cards.filter({has:page.getByRole('heading',{name:'Identity 1',exact:true})}).count(),0);
- assert.match(await cards.first().innerText(),/新账户登录时务必选择/);checks++;
+ assert.match(await cards.first().innerText(),/清空本地登录身份/);checks++;
  const geometry=await cards.evaluateAll(nodes=>nodes.slice(0,3).map(node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};}));
  assert.equal(geometry[0].y,geometry[2].y);assert(geometry[2].x+geometry[2].width<1040-150);assert(Math.abs(geometry[0].width/geometry[0].height-54/85.6)<.01);checks++;
  const current=page.locator('.identity-card.current');
@@ -82,7 +83,7 @@ try{
  await dialog.getByRole('button',{name:'确认直接删除'}).click();await renamed.waitFor({state:'detached'});
  assert.equal(await page.evaluate(()=>(window as any).identityFixture.state.current.present),true);checks++;
  await page.evaluate(()=>{(window as any).identityFixture.language('en');});
- await cards.first().getByRole('button',{name:'Use empty identity'}).waitFor();assert.match(await cards.first().innerText(),/new account/);checks++;
+ await cards.first().getByRole('button',{name:'Use empty identity'}).waitFor();assert.match(await cards.first().innerText(),/local sign-in/);checks++;
  await page.evaluate(()=>{(window as any).identityFixture.setFailure('identities_switch');});
  await cards.first().getByRole('button',{name:'Use empty identity'}).click();
  await page.getByRole('dialog').getByRole('button',{name:'Archive & switch'}).click();
@@ -102,5 +103,6 @@ try{
  await dialog.getByRole('button',{name:'Confirm deletion',exact:true}).click();
  await current.waitFor({state:'detached'});assert.equal(await page.evaluate(()=>(window as any).identityFixture.state.records.length),count);checks++;
  assert.equal(errors.length,0,errors.join('\n'));
- console.log(`${checks} identity UI simulation checks passed; no native commands or user data used.`);
+ checks+=await testBrowserVerification(browser,base);
+ console.log(`${checks} identity and browser UI simulation checks passed; no native commands or user data used.`);
 }finally{await browser.close();await server.close();await rm(temporary,{recursive:true,force:true});}

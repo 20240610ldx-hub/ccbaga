@@ -1,25 +1,29 @@
 /**
  * [INPUT]: 随机令牌回环服务上下文、浏览器原生 navigator/Intl/Permissions 与实际 HTTPS 出口与服务备援目录与宿主界面语言。
- * [OUTPUT]: 实测起始页，同步宿主中英文界面，显示本机通讯状态与回报时间，观测上报宿主；已测项目全部匹配且回传成功才显示整页绿色与大对勾。
+ * [OUTPUT]: 实测起始页，同步宿主中英文界面，显示本机通讯状态与回报时间，观测上报宿主；逐项原因和实际/目标对比，检测中黄底波纹、失败红底、完整通过绿底大对勾。
  * [POS]: 独立 Chromium 入口，复用工具箱控件；成功状态只由真实观测决定，不接入 Tauri 权限，不伪造地理位置。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-import { Button, Panel, PanelHeader, MotionRoot, TooltipProvider } from 'cromma-ui';
+import { Button, MotionRoot, TooltipProvider } from 'cromma-ui';
 import { useEffect, useState } from 'react';
-import {translate as t,setLocale,useI18n} from "./i18n";
+import {setLocale,useI18n} from "./i18n";
 import { createRoot } from 'react-dom/client';
-import { matchesDevice, type BrowserContext, type Report, type Exit } from './browser-model';
+import { type BrowserContext, type Report, type Exit } from './browser-model';
 import { probeBrowserExit } from './browser-network';
+import {verifyBrowser} from './browser-verification';
+import browserLogo from '../assets/browser-logo.jpg';
 import './index.css';
 import './style.css';
-async function api<T>(route: string, body?: unknown): Promise<T> { const response = await fetch(new URL(route, location.href), { signal: AbortSignal.timeout(3000), ...(body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) }); if (!response.ok)
+async function api<T>(route: string, body?: unknown): Promise<T> { const response = await fetch(new URL(route, location.href), { signal: AbortSignal.timeout(3000), cache:'no-store', credentials:'omit', redirect:'error', ...(body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) }); if (!response.ok)
     throw new Error("本地核验连接失败，请从CCBaga-A重新打开浏览器。"); return response.json(); }
 function Start() {
     const {t,locale}=useI18n();
-    const [context, setContext] = useState<BrowserContext | null>(null), [report, setReport] = useState<Report | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [linked, setLinked] = useState(false), [reportedAt, setReportedAt] = useState(0);
+    const [context, setContext] = useState<BrowserContext | null>(null), [report, setReport] = useState<Report | null>(null), [busy, setBusy] = useState(true), [error, setError] = useState(''), [linked, setLinked] = useState(false), [reportedAt, setReportedAt] = useState(0);
     async function measure() {
         setBusy(true);
         setError('');
+        setReport(null);
+        setReportedAt(0);
         try {
             const context = await api<BrowserContext>('context');
             setContext(context);setLocale(context.ui_language);
@@ -60,13 +64,25 @@ function Start() {
         setLinked(true);
     } }).catch(() => { if (live)
         setLinked(false); }); }, 10000); return () => { live = false; clearInterval(timer); }; }, []);
-    const matching = report && context && context.region && report.exit?.country === context.region.country && report.timezone === report.exit.timezone && report.timezone === context.machine.timezone && report.language === context.region.language && report.cores === context.machine.cores && matchesDevice(context.machine, report) && report.browser_version === context.engine_version && report.geolocation === 'denied' && context.machine.location_enabled === false && context.machine.locale.startsWith(context.region.locale) && context.machine.languages[0]?.startsWith(context.region.language);
-    const passed = Boolean(matching && !busy && linked && !error && !report?.error);
-    return <div className={`browser-verification-page${passed ? ' is-verified' : ''}`}><main className="browser-start"><div className="cleanup-title"><div><h1>{t("浏览器环境")}</h1></div><Button variant="ink" loading={busy} disabled={busy} onClick={() => void measure()}>{t("重新实测")}</Button></div>
-    {passed && <div className="browser-verification-success" role="status"><svg viewBox="0 0 96 96" aria-hidden="true"><circle cx="48" cy="48" r="46" fill="currentColor"/><path d="m27 49 14 14 28-31" fill="none" stroke="white" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/></svg><strong>{t("检测通过")}</strong></div>}
-    <Panel><PanelHeader title={busy ? t("正在读取浏览器与网络…") : passed ? t("已测项目与目标地区一致") : t("请核对环境差异")} actions={<span className="local-badge">Chromium {context?.engine_version || '…'}</span>}/><div className="browser-observations">{[[t("出口 IP"), report?.exit?.ip], [t("国家 / 城市"), report?.exit ? `${report.exit.country} / ${report.exit.city}` : null], [t("出口时区"), report?.exit?.timezone], [t("网页时区"), report?.timezone], [t("网页语言"), report?.languages.join(' → ')], [t("设备平台 / 版本"), report ? `${report.platform} / ${report.platform_version || t("不可读取")}` : null], [t("逻辑 CPU"), report?.cores.toString()], [t("浏览器实际版本"), report?.browser_version], [t("网页定位权限"), report?.geolocation], [t("本机时区"), context?.machine.timezone], [t("本机语言 / 区域"), context ? `${context.machine.languages.join(' → ')} / ${context.machine.locale}` : null], [t("本机系统 / CPU"), context ? t("{platform} {v0} / {v1} 核", { platform: context.machine.platform, v0: context.machine.version, v1: context.machine.cores }) : null]].map(([label, value]) => <div key={label}><span>{t(label || '')}</span><strong>{value || t("尚未核验")}</strong></div>)}</div></Panel>
-    {(error || report?.error) && <p className="system-feedback error" role="alert">{t(error || report?.error || '')}</p>}
-    <p className="system-hint" role="status">{linked ? t("已连接 CCBaga-A{v0}", { v0: reportedAt ? t(" · 结果回传成功 {v0}", { v0: new Date(reportedAt).toLocaleTimeString(locale==='zh'?'zh-CN':'en-US') }) : t(" · 等待本次实测回传") }) : t("与 CCBaga-A的连接已断开，请在清理器内重新打开实测页。")}</p>
-  </main></div>;
+    const result=verifyBrowser(context,report,linked,error,busy);
+    const {phase,checks,problems,failures}=result;
+    const title=phase==='checking'?'检测中':phase==='passed'?'检测通过':'检测未通过';
+    return <div className={`browser-verification-page is-${phase}`} data-verification={phase}>
+     <main className="browser-start">
+      <header className="verification-brand"><div><img src={browserLogo} width={32} height={32} alt=""/><strong>CCBaga-B</strong></div><span>Chromium {context?.engine_version||'—'}</span></header>
+      <section className="verification-banner" aria-labelledby="verification-title" aria-busy={busy}>
+       <div className="verification-signal" aria-hidden="true"><i/><i/><svg viewBox="0 0 96 96"><circle cx="48" cy="48" r="44" fill="currentColor"/>{phase==='passed'?<path d="m27 49 14 14 28-31"/>:phase==='failed'?<path d="m34 34 28 28m0-28L34 62"/>:<><path d="M48 27v23"/><circle cx="48" cy="65" r="3" fill="white" stroke="none"/></>}</svg></div>
+       <div className="verification-title" aria-live="polite"><span>{t('浏览器环境')}</span><h1 id="verification-title">{t(title)}</h1>{!busy&&<span>{t('已通过 {v0} / {v1} 项',{v0:checks.filter(check=>check.ok).length,v1:checks.length})}</span>}</div>
+       <Button variant="ink" loading={busy} disabled={busy} onClick={()=>void measure()}>{t('重新实测')}</Button>
+      </section>
+      <div className="landing-section-band" aria-hidden="true"/>
+      {phase==='failed'&&<section className="verification-reasons" aria-labelledby="verification-reasons-title"><h2 id="verification-reasons-title">{t('未通过原因')}</h2><ul>{problems.map(problem=><li key={problem}>{t(problem)}</li>)}{failures.map(check=><li key={check.label}><strong>{t(check.label)}</strong><span>{t(check.actual)} · {t('目标：{v0}',{v0:t(check.expected)})}</span></li>)}</ul></section>}
+      {checks.length>0&&<section className="verification-results" aria-label={t('逐项检测结果')}>{checks.map(check=><article className={`verification-check ${check.ok?'ok':'failed'}`} key={check.label}><header><h2>{t(check.label)}</h2><span aria-label={t(check.ok?'检测通过':'检测未通过')}>{check.ok?'✓':'×'}</span></header><strong>{t(check.actual)}</strong>{!check.ok&&<p>{t('目标：{v0}',{v0:t(check.expected)})}</p>}</article>)}</section>}
+      {phase==='checking'&&<div className="verification-loading" role="status">{t('正在读取浏览器与网络…')}</div>}
+      {report?.exit&&<section className="verification-network"><div><span>{t('出口 IP')}</span><strong>{report.exit.ip}</strong></div><div><span>{t('国家 / 城市')}</span><strong>{report.exit.country} / {report.exit.city||'—'}</strong></div></section>}
+      <footer className="verification-footer"><span className={linked?'connected':'disconnected'}>{t(linked?'已连接 CCBaga-A':'主应用未连接')}</span><time>{reportedAt?t('结果回传成功 {v0}',{v0:new Date(reportedAt).toLocaleTimeString(locale==='zh'?'zh-CN':'en-US')}):t('等待检测回传')}</time></footer>
+     </main>
+    </div>;
+
 }
 createRoot(document.getElementById('app')!).render(<MotionRoot><TooltipProvider><Start /></TooltipProvider></MotionRoot>);

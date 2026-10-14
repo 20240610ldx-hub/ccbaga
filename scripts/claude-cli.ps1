@@ -1,5 +1,5 @@
 ﻿# [INPUT]: 固定 CLI 动作、当前用户根目录与官方原生/npm/bun/WinGet 程序位置。
-# [OUTPUT]: 安装来源/版本和真实完成协议；原生安装器下载/解码/解析失败时保留旧程序。
+# [OUTPUT]: 安装来源/版本和真实完成协议；原生安装器预检失败保留旧程序，可捕获安装/核验失败时从唯一备份恢复并核对哈希。
 # [POS]: Windows CLI 程序边界；拒绝链接目录、自定义启动器，保留配置、技能、会话和项目。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 param([ValidateSet('read','uninstall','reinstall')][string]$action='read')
@@ -117,6 +117,27 @@ function RemovePrograms($state) {
     }
     foreach ($file in $state.managed) { if (Test-Path -LiteralPath $file) { Fail 'Claude Code 卸载未完成，部分程序仍存在。' } }
 }
+$backupDir=$null
+$backupFiles=@()
+$backupReady=$false
+function RollbackNative {
+    if (-not $backupReady -or -not (RealPath $backupDir)) { Fail 'Claude Code 回滚未完成，恢复文件保留在原生程序目录旁。' }
+    Step '正在回滚恢复先前的 Claude Code 原生程序。'
+    foreach ($file in $backupFiles) {
+        if (-not (RealPath $file.backup) -or (Get-FileHash -LiteralPath $file.backup -Algorithm SHA256).Hash -ne $file.hash) { Fail 'Claude Code 回滚未完成，恢复文件保留在原生程序目录旁。' }
+        $parent=Split-Path $file.source -Parent
+        $existing=$parent
+        while (-not (Test-Path -LiteralPath $existing)) { $existing=Split-Path $existing -Parent; if(-not $existing){Fail 'Claude Code 回滚未完成，恢复文件保留在原生程序目录旁。'} }
+        if (-not (RealPath $existing)) { Fail 'Claude Code 回滚未完成，恢复文件保留在原生程序目录旁。' }
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+        if (-not (RealPath $parent)) { Fail 'Claude Code 回滚未完成，恢复文件保留在原生程序目录旁。' }
+        if ((Get-Item -LiteralPath $file.source -Force -ErrorAction SilentlyContinue) -and -not (RealPath $file.source)) { Fail 'Claude Code 回滚未完成，恢复文件保留在原生程序目录旁。' }
+        Copy-Item -LiteralPath $file.backup -Destination $file.source -Force
+        if ((Get-FileHash -LiteralPath $file.source -Algorithm SHA256).Hash -ne $file.hash) { Fail 'Claude Code 回滚未完成，恢复文件保留在原生程序目录旁。' }
+    }
+    Remove-Item -LiteralPath $backupDir -Recurse -Force
+}
+
 try {
     $state=Status
     if ($action -ne 'read') {
@@ -127,6 +148,21 @@ try {
             Step '正在下载 Claude Code 官方安装器。'
             # 先下载并检查脚本，再卸载；网络或响应异常时不丢失已有程序。
             $installer=NativeInstaller
+        }
+        if ($action -eq 'reinstall' -and $state.methods.Contains('native')) {
+            $parent=Split-Path $versions -Parent
+            if (-not (RealPath $parent)) { Fail '无法暂存原程序，未开始重装。' }
+            $backupDir=Join-Path $parent ('.reinstall.'+[guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $backupDir | Out-Null
+            foreach ($file in @((Get-Item -LiteralPath $native)) + @($state.nativeFiles)) {
+                if (-not (RealPath $file.FullName)) { Fail '无法暂存原程序，未开始重装。' }
+                $destination=Join-Path $backupDir $(if($file.FullName -ieq $native){'launcher.exe'}else{'version-'+$file.Name})
+                $hash=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+                Copy-Item -LiteralPath $file.FullName -Destination $destination
+                if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -ne $hash) { Fail '无法暂存原程序，未开始重装。' }
+                $backupFiles+=@{source=$file.FullName;backup=$destination;hash=$hash}
+            }
+            $backupReady=$true
         }
         Step '正在卸载 Claude Code CLI。'
         RemovePrograms $state
@@ -146,6 +182,8 @@ try {
             Step '正在核验 Claude Code CLI 版本。'
             $state=Status
             if (-not $state.known -or -not $state.version) { Fail 'Claude Code 重装后的版本核验失败。' }
+            $backupReady=$false
+            if ($backupDir) { Remove-Item -LiteralPath $backupDir -Recurse -Force }
         } else { $state=Status;if($state.methods.Count){Fail 'Claude Code 卸载未完成。'} }
     }
     Write-Output "CC_CLI_METHOD=$($state.methods -join ' / ')"
@@ -153,6 +191,11 @@ try {
     Write-Output "CC_CLI_VERSION=$($state.version)"
     Write-Output 'CC_CLI_DONE=1'
 } catch {
-    [Console]::Error.WriteLine($_.Exception.Message)
+    $message=$_.Exception.Message
+    if ($backupReady) {
+        try { RollbackNative; $message+=' Claude Code 操作失败，已恢复原程序。' }
+        catch { $message='Claude Code 回滚未完成，恢复文件保留在原生程序目录旁。' }
+    }
+    [Console]::Error.WriteLine($message)
     exit 1
 }

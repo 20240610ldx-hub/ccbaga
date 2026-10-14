@@ -131,6 +131,38 @@ default {exit 8}
         result=self.invoke('reinstall');self.assertNotEqual(result.returncode,0)
         self.assertNotIn('CC_CLI_DONE=1',result.stdout)
         self.assertNotIn('fixture-private-diagnostic',result.stderr);self.assets()
+    def test_native_reinstall_failure_restores_hashes_and_blocked_rollback_retains_backup(self):
+        for failure in ['install','version','blocked']:
+            with self.subTest(failure=failure):
+                binary,version=self.native()
+                original=binary.read_bytes()
+                prefix=r"""param()
+$n=Join-Path $env:USERPROFILE '.local\bin\claude.exe'
+$v=Join-Path $env:USERPROFILE '.local\share\claude\versions'
+"""
+                if failure=='install':body="throw 'private fixture diagnostic'"
+                elif failure=='version':body="[IO.File]::WriteAllText($n,'invalid executable');[IO.File]::WriteAllText((Join-Path $v '2.1.0'),'invalid executable')"
+                else:
+                    outside=self.home/'outside';outside.mkdir(exist_ok=True)
+                    (outside/'keep').write_text('untouched')
+                    body=r"""Remove-Item -LiteralPath $v -Recurse -Force
+New-Item -ItemType Junction -Path $v -Target (Join-Path $env:USERPROFILE 'outside') | Out-Null
+throw 'private fixture diagnostic'"""
+                self.installer(prefix+body)
+                result=self.invoke('reinstall')
+                self.assertNotEqual(result.returncode,0)
+                self.assertNotIn('CC_CLI_DONE=1',result.stdout)
+                self.assertNotIn('private fixture diagnostic',result.stderr)
+                if failure=='blocked':
+                    self.assertIn('恢复文件保留',result.stderr)
+                    backups=list((self.home/'.local/share/claude').glob('.reinstall.*'))
+                    self.assertTrue(backups)
+                    self.assertTrue(any((path/'version-2.1.0').read_bytes()==original for path in backups))
+                    self.assertEqual((outside/'keep').read_text(),'untouched')
+                else:
+                    self.assertIn('已恢复原程序',result.stderr)
+                    self.assertEqual(binary.read_bytes(),original);self.assertEqual(version.read_bytes(),original)
+                self.assets()
     def test_npm_reinstall_and_uninstall(self):
         self.npm();result=self.invoke('reinstall')
         self.assertEqual(result.returncode,0,result.stderr);self.assertIn('CC_CLI_METHOD=npm',result.stdout);self.assertIn('CC_CLI_VERSION=2.2.0',result.stdout)

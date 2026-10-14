@@ -11,8 +11,6 @@ use dunce::canonicalize;
 use std::fs::canonicalize;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
-#[cfg(all(unix,test))]
-use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{

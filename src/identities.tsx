@@ -117,7 +117,7 @@ export function IdentityPanel({onBusy, initialEmpty=false}: {onBusy?: (busy:bool
    <div className="identity-card-rail" ref={rail} tabIndex={0} role="region" aria-label={t('身份')}>
     <IdentityCard className={`identity-card empty${current?.present===false?' selected':''}`} label={current?.present===false?`${t('空身份')} · ${t('当前身份')}`:t('空身份')}>
      <div className="identity-card-head"><div className="identity-avatar" aria-hidden="true">∅</div></div>
-     <h3>{t('空身份')}</h3><p className="identity-empty-note">{t('相当于没有痕迹。新账户登录时务必选择。')}</p>
+     <h3>{t('空身份')}</h3><p className="identity-empty-note">{t('清空本地登录身份；保留选定工作区资料，不影响服务端记录。')}</p>
      <div className="identity-card-footer"><Button variant="secondary" size="small" disabled={blocked} onClick={()=>choose('empty')}>{t('使用空身份')}</Button></div>
     </IdentityCard>
     {(loading||current?.present)&&<IdentityCard className="identity-card current" label={t('当前身份')}>

@@ -1,31 +1,59 @@
 /**
- * [INPUT]: 固定资源入口、五项 LobeHub 图标与按需服务规格、Cromma Tabs/Textarea、精简双语提示词与原生剪贴板。
- * [OUTPUT]: Laper 满宽细线三步入口与斜纹分隔、五项 AI 图标分段与问号规格说明、点阵标题和双语提示词一键复制。
- * [POS]: 网络资源导航；应用不收集密钥或执行远端部署，Skill 在用户选定的 AI 工具内运行。
+ * [INPUT]: 固定资源入口、服务规格、Claude 核心域名分流诊断、Cromma Tabs/Textarea、双语提示词与原生剪贴板。
+ * [OUTPUT]: Laper 满宽细线三步入口与斜纹分隔、固定服务只读连通性列表（连接对端不等于出口）、五项 AI 图标分段与双语提示词一键复制。
+ * [POS]: 网络资源与分流诊断；应用不收集密钥或执行远端部署，诊断仅进行只读网络连通性探测。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 import {Button,Tabs,Textarea} from 'cromma-ui';
-import {Server as ServerIcon,HomeDefault as HomeIcon} from 'cromma-ui/pika';
+import {Server as ServerIcon,HomeDefault as HomeIcon,Refresh} from 'cromma-ui/pika';
 import {useState} from 'react';
 import {invoke} from '@tauri-apps/api/core';
 import {useI18n} from './i18n';
 import {AppDialog} from './dialog';
 import {agents,installationPrompt} from './network-skill';
+
+export type DomainDiagnosis = {
+    domain: string;
+    ok: boolean;
+    status_code: number | null;
+    latency_ms: number | null;
+    ip: string | null;
+    message: string;
+};
+
 export function VpsPanel() {
     const {t,locale}=useI18n();
     const [selected,setSelected]=useState('generic'), [copied,setCopied]=useState(''), [error,setError]=useState('');
     const [guide,setGuide]=useState<'dmit'|'webshare'|null>(null);
+    const [diagnosing,setDiagnosing]=useState(false);
+    const [diagnostics,setDiagnostics]=useState<DomainDiagnosis[]|null>(null);
     const prompt=installationPrompt(selected,locale);
+
     async function open(provider:'dmit'|'webshare'|'skill') {
         setError('');
         try { await invoke('network_open_resource',{provider}); }
         catch (e) { setError(String(e)); }
     }
+
     async function copy() {
         setError('');
         try { await invoke('copy_result',{text:prompt});setCopied(prompt); }
         catch(e) { setError(String(e)); }
     }
+
+    async function runDiagnostics() {
+        setDiagnosing(true);
+        setError('');
+        try {
+            const results = await invoke<DomainDiagnosis[]>('network_diagnose_domains');
+            setDiagnostics(results);
+        } catch (e) {
+            setError(String(e));
+        } finally {
+            setDiagnosing(false);
+        }
+    }
+
     return <section className="system-page network-page"><div className="cleanup-title"><h1>{t('网络环境')}</h1></div>
         <ol className="network-steps">{([
             ['dmit','DMIT','获取 VPS'],['webshare','Webshare','获取家宽'],['skill','Skill','安装 Skill']
@@ -33,6 +61,26 @@ export function VpsPanel() {
             <div className="network-step-heading"><span className="network-step-number" aria-hidden="true">{String(index+1).padStart(2,'0')}</span><h2>{name}</h2></div>
             <div className="network-step-actions"><Button variant={provider==='dmit'?'info':provider==='webshare'?'success':'secondary'} size="small" leftIcon={provider==='dmit'?<ServerIcon size={15} aria-hidden="true"/>:provider==='webshare'?<HomeIcon size={15} aria-hidden="true"/>:undefined} onClick={()=>void open(provider)}>{t(label)}</Button>{provider!=='skill'&&<Button variant="secondary" size="small" round aria-label={t(provider==='dmit'?'VPS 帮助':'家宽帮助')} onClick={()=>setGuide(provider)}>?</Button>}</div>
         </li>)}</ol>
+        <div className="landing-section-band" aria-hidden="true"/>
+        <section className="domain-diagnostics" aria-labelledby="diagnostics-title">
+            <div className="domain-diagnostics-header">
+                <div className="domain-diagnostics-title-group">
+                    <h2 id="diagnostics-title">{t('服务连接')}</h2>
+
+                </div>
+                <Button variant="secondary" size="small" disabled={diagnosing} leftIcon={<Refresh aria-hidden size={15} className={diagnosing?'spin':''} />} onClick={()=>void runDiagnostics()}>{diagnosing?t('诊断中'):diagnostics?t('重新诊断'):t('开始诊断')}</Button>
+            </div>
+            {diagnostics&&<ul className="domain-diagnostics-list">{diagnostics.map(item=><li key={item.domain} className={'domain-diagnostics-item ' + (item.ok?'ok':'fail')}>
+                <div className="domain-item-info">
+                    <span className="domain-name">{item.domain}</span>
+                    {item.ip&&<span className="domain-ip" title={t('连接对端，不代表出口 IP')}>{item.ip}</span>}
+                </div>
+                <div className="domain-item-status">
+                    {item.latency_ms!==null&&<span className="domain-latency">{item.latency_ms + ' ms'}</span>}
+                    <span className={'domain-badge ' + (item.ok?'badge-ok':'badge-fail')}>{item.status_code?('HTTP ' + item.status_code + ' · ' + t(item.message)):t(item.message)}</span>
+                </div>
+            </li>)}</ul>}
+        </section>
         <div className="landing-section-band" aria-hidden="true"/>
         <section className="skill-install" aria-labelledby="skill-install-title">
             <h2 id="skill-install-title">{t('Skill')}</h2>
