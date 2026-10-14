@@ -1,6 +1,6 @@
 /**
  * [INPUT]: index.css 的系统字体、Cromma UI 控件、Laper 最新 LandingRailLayout/LineworkTokens/HeroDotBackground 几何与 Cromma 控件令牌。
- * [OUTPUT]: 黑白斜纹与点阵壳、细线操作网格、立体身份卡片、网络/更新布局，以及常显用途声明、编号说明行和折叠帮助；实测页红/黄/绿背景、检测波纹和逐项失败原因，复用斜纹/点阵令牌。
+ * [OUTPUT]: 黑白斜纹与点阵壳、细线操作网格、立体身份卡片、网络/更新布局，以及常显用途声明、编号说明行和折叠帮助；实测页全宽紧凑 2/3/4 列、红/黄/绿背景、检测波纹和逐项失败原因，复用斜纹/点阵令牌。
  * [POS]: 应用布局层；信息只分标题、操作和结果，删除装饰文案与重复说明区；按钮边缘、内高光、阴影和悬停效果沿用 Cromma UI。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -111,52 +111,55 @@ h3 { margin: 0; font-size: 13px; font-weight: 500; }
 .browser-check small { font-size: 11px; color: var(--muted-foreground); }
 .browser-checks > .system-feedback { margin: 16px 20px; }
 /* ----- 实测页沿用主窗口斜纹与点阵；状态由真实核验统一着色 ----- */
-.browser-verification-page { --verification-bg: #fff1f0; --verification-color: #b42318; min-height: 100vh; padding: 24px max(16px, calc((100vw - 1080px) / 2)); background-color: var(--verification-bg); background-image: var(--landing-hatch); transition: background-color 300ms ease; }
+.browser-verification-page { --verification-bg: #fff1f0; --verification-color: #b42318; min-height: 100vh; padding: 16px; background-color: var(--verification-bg); background-image: var(--landing-hatch); transition: background-color 300ms ease; }
 .browser-verification-page.is-checking { --verification-bg: #fff8df; --verification-color: #986400; }
 .browser-verification-page.is-passed { --verification-bg: #e4f5e9; --verification-color: #16703c; }
 .browser-start { width: 100%; border: 1px solid var(--landing-line); background: var(--panel); }
-.verification-brand { min-height: 72px; padding: 16px 28px; border-bottom: 1px solid var(--landing-line); display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.verification-brand { min-height: 52px; padding: 10px 20px; border-bottom: 1px solid var(--landing-line); display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .verification-brand > div { display: flex; align-items: center; gap: 12px; }
 .verification-brand img { border-radius: 8px; }
 .verification-brand strong { font-size: 14px; font-weight: 600; }
 .verification-brand > span { font: 11px ui-monospace, monospace; color: var(--muted-foreground); }
-.verification-banner { display: flex; align-items: center; gap: 32px; min-height: 242px; padding: 36px; background-color: var(--verification-bg); background-image: var(--landing-dots); background-size: 7px 7px; }
+.verification-banner { display: flex; align-items: center; gap: 24px; min-height: 132px; padding: 20px 24px; background-color: var(--verification-bg); background-image: var(--landing-dots); background-size: 7px 7px; }
 .verification-banner > button { margin-left: auto; }
-.verification-title { display: grid; gap: 10px; }
+.verification-title { display: grid; gap: 5px; }
 .verification-title > span { color: var(--verification-color); font-size: 12px; }
-.verification-title h1 { font-size: clamp(28px, 4vw, 42px); font-weight: 500; letter-spacing: -1.2px; }
-.verification-signal { position: relative; isolation: isolate; width: 112px; height: 112px; flex-shrink: 0; color: var(--verification-color); }
+.verification-title h1 { font-size: clamp(24px, 3vw, 32px); font-weight: 500; letter-spacing: -1.2px; }
+.verification-signal { position: relative; isolation: isolate; width: 76px; height: 76px; flex-shrink: 0; color: var(--verification-color); }
 .verification-signal svg { position: relative; z-index: 1; display: block; width: 100%; height: 100%; }
 .verification-signal path { fill: none; stroke: white; stroke-width: 7px; stroke-linecap: round; stroke-linejoin: round; }
 .verification-signal > i { position: absolute; inset: 0; border-radius: 50%; border: 1px solid currentColor; opacity: 0; }
 .is-checking .verification-signal > i { animation: verification-ripple 2.4s ease-out infinite; }
 .is-checking .verification-signal > i:nth-child(2) { animation-delay: 1.2s; }
 @keyframes verification-ripple { 0% { transform: scale(.9); opacity: .55; } 100% { transform: scale(1.65); opacity: 0; } }
-.verification-reasons { padding: 24px 28px; border-bottom: 1px solid var(--landing-line); }
-.verification-reasons h2 { color: var(--verification-color); margin-bottom: 16px; }
+.verification-reasons { padding: 16px 20px; border-bottom: 1px solid var(--landing-line); }
+.verification-reasons h2 { color: var(--verification-color); margin-bottom: 10px; }
 .verification-reasons ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .verification-reasons li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; padding-left: 12px; border-left: 2px solid var(--verification-color); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
 .verification-reasons li strong { font-weight: 500; }
 .verification-reasons li span { color: var(--muted-foreground); user-select: text; }
-.verification-results { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
-.verification-check { min-width: 0; min-height: 126px; padding: 22px 28px; border-bottom: 1px solid var(--landing-line); }
-.verification-check:nth-child(even) { border-left: 1px solid var(--landing-line); }
-.verification-check header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.verification-results { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); }
+.verification-check { min-width: 0; min-height: 88px; padding: 14px 20px; border-bottom: 1px solid var(--landing-line); border-right: 1px solid var(--landing-line); }
+.verification-check:nth-child(3n) { border-right: 0; }
+.verification-check header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 7px; }
 .verification-check h2 { font-size: 12px; color: var(--muted-foreground); font-weight: 400; }
 .verification-check header > span { color: #16703c; font-size: 17px; font-weight: 600; }
 .verification-check.failed header > span { color: #b42318; }
 .verification-check > strong { display: block; font: 15px ui-monospace, monospace; overflow-wrap: anywhere; user-select: text; }
 .verification-check p { font-size: 11px; line-height: 1.6; margin-top: 8px; color: var(--muted-foreground); }
-.verification-loading { padding: 50px 28px; color: var(--muted-foreground); font-size: 13px; text-align: center; }
-.verification-network { display: flex; flex-wrap: wrap; gap: 20px 48px; padding: 22px 28px; border-bottom: 1px solid var(--landing-line); }
-.verification-network > div { display: grid; gap: 8px; }
+.verification-loading { padding: 24px 20px; color: var(--muted-foreground); font-size: 13px; text-align: center; }
+.verification-network { display: flex; flex-wrap: wrap; gap: 16px 32px; padding: 14px 20px; border-bottom: 1px solid var(--landing-line); }
+.verification-network > div { display: flex; align-items: baseline; gap: 12px; }
 .verification-network span { color: var(--muted-foreground); font-size: 11px; }
 .verification-network strong { font: 13px ui-monospace, monospace; user-select: text; }
-.verification-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 18px 28px; font-size: 11px; color: var(--muted-foreground); }
+.verification-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 12px 20px; font-size: 11px; color: var(--muted-foreground); }
 .verification-footer > span::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: #b42318; }
 .verification-footer .connected::before { background: #16703c; }
 @media (prefers-reduced-motion: reduce) { .is-checking .verification-signal > i { animation: none; opacity: .35; transform: scale(1.12); } .is-checking .verification-signal > i:nth-child(2) { transform: scale(1.25); } }
-@media (max-width: 640px) { .browser-verification-page { padding: 12px; } .verification-brand { padding: 16px; } .verification-brand > span { font-size: 9px; } .verification-banner { padding: 32px 20px; gap: 20px; flex-wrap: wrap; } .verification-signal { width: 88px; height: 88px; } .verification-banner > button { margin-left: 108px; } .verification-results { grid-template-columns: 1fr; } .verification-check:nth-child(even) { border-left: 0; } .verification-check, .verification-reasons, .verification-network, .verification-footer { padding: 20px; } }
+@media (min-width: 1400px) { .verification-results { grid-template-columns: repeat(4,minmax(0,1fr)); } .verification-check:nth-child(3n) { border-right: 1px solid var(--landing-line); } .verification-check:nth-child(4n) { border-right: 0; } }
+@media (max-width: 760px) { .browser-verification-page { padding: 10px; } .verification-brand { padding: 10px 16px; } .verification-brand > span { font-size: 9px; } .verification-banner { padding: 18px 16px; gap: 16px; min-height: 116px; } .verification-signal { width: 64px; height: 64px; } .verification-results { grid-template-columns: repeat(2,minmax(0,1fr)); } .verification-check:nth-child(3n) { border-right: 1px solid var(--landing-line); } .verification-check:nth-child(2n) { border-right: 0; } .verification-check, .verification-reasons, .verification-network, .verification-footer { padding: 12px 16px; } }
+@media (max-width: 440px) { .verification-brand { flex-wrap: wrap; gap: 8px; } .verification-banner { flex-wrap: wrap; } .verification-banner > button { margin-left: 80px; } .verification-results { grid-template-columns: 1fr; } .verification-check:nth-child(n) { border-right: 0; } }
+
 .browser-surface { overflow: auto; user-select: text; }
 .browser-surface #app { height: auto; min-height: 100%; overflow: visible; }
 .cleanup-page { display: flex; flex: 1; min-height: 0; flex-direction: column; }
