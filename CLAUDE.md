@@ -22,7 +22,8 @@ index.html - 单窗口 HTML 入口
 browser.html - 独立浏览器实测页入口
 vite.config.ts - 双入口静态构建与 YAML 编译，文案单独共享分块
 tsconfig.json - 严格类型检查与 Vite 静态资源导入类型，品牌图由构建器打包
-README.md - 英文项目入口，旅居人员本人 Claude 身份管理用途与禁止违反官方用户协议声明、功能、安装和开发导航
+README.md - 英文项目入口与中文入口跳转，旅居人员本人 Claude 身份管理用途与禁止违反官方用户协议声明、功能、安装和开发导航
+README.zh-CN.md - 简明中文项目入口、安装和常用操作导航，链接现有详细文档并提供英文返回入口
 CONTRIBUTING.md - 英文贡献流程与模块契约
 LICENSE - 项目原创代码 MIT 授权
 NOTICE.md - 第三方引擎、组件与图标的授权边界
