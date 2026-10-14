@@ -1,15 +1,15 @@
 # [INPUT]: release 分支 commit、锁定依赖与 GitHub Secrets 中的 Apple 与更新签名凭据。
 # [OUTPUT]: macOS 双应用 DMG、Linux DEB/RPM/AppImage/Arch 包、Windows 当前用户 NSIS 安装器、带版本签名的主程序更新与公开清单、SHA-256、递增版本 tag 和 GitHub Release。
-# [POS]: 自动发布入口；签名和发布权限分离，仅仓库所有者触发/重跑，拒绝 fork、PR 或其他发布者。
+# [POS]: release 自动发布与 main 手动旧安装样本验证；后者不签名/发布，仅仓库所有者触发/重跑，拒绝 fork、PR 或其他发布者。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 name: Release
 on:
   push:
-    branches: [release, review/windows-ready]
+    branches: [release]
   workflow_dispatch:
     inputs:
       installer_run:
-        description: 'Owner-only Windows verification: prior installer run ID (review branch only)'
+        description: 'Owner-only Windows verification: prior installer run ID (manual main verification only)'
         type: string
         required: false
         default: ''
@@ -19,7 +19,7 @@ env:
   MACOSX_DEPLOYMENT_TARGET: "12.0"
 jobs:
   version:
-    if: github.repository == 'liseami/CCBaga' && (github.ref == 'refs/heads/release' || github.ref == 'refs/heads/review/windows-ready') && github.actor == 'liseami' && github.triggering_actor == 'liseami'
+    if: github.repository == 'liseami/CCBaga' && (github.ref == 'refs/heads/release' || (github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.installer_run != '')) && github.actor == 'liseami' && github.triggering_actor == 'liseami'
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -37,8 +37,8 @@ jobs:
           python3 - <<'PY'
           import json, os
           replay = os.environ.get('INSTALLER_RUN', '')
-          if replay and (os.environ['GITHUB_REF'] != 'refs/heads/review/windows-ready' or not replay.isdigit()):
-            raise SystemExit('Installer replay is restricted to the owner-only review branch')
+          if replay and (os.environ['GITHUB_REF'] != 'refs/heads/main' or not replay.isdigit()):
+            raise SystemExit('Installer replay is restricted to owner-only manual main verification')
           major, minor, patch = map(int, json.load(open('package.json'))['version'].split('.'))
           version = f'{major}.{minor}.{patch + int(os.environ["GITHUB_RUN_NUMBER"])}'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
