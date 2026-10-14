@@ -47,7 +47,19 @@ fn proxy_and_real_hardware() {
     assert!(a.contains(&"--profile-directory=Default".into()));
     assert!(a.contains(&"--fingerprint-platform-version=27.2.0".into()));
     assert!(a.contains(&"--fingerprint-hardware-concurrency=10".into()));
+    assert!(a.contains(&"--proxy-bypass-list=127.0.0.1;localhost;[::1];<-loopback>".into()));
     assert!(a.iter().any(|x| x.starts_with("--host-resolver-rules=")));
+    c.proxy = "socks5://[::1]:7898".into();
+    let ipv6_args = config::arguments(
+        &c,
+        &machine(),
+        Path::new("/profile"),
+        "http://127.0.0.1/page",
+        "148.0.7778.215",
+    );
+    assert!(ipv6_args
+        .iter()
+        .any(|x| x.contains("EXCLUDE ::1") && !x.contains("EXCLUDE [::1]")));
     assert!(!a
         .iter()
         .any(|x| x.contains("load-extension") || x.contains("disable-web-security")));
@@ -89,7 +101,18 @@ fn reject_links_and_malformed_preferences() {
     #[cfg(unix)]
     std::os::unix::fs::symlink(&outside, root.join("Default/Cache")).unwrap();
     #[cfg(windows)]
-    assert!(Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(root.join("Default/Cache").to_string_lossy().replace('/', "\\")).arg(outside.to_string_lossy().replace('/', "\\")).output().unwrap().status.success());
+    assert!(Command::new("cmd.exe")
+        .args(["/D", "/C", "mklink", "/J"])
+        .arg(
+            root.join("Default/Cache")
+                .to_string_lossy()
+                .replace('/', "\\")
+        )
+        .arg(outside.to_string_lossy().replace('/', "\\"))
+        .output()
+        .unwrap()
+        .status
+        .success());
     assert!(profile::clear(&root, false, |_, _| {}).is_err());
     assert!(outside.join("keep").exists());
     let prefs = root.join("Default/Preferences");
@@ -273,10 +296,33 @@ fn machine_proxy_credentials_never_leave_native_code() {
 
 #[test]
 fn windows_report_requires_real_platform_cpu_and_version() {
-    let mut m = machine(); m.platform = "windows".into(); m.version = "10.0.26100".into();
-    let mut report = network::Report { language: "en-US".into(), languages: vec!["en-US".into()], timezone: m.timezone.clone(), platform: "Win32".into(), cores: m.cores, user_agent: "fixture".into(), platform_version: m.version.clone(), browser_version: "148".into(), geolocation: "denied".into(), error: String::new(), exit: None };
-    let result = |r: &network::Report| network::checks(&m, &Config::default(), Some(r), None, "148").into_iter().find(|c| c.title == "真实设备与 CPU").unwrap().status;
+    let mut m = machine();
+    m.platform = "windows".into();
+    m.version = "10.0.26100".into();
+    let mut report = network::Report {
+        language: "en-US".into(),
+        languages: vec!["en-US".into()],
+        timezone: m.timezone.clone(),
+        platform: "Win32".into(),
+        cores: m.cores,
+        user_agent: "fixture".into(),
+        platform_version: m.version.clone(),
+        browser_version: "148".into(),
+        geolocation: "denied".into(),
+        error: String::new(),
+        exit: None,
+    };
+    let result = |r: &network::Report| {
+        network::checks(&m, &Config::default(), Some(r), None, "148")
+            .into_iter()
+            .find(|c| c.title == "真实设备与 CPU")
+            .unwrap()
+            .status
+    };
     assert_eq!(result(&report), "ok");
-    report.platform = "MacIntel".into(); assert_eq!(result(&report), "mismatch");
-    report.platform = "Win32".into(); report.platform_version = "fake".into(); assert_eq!(result(&report), "mismatch");
+    report.platform = "MacIntel".into();
+    assert_eq!(result(&report), "mismatch");
+    report.platform = "Win32".into();
+    report.platform_version = "fake".into();
+    assert_eq!(result(&report), "mismatch");
 }

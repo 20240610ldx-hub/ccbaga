@@ -525,15 +525,16 @@ fi
 
 # End-to-end: local VLESS client -> this server -> home proxy
 CLIENT_CONF="$(mktemp --suffix=.json)"
+CLIENT_LOG="$(mktemp --suffix=.log)"
 cat > "$CLIENT_CONF" <<EOF
 {"log":{"loglevel":"warning"},
  "inbounds":[{"port":${TEST_SOCKS_PORT},"listen":"127.0.0.1","protocol":"socks"}],
  "outbounds":[{"protocol":"vless","settings":{"vnext":[{"address":"127.0.0.1","port":${XRAY_PORT},"users":[{"id":"${XRAY_UUID}","flow":"xtls-rprx-vision","encryption":"none"}]}]},
   "streamSettings":{"network":"tcp","security":"reality","realitySettings":{"serverName":"${REALITY_DEST}","fingerprint":"chrome","publicKey":"${XRAY_PUBLIC_KEY}","shortId":"${XRAY_SHORT_ID}"}}}]}
 EOF
-xray run -config "$CLIENT_CONF" >/tmp/setup-vps-client.log 2>&1 &
+xray run -config "$CLIENT_CONF" >"$CLIENT_LOG" 2>&1 &
 CLIENT_PID=$!
-cleanup() { kill "$CLIENT_PID" 2>/dev/null || true; wait "$CLIENT_PID" 2>/dev/null || true; rm -f "$CLIENT_CONF"; }
+cleanup() { kill "$CLIENT_PID" 2>/dev/null || true; wait "$CLIENT_PID" 2>/dev/null || true; rm -f "$CLIENT_CONF" "$CLIENT_LOG"; }
 trap cleanup EXIT
 sleep 2
 EXIT_IP="$(curl -fsS --max-time 15 -x "socks5h://127.0.0.1:${TEST_SOCKS_PORT}" https://api.ipify.org || echo none)"

@@ -107,7 +107,10 @@ fn vault(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
         .join("identity-vault"))
 }
 fn state(app: &tauri::AppHandle) -> Result<State, String> {
-    let db = database::Database::open(&vault(app)?)?;
+    let vault_path = vault(app)?;
+    let root_path = crate::cleaner::identity::root()?;
+    let store = store::Store::open(&vault_path, &root_path)?;
+    let db = &store.db;
     Ok(State {
         browser: db.browser_link()?,
         browser_warning: app
@@ -117,11 +120,11 @@ fn state(app: &tauri::AppHandle) -> Result<State, String> {
             .unwrap()
             .clone(),
         records: db.records()?.into_iter().filter(|r| !r.empty).collect(),
-        active: catalog::current_id(&vault(app)?, &crate::cleaner::identity::root()?, &db)?
+        active: catalog::current_id(&vault_path, &root_path, db)?
             .unwrap_or_else(|| "current".into()),
         recovery: db.get("recovery")?,
         running: crate::cleaner::identity::processes_running()?,
-        current: profile::read(&crate::cleaner::identity::root()?),
+        current: profile::read(&root_path),
     })
 }
 #[tauri::command]

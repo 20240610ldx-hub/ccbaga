@@ -118,14 +118,24 @@ impl Database {
             .map_err(error)?;
         Ok(())
     }
+    pub fn remove_empty(&self) -> Result<(), String> {
+        if self.get("recovery")?.is_none() {
+            self.connection
+                .execute("DELETE FROM identities WHERE empty != 0", [])
+                .map_err(error)?;
+        }
+        Ok(())
+    }
     pub fn compact(&mut self) -> Result<(), String> {
         if self.get("recovery")?.is_some() {
             return Ok(());
         }
         let records = self.records()?;
         let tx = self.connection.transaction().map_err(error)?;
+        tx.execute("DELETE FROM identities WHERE empty != 0", [])
+            .map_err(error)?;
         let mut seen = std::collections::HashMap::<String, String>::new();
-        for record in records {
+        for record in records.into_iter().filter(|r| !r.empty) {
             if let Some(key) = record.account_key.filter(|k| !k.is_empty()) {
                 if let Some(id) = seen.get(&key) {
                     super::browser_link::merge(&tx, &record.id, id)?;

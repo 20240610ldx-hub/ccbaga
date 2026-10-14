@@ -43,7 +43,7 @@ pub(super) fn collect(root: &Path, reporter: &Reporter) -> Result<Scan, String> 
             if let Some(mut target) = targets::definitions(parent).into_iter().find(|t| {
                 root.starts_with(&t.path)
                     && matches!(t.operation, Operation::Delete)
-                    && t.path.file_name().and_then(|s| s.to_str()) != Some(".credentials.json")
+                    && t.group != "account"
             }) {
                 target.path = root.clone();
                 add_target(&mut scan, target, batch);
@@ -79,7 +79,7 @@ pub(super) fn collect(root: &Path, reporter: &Reporter) -> Result<Scan, String> 
                 for target in targets::definitions(parent).into_iter().filter(|t| {
                     t.path.starts_with(&dir)
                         && matches!(t.operation, Operation::Delete)
-                        && t.path.file_name().and_then(|s| s.to_str()) != Some(".credentials.json")
+                        && t.group != "account"
                 }) {
                     add_target(&mut scan, target, batch);
                 }

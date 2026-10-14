@@ -41,16 +41,16 @@ fn file_key(path: &Path, key: &[u8]) -> Result<Option<String>, String> {
     };
     private::parents(path.parent().ok_or("身份路径无效。")?)?;
     private::safe(path)?;
-    if !meta.is_file() || meta.len() > 2 * 1024 * 1024 {
+    if !meta.is_file() || meta.len() > 8 * 1024 * 1024 {
         return Ok(None);
     }
     let mut bytes = zeroize::Zeroizing::new(Vec::new());
     fs::File::open(path)
         .map_err(|_| "身份账号索引无法读取。")?
-        .take(2 * 1024 * 1024 + 1)
+        .take(8 * 1024 * 1024 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "身份账号索引无法读取。")?;
-    if bytes.len() > 2 * 1024 * 1024 {
+    if bytes.len() > 8 * 1024 * 1024 {
         return Ok(None);
     }
     let value: Value = serde_json::from_slice(&bytes).map_err(|_| "身份配置不是有效 JSON。")?;
@@ -92,7 +92,9 @@ impl Store {
             .filter(|r| r.account_key.is_none())
         {
             // 损坏的旧副本不自动删除；用户仍可单独删除或保留排查。
-            let Ok(stage) = self.load(&record) else { continue; };
+            let Ok(stage) = self.load(&record) else {
+                continue;
+            };
             let key = if let Some(key) = &stage.manifest.account_key {
                 Some(key.clone())
             } else if let Some(n) = stage

@@ -113,6 +113,19 @@ fn root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .map_err(|_| "应用目录不可用。")?
         .join("browser"))
 }
+pub(crate) fn configured_or_system_proxy(app: &tauri::AppHandle) -> String {
+    let configured = root(app)
+        .and_then(|r| workspaces::scope(&r))
+        .and_then(|s| config::load(&s))
+        .ok()
+        .map(|c| c.proxy)
+        .filter(|p| !p.is_empty());
+    configured.unwrap_or_else(|| {
+        config::machine()
+            .map(|m| m.system_proxy)
+            .unwrap_or_default()
+    })
+}
 #[cfg(target_os = "macos")]
 pub const BROWSER_ID: &str = "ai.local.requirement-french.browser";
 #[cfg(target_os = "macos")]
@@ -646,7 +659,7 @@ pub async fn browser_align(
         }
         let fresh = config::machine()?;
         if fresh.location_enabled != Some(false)
-            || fresh.timezone != exit.timezone
+            || !crate::regions::timezones_match(&fresh.timezone, &exit.timezone)
             || !fresh.locale.starts_with("en_US")
             || fresh.languages.first().map(String::as_str) != Some("en-US")
         {

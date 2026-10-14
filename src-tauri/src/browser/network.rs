@@ -48,6 +48,7 @@ pub(super) async fn probe_urls(proxy: &str, services: &[&str]) -> Result<Exit, S
     let mut client = reqwest::Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36")
         .timeout(Duration::from_secs(8));
     if !proxy.is_empty() {
         client = client.proxy(reqwest::Proxy::all(proxy).map_err(|_| "代理格式无效。")?);
@@ -191,9 +192,9 @@ pub fn checks(
             report
                 .zip(report.and_then(|r| r.exit.as_ref()))
                 .map(|(r, e)| {
-                    r.timezone == config.timezone(machine)
-                        && r.timezone == machine.timezone
-                        && r.timezone == e.timezone
+                    crate::regions::timezones_match(&r.timezone, &config.timezone(machine))
+                        && crate::regions::timezones_match(&r.timezone, &machine.timezone)
+                        && crate::regions::timezones_match(&r.timezone, &e.timezone)
                 }),
             format!(
                 "本机：{}；浏览器：{}；出口：{}",
@@ -263,7 +264,7 @@ pub fn checks(
                 match machine.location_enabled {
                     Some(true) => "开启",
                     Some(false) => "关闭",
-                    None => "未核验",
+                    None => "尚未核验",
                 },
                 report.map(|x| x.geolocation.as_str()).unwrap_or("待测")
             ),

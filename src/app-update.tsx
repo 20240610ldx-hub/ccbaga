@@ -64,7 +64,7 @@ export function AppUpdate({blocked,onBusy}:{blocked:boolean;onBusy:(busy:boolean
     {version&&<small className="app-version">v{version}</small>}
     <AppDialog open={open} onOpenChange={value=>{if(!busy)setOpen(value);}} title={t('主程序更新')} width={460} footer={<>
       <Button variant="ghost" disabled={busy} onClick={()=>setOpen(false)}>{t('关闭弹窗')}</Button>
-      {update||installed.current?<Button disabled={blocked||busy||phase==='checking'} onClick={()=>void install()}>{installed.current?t('重启主程序'):t('更新并重启主程序')}</Button>:<Button disabled={phase==='checking'||busy} onClick={()=>void search(true)}>{t('重新检查')}</Button>}
+      {update||installed.current?<Button variant="ink" disabled={blocked||busy||phase==='checking'} onClick={()=>void install()}>{installed.current?t('重启主程序'):t('更新并重启主程序')}</Button>:<Button variant="ink" disabled={phase==='checking'||busy} onClick={()=>void search(true)}>{t('重新检查')}</Button>}
     </>}>
       <dl className="update-versions"><div><dt>{t('当前版本')}</dt><dd>{version||'—'}</dd></div>{update&&<div><dt>{t('新版本')}</dt><dd>{update.version}</dd></div>}</dl>
       <p role="status" className="system-feedback">{phase==='current'?t('已是最新版本'):phase==='downloading'?t('正在下载更新'):phase==='installing'?t('正在安装更新'):phase==='restarting'?t('正在重启主程序'):label}</p>

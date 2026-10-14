@@ -4,9 +4,9 @@
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 #[cfg(target_os = "linux")]
 use crate::linux::*;
+use crate::native::decode;
 #[cfg(target_os = "windows")]
 use crate::windows::*;
-use crate::native::decode;
 use serde::Serialize;
 use serde_json::{json, Value};
 #[cfg(target_os = "macos")]
@@ -129,6 +129,8 @@ pub const CACHE: &[&str] = &[
     "Default/Code Cache",
     "Default/GPUCache",
     "Default/DawnCache",
+    "Default/DawnGraphiteCache",
+    "Default/DawnWebGPUCache",
     "Default/Service Worker/CacheStorage",
     "Default/Service Worker/ScriptCache",
     "ShaderCache",
@@ -139,6 +141,12 @@ pub const CACHE: &[&str] = &[
 pub const SITE_DATA: &[&str] = &[
     "Default/Network/Cookies",
     "Default/Network/Cookies-journal",
+    "Default/Network/Trust Tokens",
+    "Default/Network/Trust Tokens-journal",
+    "Default/Network/TransportSecurity",
+    "Default/Network/Network Persistent State",
+    "Default/Network/Reporting and Nel",
+    "Default/Network/Reporting and Nel-journal",
     "Default/Cookies",
     "Default/Cookies-journal",
     "Default/Local Storage",
@@ -148,6 +156,28 @@ pub const SITE_DATA: &[&str] = &[
     "Default/WebStorage",
     "Default/Storage",
     "Default/Sessions",
+    "Default/Shared Dictionary",
+    "Default/SharedStorage",
+    "Default/SharedStorage-wal",
+    "Default/DIPS",
+    "Default/DIPS-journal",
+    "Default/DIPS-wal",
+    "Default/DIPS-shm",
+    "Default/BrowsingTopicsState",
+    "Default/blob_storage",
+    "Default/Preferences",
+    "Default/Visited Links",
+    "Default/History",
+    "Default/History-journal",
+    "Default/Favicons",
+    "Default/Favicons-journal",
+    "Default/Top Sites",
+    "Default/Top Sites-journal",
+    "Default/Shortcuts",
+    "Default/Shortcuts-journal",
+    "Default/Web Data",
+    "Default/Web Data-journal",
+    "Local State",
 ];
 fn size(path: &Path) -> Result<u64, String> {
     let meta = fs::symlink_metadata(path).map_err(|_| "无法读取缓存项目。")?;

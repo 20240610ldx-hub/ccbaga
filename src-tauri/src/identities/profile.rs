@@ -58,16 +58,16 @@ pub fn read(home: &Path) -> Current {
         };
         super::private::parents(home).map_err(|_| ())?;
         super::private::safe(&path).map_err(|_| ())?;
-        if !meta.is_file() || meta.len() > 2 * 1024 * 1024 {
+        if !meta.is_file() || meta.len() > 8 * 1024 * 1024 {
             return Err(());
         }
         let mut bytes = zeroize::Zeroizing::new(Vec::new());
         fs::File::open(&path)
             .map_err(|_| ())?
-            .take(2 * 1024 * 1024 + 1)
+            .take(8 * 1024 * 1024 + 1)
             .read_to_end(&mut bytes)
             .map_err(|_| ())?;
-        if bytes.len() > 2 * 1024 * 1024 {
+        if bytes.len() > 8 * 1024 * 1024 {
             return Err(());
         }
         parse(&bytes).map_err(|_| ())

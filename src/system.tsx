@@ -115,7 +115,8 @@ export function SystemPanel({ onBusy }: {
     catch (e) {
         setError(String(e));
     } }
-    const zones = state ? Object.fromEntries(state.timezones.filter(value => value === zone || value.toLowerCase().includes(filter.toLowerCase())).map(value => [value, value.replaceAll('_', ' ')])) : {};
+    const normalizedFilter = filter.trim().toLowerCase().replaceAll('_', ' ');
+    const zones = state ? Object.fromEntries(state.timezones.filter(value => value === zone || value.toLowerCase().replaceAll('_', ' ').includes(normalizedFilter)).map(value => [value, value.replaceAll('_', ' ')])) : {};
     const disabled = busy !== null || !state;
     return <section className="system-page">
     <div className="cleanup-title"><div><h1>{t("电脑环境")}</h1></div><Button variant="secondary" size="small" loading={busy === 'read'} disabled={busy !== null} leftIcon={<ArrowClockwiseIcon size={16}/>} onClick={() => void reload()}>{t("刷新状态")}</Button></div>
@@ -125,7 +126,7 @@ export function SystemPanel({ onBusy }: {
         <label htmlFor="zone-search">{t("查找时区")}</label><Input id="zone-search" size="small" aria-label={t("查找时区")} value={filter} onChange={event => setFilter(event.currentTarget.value)} placeholder={t("例如 America / Paris / Shanghai")} disabled={disabled}/>
         <label>{t("目标时区")}</label><Select aria-label={t("目标时区")} size="small" value={zone || undefined} onValueChange={value => { if (value)
         setZone(value); }} items={Object.entries(zones).map(([value, label]) => ({ value, label: t(label) }))} disabled={disabled}/><p className="system-hint">{t(state?.platform === "windows" ? "需要时请完成系统授权。" : "需要管理员授权。")}</p>
-        <div className="system-card-actions"><Button size="small" variant="ghost" disabled={busy !== null} onClick={() => void open('timezone')}>{t("系统设置")}</Button><Button variant="ink" size="small" loading={busy === 'timezone'} disabled={disabled || !zone || (zone === state?.timezone && state?.automatic_timezone === false)} onClick={() => void apply('timezone')}>{t("应用时区")}</Button></div>
+        <div className="system-card-actions"><Button size="small" variant="ghost" disabled={busy !== null} onClick={() => void open('timezone')}>{t("系统设置")}</Button><Button variant="ink" size="small" loading={busy === 'timezone'} disabled={disabled || !zone || (zone === state?.timezone && state?.automatic_timezone !== true)} onClick={() => void apply('timezone')}>{t("应用时区")}</Button></div>
       </div></Panel>
       <Panel className="system-card"><PanelHeader title={<span className="system-card-title"><TranslateIcon size={18}/>{t("系统语言")}</span>}/><div className="system-card-body"><div className="system-current"><span>{t("当前首选语言")}</span><strong>{state ? t(languages[languageChoice(state.languages[0] || '') || ''] || state.languages[0] || "未设置") : t("读取中…")}</strong><small>{state?.languages.join(' → ') || t("等待系统状态")}</small></div>
         <label>{t("目标语言")}</label><Select aria-label={t("目标语言")} size="small" value={language} onValueChange={value => { if (value)

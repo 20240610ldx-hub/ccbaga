@@ -1,5 +1,5 @@
 // [INPUT]: Cleaner 白名单、共享 Code 登录键常量、完整目录快照、用户保留策略与 JSON 配置。
-// [OUTPUT]: 受限身份目标与配置身份键的提取/清空/恢复，保留工作区未选择的个人资产及桌面身份路径元数据检测。
+// [OUTPUT]: 受限身份目标与配置身份键（含独立代理环境变量与 githubRepoPaths）的提取/清空/恢复、跨账号残留隔离自愈，保留工作区未选择的个人资产及桌面身份路径元数据检测。
 // [POS]: 身份保险库复用原有路径边界；不扫描项目源码、Shell 或系统代理配置。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -12,7 +12,10 @@ pub(crate) struct Source {
     pub keys: Vec<String>,
 }
 pub(crate) fn credential_keys(policy: &Policy) -> Vec<String> {
-    let mut keys = config::CREDENTIAL_KEYS.iter().map(|key| (*key).into()).collect::<Vec<String>>();
+    let mut keys = config::CREDENTIAL_KEYS
+        .iter()
+        .map(|key| (*key).into())
+        .collect::<Vec<String>>();
     if !policy.mcp {
         keys.extend(
             [
@@ -29,6 +32,20 @@ pub(crate) fn credential_keys(policy: &Policy) -> Vec<String> {
     }
     keys
 }
+pub(crate) const SETTINGS_IDENTITY_KEYS: &[&str] = &[
+    "env.CLAUDE_CODE_OAUTH_TOKEN",
+    "env.ANTHROPIC_API_KEY",
+    "env.ANTHROPIC_AUTH_TOKEN",
+    "env.HTTP_PROXY",
+    "env.HTTPS_PROXY",
+    "env.ALL_PROXY",
+    "env.NO_PROXY",
+    "env.http_proxy",
+    "env.https_proxy",
+    "env.all_proxy",
+    "env.no_proxy",
+    "apiKeyHelper",
+];
 fn definitions(root: &Path, policy: &Policy) -> Vec<Source> {
     let mut result: Vec<_> = targets::definitions(root)
         .into_iter()
@@ -61,6 +78,7 @@ fn definitions(root: &Path, policy: &Policy) -> Vec<Source> {
         }
         if !policy.projects {
             source.keys.push("projects".into());
+            source.keys.push("githubRepoPaths".into());
         }
     }
     if let Some(source) = result
@@ -90,12 +108,10 @@ fn definitions(root: &Path, policy: &Policy) -> Vec<Source> {
             path: root.join(".claude").join(name),
             category: "settings".into(),
             keys: if policy.settings {
-                vec![
-                    "env.CLAUDE_CODE_OAUTH_TOKEN".into(),
-                    "env.ANTHROPIC_API_KEY".into(),
-                    "env.ANTHROPIC_AUTH_TOKEN".into(),
-                    "apiKeyHelper".into(),
-                ]
+                SETTINGS_IDENTITY_KEYS
+                    .iter()
+                    .map(|k| (*k).into())
+                    .collect()
             } else {
                 Vec::new()
             },
@@ -134,7 +150,11 @@ pub(crate) fn sources(root: &Path, policy: &Policy) -> Result<Vec<Source>, Strin
         };
         #[cfg(test)]
         if !linked(&meta) {
-            assert_eq!(canonicalize(&source.path).ok().as_deref(), Some(source.path.as_path()), "fixture source must be canonical");
+            assert_eq!(
+                canonicalize(&source.path).ok().as_deref(),
+                Some(source.path.as_path()),
+                "fixture source must be canonical"
+            );
         }
         if linked(&meta)
             || canonicalize(&source.path).ok().as_deref() != Some(source.path.as_path())
@@ -151,7 +171,8 @@ pub(crate) fn sources(root: &Path, policy: &Policy) -> Result<Vec<Source>, Strin
             source.keys = object
                 .keys()
                 .filter(|k| {
-                    !(policy.mcp && *k == "mcpServers") && !(policy.projects && *k == "projects")
+                    !(policy.mcp && *k == "mcpServers")
+                        && !(policy.projects && (*k == "projects" || *k == "githubRepoPaths"))
                 })
                 .cloned()
                 .collect();
@@ -191,15 +212,10 @@ pub(crate) fn allowed(root: &Path, source: &Source) -> bool {
                     .all(|k| !k.contains('.') && !k.contains('/')))
                 || source.keys.iter().all(|k| t.keys.contains(k))
                 || (source.category == "settings"
-                    && source.keys.iter().all(|k| {
-                        [
-                            "env.CLAUDE_CODE_OAUTH_TOKEN",
-                            "env.ANTHROPIC_API_KEY",
-                            "env.ANTHROPIC_AUTH_TOKEN",
-                            "apiKeyHelper",
-                        ]
-                        .contains(&k.as_str())
-                    })))
+                    && source
+                        .keys
+                        .iter()
+                        .all(|k| SETTINGS_IDENTITY_KEYS.contains(&k.as_str()))))
     });
     let special = source.keys.is_empty()
         && [
@@ -316,4 +332,385 @@ pub(crate) fn desktop_present(root: &Path) -> bool {
             crate::identities::private::parents(s.path.parent().unwrap()).is_ok()
                 && crate::identities::private::safe(&s.path).is_ok()
         })
+}
+
+fn remove_safe_entry(path: &Path) {
+    let Ok(meta) = fs::symlink_metadata(path) else {
+        return;
+    };
+    if linked(&meta) || canonicalize(path).ok().as_deref() != Some(path) {
+        return;
+    }
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    if crate::identities::private::parents(parent).is_err()
+        || crate::identities::private::safe(path).is_err()
+    {
+        return;
+    }
+    if meta.is_dir() {
+        let _ = fs::remove_dir_all(path);
+    } else if meta.is_file() {
+        let _ = fs::remove_file(path);
+    }
+}
+
+/// 清理与当前活跃 `.claude.json` 账号 UUID 不一致的历史跨账号残留（如异账号 dxt:allowlist、异账号会话目录及未同步的 Claude-3p 旧登录）。
+pub(crate) fn sanitize_cross_account_residue(root: &Path) -> Result<(), String> {
+    let claude_json = root.join(".claude.json");
+    let meta = match fs::symlink_metadata(&claude_json) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => return Ok(()),
+    };
+    if linked(&meta)
+        || !meta.is_file()
+        || meta.len() > 8 * 1024 * 1024
+        || canonicalize(&claude_json).ok().as_deref() != Some(claude_json.as_path())
+    {
+        return Ok(());
+    }
+    crate::identities::private::parents(root)?;
+    crate::identities::private::safe(&claude_json)?;
+    let bytes = fs::read(&claude_json).map_err(|_| "身份配置无法读取。")?;
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|_| "身份配置不是有效 JSON。")?;
+    let Some(acct) = value["oauthAccount"]["accountUuid"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && s.len() <= 254 && !s.chars().any(char::is_control))
+        .map(str::to_string)
+    else {
+        return Ok(());
+    };
+    let org = value["oauthAccount"]["organizationUuid"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && s.len() <= 254 && !s.chars().any(char::is_control))
+        .map(str::to_string);
+    let acct_prefix = &acct[..acct.len().min(8)];
+    let org_prefix = org.as_deref().map(|o| &o[..o.len().min(8)]);
+
+    let mut claude_modified = false;
+    if let Some(obj) = value.as_object_mut() {
+        if let Some(ref active_org) = org {
+            if let Some(s1m) = obj
+                .get_mut("s1mAccessCache")
+                .and_then(|v| v.as_object_mut())
+            {
+                let before = s1m.len();
+                s1m.retain(|k, _| k == active_org);
+                if s1m.len() != before {
+                    claude_modified = true;
+                }
+            }
+        }
+        if let Some(principals) = obj
+            .get_mut("metricsStatusCacheByPrincipal")
+            .and_then(|v| v.as_object_mut())
+        {
+            let before = principals.len();
+            principals.retain(|k, _| k.contains(&acct));
+            if principals.len() != before {
+                claude_modified = true;
+            }
+        }
+        for cache_key in [
+            "cachedUsageUtilization",
+            "cachedArtifactRoster",
+            "githubWebConnectionStatusCache",
+        ] {
+            if obj
+                .get(cache_key)
+                .and_then(|v| v.get("accountUuid"))
+                .and_then(|v| v.as_str())
+                .is_some_and(|u| !u.is_empty() && u != acct)
+            {
+                obj.remove(cache_key);
+                claude_modified = true;
+            }
+        }
+    }
+    if claude_modified {
+        if let Ok(text) = serde_json::to_string_pretty(&value) {
+            let formatted = format!("{text}\n");
+            let _ = file_io::atomic_write(&claude_json, formatted.as_bytes(), 0o600);
+        }
+    }
+
+    for desktop in targets::desktop_roots(root) {
+        let Ok(d_meta) = fs::symlink_metadata(&desktop) else {
+            continue;
+        };
+        if linked(&d_meta)
+            || !d_meta.is_dir()
+            || canonicalize(&desktop).ok().as_deref() != Some(desktop.as_path())
+            || crate::identities::private::safe(&desktop).is_err()
+        {
+            continue;
+        }
+        let mut foreign_desktop_root = false;
+        let mut has_matching_desktop_account = false;
+        let cfg_path = desktop.join("config.json");
+        if let Ok(c_meta) = fs::symlink_metadata(&cfg_path) {
+            if !linked(&c_meta)
+                && c_meta.is_file()
+                && c_meta.len() <= 4 * 1024 * 1024
+                && canonicalize(&cfg_path).ok().as_deref() == Some(cfg_path.as_path())
+                && crate::identities::private::safe(&cfg_path).is_ok()
+            {
+                if let Ok(mut cfg) = fs::read(&cfg_path)
+                    .ok()
+                    .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                    .ok_or(())
+                {
+                    if let Some(obj) = cfg.as_object_mut() {
+                        let mut cfg_modified = false;
+                        match obj
+                            .get("lastKnownAccountUuid")
+                            .and_then(|v| v.as_str())
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())
+                        {
+                            Some(last) if last == acct => {
+                                has_matching_desktop_account = true;
+                            }
+                            Some(_) => {
+                                foreign_desktop_root = true;
+                                for k in [
+                                    "lastKnownAccountUuid",
+                                    "oauth:tokenCache",
+                                    "oauth:tokenCacheV2",
+                                    "first_launch_at",
+                                    "version_first_launch",
+                                    "hasTrackedInitialActivation",
+                                    "windowSizeWasSignedIn",
+                                    "planUsageLastTrayOpenAt",
+                                ] {
+                                    if obj.remove(k).is_some() {
+                                        cfg_modified = true;
+                                    }
+                                }
+                            }
+                            None => {}
+                        }
+                        let remove_keys: Vec<String> = obj
+                            .keys()
+                            .filter(|k| {
+                                (k.starts_with("dxt:allowlist")
+                                    && !k.ends_with(&format!(":{acct}"))
+                                    && !org
+                                        .as_deref()
+                                        .is_some_and(|o| k.ends_with(&format!(":{o}"))))
+                                    || (foreign_desktop_root
+                                        && k.starts_with("remote_uploads_migration_done_v1_"))
+                            })
+                            .cloned()
+                            .collect();
+                        if !remove_keys.is_empty() {
+                            for k in remove_keys {
+                                obj.remove(&k);
+                            }
+                            cfg_modified = true;
+                        }
+                        if cfg_modified {
+                            if foreign_desktop_root {
+                                remove_safe_entry(&cfg_path);
+                            } else if let Ok(text) = serde_json::to_string_pretty(&cfg) {
+                                let formatted = format!("{text}\n");
+                                let _ =
+                                    file_io::atomic_write(&cfg_path, formatted.as_bytes(), 0o600);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let cowork_path = desktop.join("cowork-enabled-cli-ops.json");
+        if let Ok(m) = fs::symlink_metadata(&cowork_path) {
+            if !linked(&m) && m.is_file() && m.len() <= 1024 * 1024 {
+                if let Some(owner) = fs::read(&cowork_path)
+                    .ok()
+                    .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                    .and_then(|v| {
+                        v.get("ownerAccountId")
+                            .and_then(|u| u.as_str())
+                            .map(str::to_string)
+                    })
+                {
+                    if !owner.is_empty() && owner != acct {
+                        remove_safe_entry(&cowork_path);
+                        if !has_matching_desktop_account {
+                            foreign_desktop_root = true;
+                        }
+                    }
+                }
+            }
+        }
+        let dev_reg_path = desktop.join("ant-device-registry.json");
+        if let Ok(m) = fs::symlink_metadata(&dev_reg_path) {
+            if !linked(&m)
+                && m.is_file()
+                && m.len() <= 1024 * 1024
+                && canonicalize(&dev_reg_path).ok().as_deref() == Some(dev_reg_path.as_path())
+                && crate::identities::private::safe(&dev_reg_path).is_ok()
+            {
+                if let Some(mut reg) = fs::read(&dev_reg_path)
+                    .ok()
+                    .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                {
+                    if let Some(obj) = reg.as_object_mut() {
+                        let before = obj.len();
+                        obj.retain(|k, _| k == &acct || org.as_deref() == Some(k.as_str()));
+                        if obj.len() != before {
+                            if obj.is_empty() {
+                                remove_safe_entry(&dev_reg_path);
+                                remove_safe_entry(&desktop.join("ant-did"));
+                                if !has_matching_desktop_account {
+                                    foreign_desktop_root = true;
+                                }
+                            } else if let Ok(text) = serde_json::to_string(&reg) {
+                                let _ =
+                                    file_io::atomic_write(&dev_reg_path, text.as_bytes(), 0o600);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let sentry_scope = desktop.join("sentry/scope_v3.json");
+        if let Ok(m) = fs::symlink_metadata(&sentry_scope) {
+            if !linked(&m) && m.is_file() && m.len() <= 1024 * 1024 {
+                let user_id = fs::read(&sentry_scope)
+                    .ok()
+                    .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                    .and_then(|v| {
+                        v.pointer("/scope/user/id")
+                            .and_then(|u| u.as_str())
+                            .map(str::to_string)
+                    });
+                if user_id.as_deref() != Some(acct.as_str()) {
+                    remove_safe_entry(&desktop.join("sentry"));
+                }
+            }
+        }
+        for sub in ["local-agent-mode-sessions", "claude-code-sessions"] {
+            let dir = desktop.join(sub);
+            let Ok(entries) = fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if name == "skills-plugin" {
+                    if let Ok(org_entries) = fs::read_dir(entry.path()) {
+                        for org_entry in org_entries.flatten() {
+                            let org_name = org_entry.file_name().to_string_lossy().into_owned();
+                            let has_foreign_acct =
+                                fs::read_dir(org_entry.path()).ok().is_some_and(|mut it| {
+                                    it.any(|e| {
+                                        e.ok().is_some_and(|c| {
+                                            let cn = c.file_name().to_string_lossy().into_owned();
+                                            cn.contains('-')
+                                                && cn != acct
+                                                && org.as_deref() != Some(cn.as_str())
+                                        })
+                                    })
+                                });
+                            let is_foreign_org = org.as_deref().is_some_and(|o| {
+                                org_name != o && org_name != "00000000-0000-4000-8000-000000000001"
+                            });
+                            if has_foreign_acct || is_foreign_org {
+                                remove_safe_entry(&org_entry.path());
+                            }
+                        }
+                    }
+                    if fs::read_dir(entry.path())
+                        .ok()
+                        .is_some_and(|mut it| it.next().is_none())
+                    {
+                        remove_safe_entry(&entry.path());
+                    }
+                } else if name != acct
+                    && name != acct_prefix
+                    && org.as_deref() != Some(name.as_str())
+                    && org_prefix != Some(name.as_str())
+                {
+                    remove_safe_entry(&entry.path());
+                }
+            }
+            if fs::read_dir(&dir)
+                .ok()
+                .is_some_and(|mut it| it.next().is_none())
+            {
+                remove_safe_entry(&dir);
+            }
+        }
+        let spaces = desktop.join("spaces-present");
+        if let Ok(entries) = fs::read_dir(&spaces) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if name != acct
+                    && name != acct_prefix
+                    && org.as_deref() != Some(name.as_str())
+                    && org_prefix != Some(name.as_str())
+                {
+                    remove_safe_entry(&entry.path());
+                }
+            }
+            if fs::read_dir(&spaces)
+                .ok()
+                .is_some_and(|mut it| it.next().is_none())
+            {
+                remove_safe_entry(&spaces);
+            }
+        }
+        if foreign_desktop_root {
+            remove_safe_entry(&cfg_path);
+            for target in targets::desktop_storage(root, &desktop) {
+                remove_safe_entry(&target.path);
+            }
+            for dev in [
+                "ant-did",
+                "ant-device-registry.json",
+                ".machine-id",
+                "machine-id",
+                "Cache",
+                "Code Cache",
+                "GPUCache",
+                "DawnGraphiteCache",
+                "DawnWebGPUCache",
+                "fcache",
+                "model-catalog",
+                "Crashpad",
+                "logs",
+                "Network",
+                "declarative_performance_observer.db",
+                "declarative_performance_observer.db-journal",
+            ] {
+                remove_safe_entry(&desktop.join(dev));
+            }
+        } else if !has_matching_desktop_account
+            && !desktop.join("Local Storage").exists()
+            && !desktop.join("Cookies").exists()
+            && !desktop.join("Network/Cookies").exists()
+        {
+            for stale in [
+                "DIPS",
+                "DIPS-journal",
+                "DIPS-wal",
+                "DIPS-shm",
+                "Shared Dictionary",
+                "SharedStorage",
+                "SharedStorage-wal",
+                "blob_storage",
+                "sentry",
+                "DawnGraphiteCache",
+                "DawnWebGPUCache",
+            ] {
+                remove_safe_entry(&desktop.join(stale));
+            }
+        }
+    }
+    Ok(())
 }

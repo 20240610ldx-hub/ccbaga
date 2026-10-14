@@ -1,4 +1,4 @@
-﻿# [INPUT]: 固定 CLI 动作、当前用户根目录与官方原生/npm/bun/WinGet 程序位置。
+# [INPUT]: 固定 CLI 动作、当前用户根目录与官方原生/npm/bun/WinGet 程序位置。
 # [OUTPUT]: 安装来源/版本和真实完成协议；原生安装器预检失败保留旧程序，可捕获安装/核验失败时从唯一备份恢复并核对哈希。
 # [POS]: Windows CLI 程序边界；拒绝链接目录、自定义启动器，保留配置、技能、会话和项目。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -80,6 +80,14 @@ function Status {
     $command=Get-Command claude -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($command) { $cli=$command.Source }
     if (-not $cli -and (Test-Path -LiteralPath $native)) { $cli=$native }
+    if (-not $cli -and $methods.Contains('npm') -and $npmRoot) {
+        $shim=Join-Path (Split-Path $npmRoot -Parent) 'claude.cmd'
+        if (Test-Path -LiteralPath $shim) { $cli=$shim }
+    }
+    if (-not $cli -and $methods.Contains('bun')) {
+        $bunCli=Join-Path $root '.bun\bin\claude.exe'
+        if (Test-Path -LiteralPath $bunCli) { $cli=$bunCli }
+    }
     if (-not $cli -and $methods.Contains('winget')) { $cli=$wingetBinary }
     $known=$false
     if ($cli -and (RealPath $cli)) {
@@ -193,7 +201,7 @@ try {
 } catch {
     $message=$_.Exception.Message
     if ($backupReady) {
-        try { RollbackNative; $message+=' Claude Code 操作失败，已恢复原程序。' }
+        try { RollbackNative; $message=if($message -like 'Claude Code *'){"$message Claude Code 操作失败，已恢复原程序。"}else{'Claude Code 操作失败，已恢复原程序。'} }
         catch { $message='Claude Code 回滚未完成，恢复文件保留在原生程序目录旁。' }
     }
     [Console]::Error.WriteLine($message)

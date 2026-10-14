@@ -364,7 +364,23 @@ fn locale() -> String {
     }
     String::from_utf16_lossy(&value[..count as usize - 1]).replace('-', "_")
 }
-fn session_language() -> String {
+pub(crate) fn normalize_language_tag(tag: &str) -> String {
+    let trimmed = tag.trim();
+    match trimmed {
+        "zh-CN" | "zh-SG" | "zh-Hans" => "zh-Hans".into(),
+        "zh-TW" | "zh-HK" | "zh-MO" | "zh-Hant" => "zh-Hant".into(),
+        s if s.starts_with("zh-Hans-") => "zh-Hans".into(),
+        s if s.starts_with("zh-Hant-") => "zh-Hant".into(),
+        s if s.starts_with("fr-") => "fr".into(),
+        s if s.starts_with("de-") => "de".into(),
+        s if s.starts_with("ja-") => "ja".into(),
+        s if s.starts_with("ko-") => "ko".into(),
+        s if s.starts_with("es-") => "es".into(),
+        s if s.starts_with("it-") => "it".into(),
+        _ => trimmed.into(),
+    }
+}
+fn ui_display_language() -> String {
     use windows_sys::Win32::Globalization::{GetUserPreferredUILanguages, MUI_LANGUAGE_NAME};
     let mut count = 0;
     let mut size = 0;
@@ -390,12 +406,41 @@ fn session_language() -> String {
         return String::new();
     }
     let first = buffer.split(|c| *c == 0).next().unwrap_or_default();
-    let language = String::from_utf16_lossy(first);
-    match language.as_str() {
-        "zh-CN" | "zh-SG" => "zh-Hans".into(),
-        "zh-TW" | "zh-HK" => "zh-Hant".into(),
-        _ => language,
+    normalize_language_tag(&String::from_utf16_lossy(first))
+}
+fn user_profile_language() -> Option<String> {
+    use windows_sys::Win32::System::Registry::{
+        RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_MULTI_SZ, RRF_RT_REG_SZ,
+    };
+    let key: Vec<u16> = r"Control Panel\International\User Profile"
+        .encode_utf16()
+        .chain(Some(0))
+        .collect();
+    let name: Vec<u16> = "Languages".encode_utf16().chain(Some(0)).collect();
+    let mut value = [0u16; 2048];
+    let mut bytes = std::mem::size_of_val(&value) as u32;
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            key.as_ptr(),
+            name.as_ptr(),
+            RRF_RT_REG_SZ | RRF_RT_REG_MULTI_SZ,
+            std::ptr::null_mut(),
+            value.as_mut_ptr().cast(),
+            &mut bytes,
+        )
+    };
+    if status != 0 || bytes < 2 {
+        return None;
     }
+    let first = value[..bytes as usize / 2]
+        .split(|c| *c == 0)
+        .find(|s| !s.is_empty())?;
+    let normalized = normalize_language_tag(&String::from_utf16_lossy(first));
+    (!normalized.is_empty()).then_some(normalized)
+}
+fn session_language() -> String {
+    user_profile_language().unwrap_or_else(ui_display_language)
 }
 pub(super) fn registry_string(
     root: windows_sys::Win32::System::Registry::HKEY,
@@ -427,15 +472,119 @@ pub(super) fn registry_string(
             .into(),
     )
 }
+pub(super) fn registry_dword(
+    root: windows_sys::Win32::System::Registry::HKEY,
+    key: &str,
+    name: &str,
+) -> Option<u32> {
+    use windows_sys::Win32::System::Registry::{RegGetValueW, RRF_RT_REG_DWORD};
+    let key: Vec<u16> = key.encode_utf16().chain(Some(0)).collect();
+    let name: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
+    let mut value: u32 = 0;
+    let mut bytes = std::mem::size_of::<u32>() as u32;
+    let status = unsafe {
+        RegGetValueW(
+            root,
+            key.as_ptr(),
+            name.as_ptr(),
+            RRF_RT_REG_DWORD,
+            std::ptr::null_mut(),
+            (&mut value as *mut u32).cast(),
+            &mut bytes,
+        )
+    };
+    if status != 0 {
+        return None;
+    }
+    Some(value)
+}
+
+pub(crate) fn parse_windows_proxy_server(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if trimmed.contains('=') {
+        let pairs: Vec<(&str, &str)> = trimmed
+            .split(';')
+            .filter_map(|part| part.trim().split_once('='))
+            .map(|(k, v)| (k.trim(), v.trim()))
+            .filter(|(_, v)| !v.is_empty())
+            .collect();
+        for kind in ["https", "http", "socks", "socks5"] {
+            if let Some((_, addr)) = pairs.iter().find(|(k, _)| k.eq_ignore_ascii_case(kind)) {
+                if addr.contains("://") {
+                    return (*addr).into();
+                }
+                let scheme = if kind.starts_with("socks") {
+                    "socks5h"
+                } else {
+                    "http"
+                };
+                return format!("{scheme}://{addr}");
+            }
+        }
+        return String::new();
+    }
+    let first = trimmed
+        .split(';')
+        .map(str::trim)
+        .find(|s| !s.is_empty())
+        .unwrap_or("");
+    if first.is_empty() {
+        String::new()
+    } else if first.contains("://") {
+        first.into()
+    } else {
+        format!("http://{first}")
+    }
+}
+
+pub(crate) fn system_proxy() -> String {
+    if let Some(env_proxy) = [
+        "ALL_PROXY",
+        "all_proxy",
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+    ]
+    .iter()
+    .find_map(|k| std::env::var(k).ok())
+    .map(|v| v.trim().to_string())
+    .filter(|v| !v.is_empty())
+    {
+        return env_proxy;
+    }
+    use windows_sys::Win32::System::Registry::HKEY_CURRENT_USER;
+    let key = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings";
+    if registry_dword(HKEY_CURRENT_USER, key, "ProxyEnable").unwrap_or(0) != 0 {
+        if let Some(server) = registry_string(HKEY_CURRENT_USER, key, "ProxyServer") {
+            return parse_windows_proxy_server(&server);
+        }
+    }
+    String::new()
+}
+
 fn location_enabled() -> Option<bool> {
-    use windows_sys::Win32::System::Registry::HKEY_LOCAL_MACHINE;
-    match registry_string(
+    use windows_sys::Win32::System::Registry::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    let hklm = registry_string(
         HKEY_LOCAL_MACHINE,
         r"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location",
         "Value",
-    )?
-    .as_str()
-    {
+    );
+    if hklm.as_deref() == Some("Deny") {
+        return Some(false);
+    }
+    for subkey in [
+        r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location",
+        r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location\NonPackaged",
+    ] {
+        if registry_string(HKEY_CURRENT_USER, subkey, "Value").as_deref() == Some("Deny") {
+            return Some(false);
+        }
+    }
+    match hklm.as_deref()? {
         "Allow" => Some(true),
         "Deny" => Some(false),
         _ => None,
@@ -472,18 +621,7 @@ pub unsafe fn rf_browser_machine() -> *mut c_char {
         .map(|n| n.get())
         .unwrap_or(1));
     state["locale"] = json!(locale());
-    let proxy = [
-        "ALL_PROXY",
-        "all_proxy",
-        "HTTPS_PROXY",
-        "https_proxy",
-        "HTTP_PROXY",
-        "http_proxy",
-    ]
-    .iter()
-    .find_map(|k| std::env::var(k).ok())
-    .unwrap_or_default();
-    state["system_proxy"] = json!(proxy);
+    state["system_proxy"] = json!(system_proxy());
     response(Ok(state))
 }
 
@@ -550,7 +688,7 @@ fn region_settings(language: &str, region: Option<&str>) -> Result<Value, String
         }
         .into()
     };
-    let active_language = session_language();
+    let display_language = ui_display_language();
     let script = include_str!("../../scripts/windows-region.ps1").trim_start_matches('\u{feff}');
     let result = Command::new("powershell")
         .creation_flags(0x08000000)
@@ -569,13 +707,19 @@ fn region_settings(language: &str, region: Option<&str>) -> Result<Value, String
     if region.is_some_and(|r| locale() != r) {
         return Err("Windows 区域格式修改未通过核验。".into());
     }
-    if !language_matches(&active_language, language) {
+    let saved_language = session_language();
+    if !language_matches(&saved_language, language) {
         open_settings("language")?;
         return Err(
             "首选语言与区域已保存；安装所需语言包并注销、重新登录后再核验显示语言。".into(),
         );
     }
-    Ok(json!({"state": snapshot(), "message": "系统语言与区域已应用并核验。"}))
+    let message = if language_matches(&display_language, language) {
+        "系统语言与区域已应用并核验。"
+    } else {
+        "首选语言与地区格式已保存，部分应用需重启或注销。"
+    };
+    Ok(json!({"state": snapshot(), "message": message}))
 }
 pub unsafe fn rf_system_language(language: *const c_char) -> *mut c_char {
     response(region_settings(input(language), None))
@@ -628,5 +772,27 @@ mod tests {
                 .is_err()
         );
         assert_eq!(raw_windows_timezone(), "Tokyo Standard Time");
+    }
+
+    #[test]
+    fn windows_proxy_server_formats_are_normalized() {
+        assert_eq!(parse_windows_proxy_server(""), "");
+        assert_eq!(
+            parse_windows_proxy_server("127.0.0.1:7890"),
+            "http://127.0.0.1:7890"
+        );
+        assert_eq!(
+            parse_windows_proxy_server("http=127.0.0.1:7890;https=127.0.0.1:7891"),
+            "http://127.0.0.1:7891"
+        );
+        assert_eq!(
+            parse_windows_proxy_server("socks=127.0.0.1:7898"),
+            "socks5h://127.0.0.1:7898"
+        );
+        assert_eq!(normalize_language_tag("zh-CN"), "zh-Hans");
+        assert_eq!(normalize_language_tag("zh-TW"), "zh-Hant");
+        assert_eq!(normalize_language_tag("ja-JP"), "ja");
+        assert_eq!(normalize_language_tag("fr-FR"), "fr");
+        assert_eq!(normalize_language_tag("en-US"), "en-US");
     }
 }

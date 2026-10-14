@@ -23,7 +23,7 @@ export function verifyBrowser(context:BrowserContext|null,report:Report|null,lin
   add('网页时区',report.timezone,config.follow_machine?machine.timezone:config.timezone,!!report.timezone&&report.timezone===(config.follow_machine?machine.timezone:config.timezone));
   add('出口时区',exit?.timezone,report.timezone,!!exit?.timezone&&exit.timezone===report.timezone);
   add('本机时区',machine.timezone,report.timezone,!!machine.timezone&&machine.timezone===report.timezone);
-  add('网页语言',report.language,region?.language,!!region&&report.language===region.language);
+  add('网页语言',report.language,region?.language,!!region&&!!report.language&&(report.language===region.language||report.language.startsWith(region.language+'-')));
   add('本机首选语言',machine.languages[0],region?.language,!!region&&!!machine.languages[0]&&(machine.languages[0]===region.language||machine.languages[0].startsWith(region.language+'-')));
   add('本机区域',machine.locale,region?.locale,!!region&&machine.locale.startsWith(region.locale));
   add('设备平台 / 版本',`${report.platform} / ${report.platform_version||'—'}`,`${machine.platform} / ${machine.version}`,matchesDevice({...machine,cores:report.cores},report));

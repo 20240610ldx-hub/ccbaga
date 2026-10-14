@@ -171,9 +171,13 @@ pub fn arguments(
             "--proxy-server={}",
             config.proxy.replace("socks5h://", "socks5://")
         ));
+        args.push("--proxy-bypass-list=127.0.0.1;localhost;[::1];<-loopback>".into());
         if let Ok(Some(url)) = proxy(&config.proxy) {
             if url.scheme().starts_with("socks") {
-                args.push(format!("--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE {}, EXCLUDE 127.0.0.1, EXCLUDE localhost",url.host_str().unwrap()));
+                let host = url.host_str().unwrap().trim_matches(['[', ']']);
+                args.push(format!(
+                    "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE {host}, EXCLUDE 127.0.0.1, EXCLUDE localhost, EXCLUDE ::1"
+                ));
             }
         }
     }

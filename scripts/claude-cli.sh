@@ -87,8 +87,8 @@ rollback_native() {
   if [[ -L "$native_backup/launcher" ]]; then
     [[ ! -e "$launcher" && ! -L "$launcher" ]] || /bin/rm -f "$launcher" || return 1
     /bin/mv "$native_backup/launcher" "$launcher" || return 1
+    [[ -x "$launcher" && "${launcher:A}" == "$native_dir"/versions/* ]] || return 1
   fi
-  [[ -x "$launcher" && "${launcher:A}" == "$native_dir"/versions/* ]] || return 1
   /bin/rmdir "$native_backup" || return 1
   native_backup=''
   return 0

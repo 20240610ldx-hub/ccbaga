@@ -219,8 +219,21 @@ fn claude_kind(image: &str, args: &[String]) -> Option<&'static str> {
         return Some("Claude Code");
     }
     let home = normalized(&std::env::var("USERPROFILE").ok()?);
+    let local = normalized(&std::env::var("LOCALAPPDATA").ok()?);
+    if name == "claude-code-helper.exe"
+        && (path.starts_with(&format!("{home}\\.local\\share\\claude\\"))
+            || path.starts_with(&format!("{home}\\.claude\\"))
+            || path.starts_with(&format!("{local}\\anthropicclaude\\"))
+            || path.starts_with(&format!("{local}\\programs\\claude\\")))
+    {
+        return Some("Claude Code");
+    }
     if path == format!("{home}\\.local\\bin\\claude.exe")
         || path == format!("{home}\\.bun\\bin\\claude.exe")
+        || path == format!("{home}\\scoop\\apps\\claude-code\\current\\claude.exe")
+        || path == format!("{home}\\scoop\\shims\\claude.exe")
+        || path == format!("{home}\\.volta\\bin\\claude.exe")
+        || path == format!("{local}\\volta\\bin\\claude.exe")
         || (Path::new(&path).parent()
             == Some(Path::new(&format!(
                 "{home}\\.local\\share\\claude\\versions"
@@ -229,15 +242,27 @@ fn claude_kind(image: &str, args: &[String]) -> Option<&'static str> {
     {
         return Some("Claude Code");
     }
-    if name != "claude.exe" {
-        return None;
-    }
-    let local = normalized(&std::env::var("LOCALAPPDATA").ok()?);
-    if path == format!("{local}\\microsoft\\winget\\packages\\anthropic.claudecode_microsoft.winget.source_8wekyb3d8bbwe\\claude.exe") { return Some("Claude Code"); }
     if path.starts_with(&format!("{local}\\anthropicclaude\\"))
         || path.starts_with(&format!("{local}\\programs\\claude\\"))
     {
-        return Some("Claude Desktop");
+        if [
+            "claude.exe",
+            "cowork-svc.exe",
+            "claude-ssh-askpass.exe",
+            "claude-ssh-proxy.exe",
+        ]
+        .contains(&name)
+        {
+            return Some("Claude Desktop");
+        }
+    }
+    if name != "claude.exe" {
+        return None;
+    }
+    if path == format!("{local}\\microsoft\\winget\\packages\\anthropic.claudecode_microsoft.winget.source_8wekyb3d8bbwe\\claude.exe")
+        || path == format!("{local}\\microsoft\\winget\\links\\claude.exe")
+    {
+        return Some("Claude Code");
     }
     None
 }
@@ -263,7 +288,17 @@ fn processes(terminate: bool) -> Result<Vec<(u32, Handle)>, String> {
         let name = String::from_utf16_lossy(&entry.szExeFile)
             .trim_end_matches('\0')
             .to_lowercase();
-        if (["claude.exe", "node.exe", "bun.exe", "chrome.exe"].contains(&name.as_str())
+        if ([
+            "claude.exe",
+            "claude-code-helper.exe",
+            "cowork-svc.exe",
+            "claude-ssh-askpass.exe",
+            "claude-ssh-proxy.exe",
+            "node.exe",
+            "bun.exe",
+            "chrome.exe",
+        ]
+        .contains(&name.as_str())
             || version_name(&name))
             && entry.th32ProcessID > 1
         {
@@ -278,7 +313,9 @@ fn processes(terminate: bool) -> Result<Vec<(u32, Handle)>, String> {
 pub fn claude_processes() -> Result<Vec<ClaudeProcess>, String> {
     let mut found = vec![];
     for (pid, handle) in processes(false)? {
-        let Some(image) = handle.image() else { continue; };
+        let Some(image) = handle.image() else {
+            continue;
+        };
         let args = arguments(&handle).unwrap_or_default();
         let kind = if handle.packaged_claude() {
             Some("Claude Desktop")
@@ -297,7 +334,9 @@ pub fn claude_processes() -> Result<Vec<ClaudeProcess>, String> {
     Ok(found)
 }
 pub fn kill_process(target: &ClaudeProcess) -> Result<(), String> {
-    let Some(handle) = Handle::open(target.pid as u32, true) else { return Ok(()); };
+    let Some(handle) = Handle::open(target.pid as u32, true) else {
+        return Ok(());
+    };
     if handle.created() != Some(target.created)
         || handle.image().as_deref() != Some(target.executable.as_str())
     {
@@ -416,9 +455,17 @@ mod tests {
             "C:\\空 格\\profile"
         ));
         let home = std::env::var("USERPROFILE").unwrap();
+        let local = std::env::var("LOCALAPPDATA").unwrap();
         assert_eq!(
             claude_kind(&format!(r"{home}\.bun\bin\claude.exe"), &[]),
             Some("Claude Code")
+        );
+        assert_eq!(
+            claude_kind(
+                &format!(r"{local}\AnthropicClaude\app\resources\cowork-svc.exe"),
+                &[]
+            ),
+            Some("Claude Desktop")
         );
         assert!(current_sid().is_some());
         assert!(Handle::open(std::process::id(), false).is_some());

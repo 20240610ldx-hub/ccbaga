@@ -214,6 +214,9 @@ impl Store {
         reuse: bool,
     ) -> Result<(Record, Stage), String> {
         self.stopped()?;
+        if reuse {
+            let _ = identity::sanitize_cross_account_residue(&self.home);
+        }
         reporter.log("validate", "running", "正在检查当前身份文件。", 0, None);
         let sources = identity::sources(&self.home, policy)?;
         let mut fingerprints = Vec::with_capacity(sources.len());

@@ -134,6 +134,7 @@ fn execute_script(
                 || line.starts_with("无法读取 ")
                 || line.starts_with("无法暂存原程序")
                 || line.starts_with("发现未识别的 ")
+                || line.starts_with("检测到自定义 ")
                 || line.starts_with("仍有其他 ")
         });
         return Err(message

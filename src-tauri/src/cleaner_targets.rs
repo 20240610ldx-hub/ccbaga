@@ -30,7 +30,7 @@ fn target(
         operation: Operation::Delete,
     }
 }
-fn desktop_storage(root: &Path, desktop: &Path) -> Vec<Target> {
+pub(super) fn desktop_storage(root: &Path, desktop: &Path) -> Vec<Target> {
     [
         "Local Storage",
         "Session Storage",
@@ -41,6 +41,64 @@ fn desktop_storage(root: &Path, desktop: &Path) -> Vec<Target> {
         "Service Worker",
         "WebStorage",
         "Sessions",
+        "Storage",
+        "Shared Dictionary",
+        "SharedStorage",
+        "SharedStorage-wal",
+        "DIPS",
+        "DIPS-journal",
+        "DIPS-wal",
+        "DIPS-shm",
+        "Preferences",
+        "Local State",
+        "Session State",
+        "SingletonCookie",
+        "Visited Links",
+        "TransportSecurity",
+        "Trust Tokens",
+        "Trust Tokens-journal",
+        "Reporting and Nel",
+        "Reporting and Nel-journal",
+        "Network Persistent State",
+        "BrowsingTopicsState",
+        "Safe Browsing",
+        "Safe Browsing Cookies",
+        "Safe Browsing Cookies-journal",
+        "Top Sites",
+        "Top Sites-journal",
+        "Shortcuts",
+        "Shortcuts-journal",
+        "History",
+        "History-journal",
+        "Favicons",
+        "Favicons-journal",
+        "Web Data",
+        "Web Data-journal",
+        "blob_storage",
+        "Partitions",
+        "declarative_performance_observer.db",
+        "declarative_performance_observer.db-journal",
+        "fcache",
+        "config.json",
+        "window-state.json",
+        "cowork-enabled-cli-ops.json",
+        "mcp-user-tool-toggles.json",
+        "plan-usage-history.json",
+        "custom3p-anthropic-console.json",
+        "custom3p-bootstrap-oidc.json",
+        "developer_settings.json",
+        "extensions-blocklist.json",
+        "git-worktrees.json",
+        "claude-code-sessions",
+        "local-agent-mode-sessions",
+        "spaces-present",
+        "claude-code-vm",
+        "claude-code",
+        "title-gen",
+        "configLibrary",
+        "sentry",
+        "local_sessions",
+        "conversations",
     ]
     .into_iter()
     .map(|name| Target {
@@ -57,7 +115,7 @@ fn desktop_storage(root: &Path, desktop: &Path) -> Vec<Target> {
     .collect()
 }
 #[cfg(target_os = "windows")]
-fn win_dir(root: &Path, variable: &str, fallback: &str) -> PathBuf {
+pub(super) fn win_dir(root: &Path, variable: &str, fallback: &str) -> PathBuf {
     if super::home().ok().as_deref() == Some(root) {
         if let Some(path) = std::env::var_os(variable)
             .map(PathBuf::from)
@@ -88,6 +146,31 @@ fn entries(path: &Path, warnings: &mut Vec<String>) -> Vec<fs::DirEntry> {
         })
         .collect()
 }
+pub(super) fn desktop_roots(root: &Path) -> Vec<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        let appdata = win_dir(root, "APPDATA", "AppData/Roaming");
+        let localappdata = win_dir(root, "LOCALAPPDATA", "AppData/Local");
+        vec![
+            appdata.join("Claude"),
+            appdata.join("Claude-3p"),
+            localappdata.join("Claude"),
+            localappdata.join("Claude-3p"),
+            localappdata.join("Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude"),
+            localappdata.join("Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude-3p"),
+            localappdata.join("Packages/Claude_pzs8sxrjxfjjc/LocalCache/Local/Claude"),
+            localappdata.join("Packages/Claude_pzs8sxrjxfjjc/LocalCache/Local/Claude-3p"),
+        ]
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        vec![
+            root.join("Library/Application Support/Claude"),
+            root.join("Library/Application Support/Claude-3p"),
+            root.join("Library/Application Support/com.anthropic.claudefordesktop"),
+        ]
+    }
+}
 pub(super) fn definitions(root: &Path) -> Vec<Target> {
     definitions_with_warnings(root).0
 }
@@ -102,6 +185,18 @@ pub(super) fn definitions_with_warnings(root: &Path) -> (Vec<Target>, Vec<String
         ("usage.jsonl", "用量记录"),
         ("usage.with-fix.jsonl", "用量修正记录"),
         ("paste-cache", "粘贴缓存"),
+        ("statsig", "实验特性与遥测缓存"),
+        ("todos", "待办缓存"),
+        ("ide", "IDE 连接状态缓存"),
+        ("daemon", "后台守护进程状态"),
+        ("daemon.lock", "后台守护进程锁"),
+        ("daemon.log", "后台守护进程日志"),
+        ("daemon.status.json", "后台守护进程状态记录"),
+        ("downloads", "Code 下载缓存"),
+        (".last-cleanup", "清理时间戳记录"),
+        (".last-update-result.json", "更新结果记录"),
+        (".oauth_refresh.lock", "Code 缓存"),
+        (".oauth_refresh.lock.owner", "Code 缓存"),
     ] {
         result.push(target(
             root,
@@ -182,6 +277,7 @@ pub(super) fn definitions_with_warnings(root: &Path) -> (Vec<Target>, Vec<String
         ("feedback-bundles", "Code 反馈归档"),
         ("feedback/drafts", "Code 反馈草稿"),
         ("dev-mods", "Code 会话扩展"),
+        ("jobs", "Code 后台作业记录"),
     ] {
         result.push(target(
             root,
@@ -200,6 +296,21 @@ pub(super) fn definitions_with_warnings(root: &Path) -> (Vec<Target>, Vec<String
         "login",
         "退出文件凭据登录。凭据内容不会显示。",
     ));
+    for (name, title) in [
+        ("credentials.json", "Code 备用登录凭据"),
+        ("auth.json", "Code 认证配置"),
+        (".user-id", "Code 本地用户标识"),
+        (".machine-id", "Code 本地设备标识"),
+    ] {
+        result.push(target(
+            root,
+            &format!(".claude/{name}"),
+            title,
+            "account",
+            "login",
+            "清除本地登录凭据或设备标识；不会删除服务端记录。",
+        ));
+    }
     let mut account = target(root, ".claude.json", "Code 账号与本地标识", "account", "login", "清除账号缓存及本地 userID、machineID；保留项目、MCP 和个人设置。再次运行时由 Claude 重新生成本地标识。");
     account.operation = Operation::Edit(config::EditKind::Account);
     result.push(account);
@@ -316,27 +427,38 @@ pub(super) fn definitions_with_warnings(root: &Path) -> (Vec<Target>, Vec<String
     #[cfg(target_os = "windows")]
     {
         result.retain(|item| !item.path.starts_with(root.join("Library")));
-        let appdata = win_dir(root, "APPDATA", "AppData/Roaming");
         let localappdata = win_dir(root, "LOCALAPPDATA", "AppData/Local");
-        result.push(Target {
-            path: localappdata.join("claude-cli-nodejs"),
-            ..target(
-                root,
-                "",
+        for (path, title) in [
+            (localappdata.join("claude-cli-nodejs"), "Code 系统缓存"),
+            (localappdata.join("Claude/logs"), "Desktop 日志"),
+            (
+                localappdata
+                    .join("Packages/Claude_pzs8sxrjxfjjc/LocalCache/Local/claude-cli-nodejs"),
                 "Code 系统缓存",
-                "cache",
-                "safe",
-                "仅移除本地缓存或日志。",
-            )
-        });
-        for desktop in [
-            appdata.join("Claude"),
-            localappdata.join("Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude"),
+            ),
+            (
+                localappdata.join("Packages/Claude_pzs8sxrjxfjjc/LocalCache/Local/Claude/logs"),
+                "Desktop 日志",
+            ),
         ] {
+            result.push(Target {
+                path,
+                ..target(root, "", title, "cache", "safe", "仅移除本地缓存或日志。")
+            });
+        }
+        for desktop in desktop_roots(root) {
             for (name, title) in [
                 ("Cache", "Desktop 页面缓存"),
                 ("Code Cache", "Desktop 编译缓存"),
                 ("GPUCache", "Desktop 图形缓存"),
+                ("DawnCache", "Desktop 图形缓存"),
+                ("DawnGraphiteCache", "Desktop 图形缓存"),
+                ("DawnWebGPUCache", "Desktop 图形缓存"),
+                ("GraphiteDawnCache", "Desktop 图形缓存"),
+                ("ShaderCache", "Desktop 着色器缓存"),
+                ("GrShaderCache", "Desktop 着色器缓存"),
+                ("Service Worker/CacheStorage", "Desktop 离线缓存"),
+                ("Service Worker/ScriptCache", "Desktop 脚本缓存"),
                 ("logs", "Desktop 日志"),
                 ("Crashpad", "Desktop 崩溃报告"),
             ] {
@@ -346,7 +468,12 @@ pub(super) fn definitions_with_warnings(root: &Path) -> (Vec<Target>, Vec<String
                 });
             }
             result.extend(desktop_storage(root, &desktop));
-            for name in ["ant-did", "ant-device-registry.json"] {
+            for name in [
+                "ant-did",
+                "ant-device-registry.json",
+                ".machine-id",
+                "machine-id",
+            ] {
                 result.push(Target {
                     path: desktop.join(name),
                     ..target(
@@ -475,18 +602,16 @@ pub(super) fn org_files(root: &Path, org: &str) -> Result<(Vec<PathBuf>, bool), 
     }
     let mut pending = Vec::new();
     let mut candidates = vec![root.join(".claude/projects"), root.join(".claude/sessions")];
-    #[cfg(target_os = "macos")]
-    candidates.extend([
-        root.join("Library/Application Support/Claude/local_sessions"),
-        root.join("Library/Application Support/Claude/conversations"),
-    ]);
-    #[cfg(target_os = "windows")]
-    {
-        let appdata = win_dir(root, "APPDATA", "AppData/Roaming");
-        candidates.extend([
-            appdata.join("Claude/local_sessions"),
-            appdata.join("Claude/conversations"),
-        ]);
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    for desktop in desktop_roots(root) {
+        for sub in [
+            "local_sessions",
+            "conversations",
+            "claude-code-sessions",
+            "local-agent-mode-sessions",
+        ] {
+            candidates.push(desktop.join(sub));
+        }
     }
     for p in candidates {
         if canonicalize(&p).ok().as_deref() == Some(p.as_path()) {

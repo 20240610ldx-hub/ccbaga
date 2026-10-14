@@ -143,8 +143,52 @@ mod tests {
 }
 
 // 通过既有语言与时区识别目标地区；自定义组合无法识别时保持未核验。
+pub(crate) fn timezones_match(a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let (Some(wa), Some(wb)) = (
+            crate::windows::iana_to_windows_tz(a),
+            crate::windows::iana_to_windows_tz(b),
+        ) {
+            return wa.eq_ignore_ascii_case(wb);
+        }
+    }
+    false
+}
+
 pub fn matching(language: &str, timezone: &str) -> Option<&'static Region> {
-    REGIONS
+    let lang_matches = |r_lang: &str| {
+        language == r_lang
+            || language
+                .strip_prefix(r_lang)
+                .is_some_and(|s| s.starts_with('-'))
+    };
+    if let Some(region) = REGIONS
         .iter()
-        .find(|r| r.language == language && r.timezone == timezone)
+        .find(|r| lang_matches(r.language) && timezones_match(r.timezone, timezone))
+    {
+        return Some(region);
+    }
+    if lang_matches("en-US")
+        && matches!(
+            timezone,
+            "America/Chicago"
+                | "America/Denver"
+                | "America/Phoenix"
+                | "America/Detroit"
+                | "America/Indianapolis"
+                | "America/Indiana/Indianapolis"
+                | "America/Boise"
+                | "America/Anchorage"
+                | "America/Juneau"
+                | "America/Adak"
+                | "Pacific/Honolulu"
+        )
+    {
+        return Some(&REGIONS[0]);
+    }
+    None
 }

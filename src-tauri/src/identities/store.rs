@@ -1,5 +1,5 @@
 // [INPUT]: SQLite 目录、用户策略、白名单源、已验收归档代次、认证加密与平台凭据桥。
-// [OUTPUT]: 已验证身份归档、先暂存后切换、持久恢复记录、原位配置合并、直接删除与清除/恢复/凭据/提交/回滚真实进度。
+// [OUTPUT]: 已验证身份归档、先暂存后切换、恢复后跨账号残留消毒、持久恢复记录、原位配置合并、直接删除与清除/恢复/凭据/提交/回滚真实进度。
 // [POS]: 身份的文件事务；SQLite 与文件系统由恢复日志协调，不能假装是同一原子事务。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::{
@@ -95,7 +95,11 @@ impl Store {
         };
         if store.db.get("recovery")?.is_none() {
             store.index_legacy()?;
+            store.db.remove_empty()?;
             store.collect_generations()?;
+            if store.stopped().is_ok() {
+                let _ = identity::sanitize_cross_account_residue(&store.home);
+            }
         }
         Ok(store)
     }
@@ -163,18 +167,17 @@ impl Store {
                 }
                 let mut s = s.clone();
                 if s.keys.is_empty() && s.category == "settings" && policy.settings {
-                    s.keys = vec![
-                        "env.CLAUDE_CODE_OAUTH_TOKEN".into(),
-                        "env.ANTHROPIC_API_KEY".into(),
-                        "env.ANTHROPIC_AUTH_TOKEN".into(),
-                        "apiKeyHelper".into(),
-                    ];
+                    s.keys = crate::cleaner::identity::SETTINGS_IDENTITY_KEYS
+                        .iter()
+                        .map(|k| (*k).into())
+                        .collect();
                 }
                 if s.path == stage.manifest.home.join(".claude.json") && policy.settings {
                     s.keys.retain(|k| {
                         crate::cleaner::identity::account_key(k)
                             || k == "mcpServers"
                             || k == "projects"
+                            || k == "githubRepoPaths"
                     });
                 }
                 if policy.mcp {
@@ -193,7 +196,7 @@ impl Store {
                     s.keys.retain(|k| k != "pluginSecrets");
                 }
                 if policy.projects {
-                    s.keys.retain(|k| k != "projects");
+                    s.keys.retain(|k| k != "projects" && k != "githubRepoPaths");
                 }
                 if !stage.manifest.sources[n].keys.is_empty() && s.keys.is_empty() {
                     return None;
@@ -506,6 +509,7 @@ impl Store {
             reporter.log("credentials", "ok", "当前本地登录凭据已清除。", 1, Some(1));
             if let Some(stage) = incoming.as_ref() {
                 self.restore(stage, &next, policy, reporter, "restore")?;
+                let _ = identity::sanitize_cross_account_residue(&self.home);
             }
             reporter.log(
                 "commit",
@@ -617,7 +621,9 @@ impl Store {
         // 恢复前再保存现状，避免崩溃后用户新产生的数据被恢复操作覆盖。
         let (checkpoint, current_stage) =
             self.save_checkpoint(name, &outgoing.manifest.policy, reporter)?;
-        self.db.remember(&checkpoint)?;
+        if !checkpoint.empty {
+            self.db.remember(&checkpoint)?;
+        }
         self.clear(
             &Self::selected(&current_stage, &outgoing.manifest.policy),
             reporter,
@@ -655,6 +661,7 @@ impl Store {
             reporter,
             "restore",
         )?;
+        let _ = identity::sanitize_cross_account_residue(&self.home);
         reporter.log(
             "commit",
             "running",
@@ -663,6 +670,8 @@ impl Store {
             Some(1),
         );
         self.db.complete(&record.id)?;
+        self.db.compact()?;
+        let _ = self.collect_generations();
         reporter.log("commit", "ok", "恢复后的身份选择已提交。", 1, Some(1));
         reporter.log("verify", "ok", "原身份已恢复。", 1, Some(1));
         Ok(())

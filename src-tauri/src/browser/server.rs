@@ -73,6 +73,7 @@ pub fn start(
     root: std::path::PathBuf,
     context: Context,
 ) {
+    let context = std::sync::Arc::new(context);
     std::thread::spawn(move || {
         // 生命周期跟随会话令牌：令牌被替换或清空即退出；宿主运行期间保持可用，供 CCBaga-B 每次全新启动打开。
         loop {
@@ -89,10 +90,22 @@ pub fn start(
             }
             match listener.accept() {
                 Ok((mut stream, _)) => {
-                    let _ = stream.set_nonblocking(false);
-                    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-                    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
-                    handle(&app, &mut stream, &token, &root, &context);
+                    let app_clone = app.clone();
+                    let token_clone = token.clone();
+                    let root_clone = root.clone();
+                    let context_clone = std::sync::Arc::clone(&context);
+                    std::thread::spawn(move || {
+                        let _ = stream.set_nonblocking(false);
+                        let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+                        let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+                        handle(
+                            &app_clone,
+                            &mut stream,
+                            &token_clone,
+                            &root_clone,
+                            &context_clone,
+                        );
+                    });
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     std::thread::sleep(Duration::from_millis(40))
@@ -109,10 +122,11 @@ fn handle(
     root: &Path,
     context: &Context,
 ) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
     let mut data = Vec::new();
     let mut byte = [0u8; 1];
     while data.len() < 8192 && !data.ends_with(b"\r\n\r\n") {
-        if stream.read_exact(&mut byte).is_err() {
+        if std::time::Instant::now() >= deadline || stream.read_exact(&mut byte).is_err() {
             return;
         }
         data.push(byte[0]);
@@ -125,7 +139,10 @@ fn handle(
     let method = words.next().unwrap_or("");
     let url = words.next().unwrap_or("");
     let prefix = format!("/{token}/");
-    let Some(path)=url.strip_prefix(&prefix) else{answer(stream,"404 Not Found","text/plain",b"Not found");return;};
+    let Some(path) = url.strip_prefix(&prefix) else {
+        answer(stream, "404 Not Found", "text/plain", b"Not found");
+        return;
+    };
     if method == "GET" && path == "context" {
         let mut current = context.clone();
         current.ui_language = crate::ui_language::ui_language_read(app.clone());
@@ -185,7 +202,10 @@ fn handle(
             .find(|(k, _)| k.eq_ignore_ascii_case("content-length"))
             .and_then(|(_, v)| v.trim().parse::<usize>().ok())
             .filter(|n| *n > 0 && *n <= 16_384);
-        let Some(length)=length else{answer(stream,"400 Bad Request","text/plain",b"Invalid length");return;};
+        let Some(length) = length else {
+            answer(stream, "400 Bad Request", "text/plain", b"Invalid length");
+            return;
+        };
         let mut body = vec![0u8; length];
         if stream.read_exact(&mut body).is_err() {
             return;
@@ -193,7 +213,10 @@ fn handle(
         let report = serde_json::from_slice::<Report>(&body)
             .ok()
             .filter(Report::valid);
-        let Some(report)=report else{answer(stream,"400 Bad Request","text/plain",b"Invalid report");return;};
+        let Some(report) = report else {
+            answer(stream, "400 Bad Request", "text/plain", b"Invalid report");
+            return;
+        };
         let state = app.state::<Browser>();
         let mut session = state.session.lock().unwrap();
         if let Some(state) = session.as_mut().filter(|x| x.token == token) {
@@ -237,8 +260,14 @@ fn media_type(path: &Path) -> Option<&'static str> {
     )
 }
 fn serve_resource(stream: &mut TcpStream, root: &Path, relative: &str) {
-    let Some(path)=resource(root,relative) else{answer(stream,"404 Not Found","text/plain",b"Not found");return;};
-    let Some(kind)=media_type(&path) else{answer(stream,"404 Not Found","text/plain",b"Not found");return;};
+    let Some(path) = resource(root, relative) else {
+        answer(stream, "404 Not Found", "text/plain", b"Not found");
+        return;
+    };
+    let Some(kind) = media_type(&path) else {
+        answer(stream, "404 Not Found", "text/plain", b"Not found");
+        return;
+    };
     if let Ok(body) = std::fs::read(path) {
         answer(stream, "200 OK", kind, &body);
     }

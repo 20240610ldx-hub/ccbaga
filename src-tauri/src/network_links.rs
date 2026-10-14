@@ -68,6 +68,33 @@ pub async fn network_open_resource(provider: String) -> Result<(), String> {
     .map_err(|_| "无法打开供应商网站。".to_string())?
 }
 
+fn valid_redirect_location(request_url: &str, location: Option<&str>) -> bool {
+    let Some(loc) = location.map(str::trim).filter(|s| !s.is_empty()) else {
+        return true;
+    };
+    if loc.starts_with('/') && !loc.starts_with("//") {
+        return true;
+    }
+    let req_host = reqwest::Url::parse(request_url)
+        .ok()
+        .and_then(|u| u.host_str().map(|s| s.to_ascii_lowercase()));
+    let loc_url = if let Some(rest) = loc.strip_prefix("//") {
+        reqwest::Url::parse(&format!("https://{rest}")).ok()
+    } else {
+        reqwest::Url::parse(loc).ok()
+    };
+    let Some(loc_host) = loc_url.and_then(|u| u.host_str().map(|s| s.to_ascii_lowercase())) else {
+        return false;
+    };
+    req_host.as_deref() == Some(loc_host.as_str())
+        || loc_host == "claude.ai"
+        || loc_host.ends_with(".claude.ai")
+        || loc_host == "claude.com"
+        || loc_host.ends_with(".claude.com")
+        || loc_host == "anthropic.com"
+        || loc_host.ends_with(".anthropic.com")
+}
+
 async fn diagnose(client: reqwest::Client, domain: String, url: String) -> DomainCheckResult {
     let started = Instant::now();
     let mut result = DomainCheckResult {
@@ -78,7 +105,7 @@ async fn diagnose(client: reqwest::Client, domain: String, url: String) -> Domai
         ip: None,
         message: String::new(),
     };
-    match client.get(url).send().await {
+    match client.get(&url).send().await {
         Ok(response) => {
             let status = response.status().as_u16();
             // 展示真实连接对端，不把独立 DNS 查询误称为这次连接的路由。
@@ -86,12 +113,19 @@ async fn diagnose(client: reqwest::Client, domain: String, url: String) -> Domai
                 .remote_addr()
                 .map(|address| address.ip().to_string());
             result.status_code = Some(status);
-            result.ok = (200..400).contains(&status) || status == 401 || status == 404;
+            let location = response
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|v| v.to_str().ok());
+            let redirect_ok =
+                !(300..400).contains(&status) || valid_redirect_location(&url, location);
+            result.ok =
+                ((200..400).contains(&status) && redirect_ok) || status == 401 || status == 404;
             result.message = match status {
                 200..=299 => "连接正常",
                 401 | 404 => "服务响应正常",
-                300..=399 => "服务要求重定向",
-                403 => "受到安全拦截或限制",
+                300..=399 if redirect_ok => "服务要求重定向",
+                300..=399 | 403 => "受到安全拦截或限制",
                 _ => "服务响应异常",
             }
             .into();
@@ -111,13 +145,25 @@ async fn diagnose(client: reqwest::Client, domain: String, url: String) -> Domai
     result
 }
 pub(crate) async fn diagnose_urls(targets: &[(&str, &str)]) -> Vec<DomainCheckResult> {
-    let client = reqwest::Client::builder()
+    diagnose_urls_with_proxy(targets, "").await
+}
+pub(crate) async fn diagnose_urls_with_proxy(
+    targets: &[(&str, &str)],
+    proxy: &str,
+) -> Vec<DomainCheckResult> {
+    let mut builder = reqwest::Client::builder()
         .no_proxy()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36")
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(8))
-        .build();
-    let client = match client {
+        .timeout(Duration::from_secs(8));
+    let trimmed = proxy.trim();
+    if !trimmed.is_empty() {
+        if let Ok(p) = reqwest::Proxy::all(trimmed) {
+            builder = builder.proxy(p);
+        }
+    }
+    let client = match builder.build() {
         Ok(client) => client,
         Err(_) => {
             return targets
@@ -159,13 +205,20 @@ pub(crate) async fn diagnose_urls(targets: &[(&str, &str)]) -> Vec<DomainCheckRe
 }
 
 #[tauri::command]
-pub async fn network_diagnose_domains() -> Result<Vec<DomainCheckResult>, String> {
+pub async fn network_diagnose_domains(
+    app: tauri::AppHandle,
+) -> Result<Vec<DomainCheckResult>, String> {
     let targets = [
         ("claude.ai", "https://claude.ai/"),
         ("api.anthropic.com", "https://api.anthropic.com/"),
         ("downloads.claude.ai", "https://downloads.claude.ai/"),
     ];
-    Ok(diagnose_urls(&targets).await)
+    let proxy = tauri::async_runtime::spawn_blocking(move || {
+        crate::browser::configured_or_system_proxy(&app)
+    })
+    .await
+    .unwrap_or_default();
+    Ok(diagnose_urls_with_proxy(&targets, &proxy).await)
 }
 
 #[cfg(test)]
@@ -271,5 +324,21 @@ mod tests {
         assert!(results
             .iter()
             .all(|result| result.ip.as_deref() == Some("127.0.0.1")));
+        assert!(valid_redirect_location(
+            "https://claude.ai/",
+            Some("/login")
+        ));
+        assert!(valid_redirect_location(
+            "https://claude.ai/",
+            Some("https://claude.ai/login")
+        ));
+        assert!(valid_redirect_location(
+            "https://platform.claude.com/",
+            Some("https://console.anthropic.com/login")
+        ));
+        assert!(!valid_redirect_location(
+            "https://claude.ai/",
+            Some("http://198.18.0.1/portal")
+        ));
     }
 }
