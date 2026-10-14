@@ -61,7 +61,8 @@ def main():
         sys.path.insert(0,str(ROOT/'skills/ccbaga-network/scripts'))
         import windows as private_files
         for sample in (data,claude):
-            for path in [sample,*sample.rglob('*')]:
+            # 先保护子项，避免父目录移除继承 ACE 时暂时失去子项访问权。
+            for path in sorted([sample,*sample.rglob('*')],key=lambda p:len(p.parts),reverse=True):
                 private_files.protect(path)
         env={k:v for k,v in os.environ.items() if not k.startswith(('APPLE_','TAURI_SIGNING_PRIVATE_KEY'))}
         env.update(CC_CLI_USER_DIR=str(home),HTTPS_PROXY='http://secret-marker.invalid:1')
