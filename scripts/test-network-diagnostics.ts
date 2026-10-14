@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 隔离 Playwright 引擎、Vite 与网络页虚构 IPC。
- * [OUTPUT]: Claude 出口待测/检测中/成功/失败、原因、空结果拒绝和双语 DOM 回归。
+ * [OUTPUT]: Claude 出口四域名待测/检测中/成功/失败、浏览器质询可达、原因、空结果拒绝和双语 DOM 回归。
  * [POS]: 共用 UI 回归的功能证明，不截图或访问外部服务。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -14,15 +14,17 @@ export async function testNetworkDiagnostics(browser:Browser,base:string) {
   await page.goto(base+'/tests/network.html');
   await page.getByRole('heading',{name:'Claude 出口',exact:true}).waitFor();
   const panel=page.locator('.domain-diagnostics'),rows=panel.locator('.domain-diagnostics-item');
-  assert.equal(await panel.getAttribute('data-status'),'idle');assert.equal(await rows.count(),3);
+  assert.equal(await panel.getAttribute('data-status'),'idle');assert.equal(await rows.count(),4);
+  assert.deepEqual(await panel.locator('.domain-name').allInnerTexts(),['claude.ai','api.anthropic.com','platform.claude.com','downloads.claude.ai']);
   await panel.getByRole('button',{name:'开始检测',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.domain-diagnostics')?.getAttribute('data-status')==='checking');
-  assert.equal(await panel.locator('.domain-badge.checking').count(),3);
+  assert.equal(await panel.locator('.domain-badge.checking').count(),4);
   assert.equal(await panel.getByRole('button',{name:'检测中',exact:true}).isDisabled(),true);
   await page.evaluate(()=>(window as any).networkFixture.finish());
   await page.waitForFunction(()=>document.querySelector('.domain-diagnostics')?.getAttribute('data-status')==='passed');
-  assert.equal(await panel.locator('.domain-badge.passed').count(),3);
+  assert.equal(await panel.locator('.domain-badge.passed').count(),4);
   assert.match(await panel.locator('.domain-outcome').innerText(),/检测成功/);
+  assert.match(await rows.first().innerText(),/HTTP 403.*服务可达，需浏览器验证/);
   for(const mode of ['partial','error','empty','invalid']){
    await page.evaluate(mode=>(window as any).networkFixture.setMode(mode),mode);
    await panel.getByRole('button',{name:'重新检测',exact:true}).click();

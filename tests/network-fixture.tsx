@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 真实网络页、Tauri mockIPC 与四类虚构诊断结果。
+ * [INPUT]: 真实网络页、Tauri mockIPC 与四类虚构诊断结果（四个固定域名，含 Cloudflare 浏览器质询可达）。
  * [OUTPUT]: 可控的成功/部分失败/命令异常/缺失结果，检测期间由测试显式释放。
  * [POS]: 无真实连接、密钥或外部导航的 GUI 回归样本。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -20,7 +20,7 @@ mockIPC(command=>{
   if(mode==='error')return reject('fixture connection interrupted');
   if(mode==='empty')return resolve([]);
   if(mode==='invalid')return resolve(null);
-  resolve(['claude.ai','api.anthropic.com','downloads.claude.ai'].map((domain,n)=>({domain,ok:mode!=='partial'||n!==1,status_code:mode==='partial'&&n===1?403:200,latency_ms:35+n,ip:'203.0.113.1',message:mode==='partial'&&n===1?'受到安全拦截或限制':'连接正常'})));
+  resolve(['claude.ai','api.anthropic.com','platform.claude.com','downloads.claude.ai'].map((domain,n)=>({domain,ok:mode!=='partial'||n!==1,status_code:mode==='partial'&&n===1?403:n===0?403:200,latency_ms:35+n,ip:'203.0.113.1',message:mode==='partial'&&n===1?'受到安全拦截或限制':n===0?'服务可达，需浏览器验证':'连接正常'})));
  };});
 });
 setLocale('zh');
