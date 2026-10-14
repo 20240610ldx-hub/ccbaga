@@ -1,5 +1,5 @@
-// [INPUT]: Windows 当前用户 SID、时区、注册表状态、系统工具与受限进程接口。
-// [OUTPUT]: Windows 平台 JSON 桥；支持时区/语言/区域/定位状态、Win32 剪贴板、当前用户文件所有权和安全进程接口。
+// [INPUT]: Windows 当前用户/默认所有者/管理员组 SID、时区、注册表状态、系统工具与受限进程接口。
+// [OUTPUT]: Windows 平台 JSON 桥；支持时区/语言/区域/定位状态、Win32 剪贴板、兼容管理员令牌的当前用户文件所有权和安全进程接口。
 // [POS]: 仅原生识别与用户触发的系统操作；不含网络客户端，不向 UI 输出进程参数或代理秘密。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use serde_json::{json, Value};
@@ -13,7 +13,8 @@ use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
 use windows_sys::Win32::Security::Authorization::{GetNamedSecurityInfoW, SE_FILE_OBJECT};
 use windows_sys::Win32::Security::OWNER_SECURITY_INFORMATION;
 use windows_sys::Win32::Security::{
-    GetLengthSid, GetTokenInformation, TokenUser, TOKEN_QUERY, TOKEN_USER,
+    GetLengthSid, GetTokenInformation, IsValidSid, TokenGroups, TokenOwner, TokenUser,
+    TOKEN_GROUPS, TOKEN_OWNER, TOKEN_QUERY, TOKEN_USER,
 };
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 #[path = "windows_process.rs"]
@@ -177,6 +178,83 @@ pub(super) fn current_sid() -> Option<&'static Vec<u8>> {
     SID.get_or_init(|| unsafe { process_sid(GetCurrentProcess()) })
         .as_ref()
 }
+const SE_GROUP_OWNER_ATTR: u32 = 0x0000_0008;
+const BUILTIN_ADMINS_SID: [u8; 16] = [1, 2, 0, 0, 0, 0, 0, 5, 32, 0, 0, 0, 32, 2, 0, 0];
+
+unsafe fn copy_sid(sid: *mut std::ffi::c_void) -> Option<Vec<u8>> {
+    if sid.is_null() || IsValidSid(sid) == 0 {
+        return None;
+    }
+    Some(std::slice::from_raw_parts(sid.cast::<u8>(), GetLengthSid(sid) as usize).to_vec())
+}
+
+fn push_unique_sid(sids: &mut Vec<Vec<u8>>, candidate: Option<Vec<u8>>) {
+    if let Some(sid) = candidate {
+        if !sids.iter().any(|existing| existing == &sid) {
+            sids.push(sid);
+        }
+    }
+}
+
+unsafe fn current_process_owner_sids() -> Vec<Vec<u8>> {
+    let mut sids = Vec::new();
+    push_unique_sid(&mut sids, current_sid().cloned());
+    let mut token = std::ptr::null_mut();
+    if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
+        return sids;
+    }
+    let mut size = 0;
+    GetTokenInformation(token, TokenOwner, std::ptr::null_mut(), 0, &mut size);
+    if size > 0 {
+        let mut buffer = vec![0usize; (size as usize).div_ceil(std::mem::size_of::<usize>())];
+        if GetTokenInformation(
+            token,
+            TokenOwner,
+            buffer.as_mut_ptr().cast(),
+            size,
+            &mut size,
+        ) != 0
+        {
+            let owner = &*(buffer.as_ptr().cast::<TOKEN_OWNER>());
+            push_unique_sid(&mut sids, copy_sid(owner.Owner));
+        }
+    }
+    size = 0;
+    GetTokenInformation(token, TokenGroups, std::ptr::null_mut(), 0, &mut size);
+    if size > 0 {
+        let mut buffer = vec![0usize; (size as usize).div_ceil(std::mem::size_of::<usize>())];
+        if GetTokenInformation(
+            token,
+            TokenGroups,
+            buffer.as_mut_ptr().cast(),
+            size,
+            &mut size,
+        ) != 0
+        {
+            let groups = &*(buffer.as_ptr().cast::<TOKEN_GROUPS>());
+            let items =
+                std::slice::from_raw_parts(groups.Groups.as_ptr(), groups.GroupCount as usize);
+            for group in items {
+                if let Some(sid) = copy_sid(group.Sid) {
+                    if (group.Attributes & SE_GROUP_OWNER_ATTR) != 0
+                        || sid.as_slice() == BUILTIN_ADMINS_SID
+                    {
+                        push_unique_sid(&mut sids, Some(sid));
+                    }
+                }
+            }
+        }
+    }
+    CloseHandle(token);
+    sids
+}
+
+pub(super) fn current_owner_sids() -> &'static [Vec<u8>] {
+    static SIDS: std::sync::OnceLock<Vec<Vec<u8>>> = std::sync::OnceLock::new();
+    SIDS.get_or_init(|| unsafe { current_process_owner_sids() })
+        .as_slice()
+}
+
 pub fn owned(path: &std::path::Path) -> bool {
     use std::os::windows::ffi::OsStrExt;
     let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
@@ -194,10 +272,10 @@ pub fn owned(path: &std::path::Path) -> bool {
             &mut descriptor,
         );
         let matches = status == 0
-            && !owner.is_null()
-            && current_sid().is_some_and(|sid| {
-                sid.as_slice()
-                    == std::slice::from_raw_parts(owner.cast::<u8>(), GetLengthSid(owner) as usize)
+            && copy_sid(owner).is_some_and(|actual| {
+                current_owner_sids()
+                    .iter()
+                    .any(|sid| sid.as_slice() == actual.as_slice())
             });
         if !descriptor.is_null() {
             LocalFree(descriptor.cast());
@@ -257,7 +335,7 @@ pub fn preserve_file_permissions(
             &mut descriptor,
         );
         let status = if read == 0 && !owner.is_null() && !acl.is_null() {
-            SetNamedSecurityInfoW(
+            let first = SetNamedSecurityInfoW(
                 target.as_ptr(),
                 SE_FILE_OBJECT,
                 OWNER_SECURITY_INFORMATION
@@ -267,7 +345,26 @@ pub fn preserve_file_permissions(
                 std::ptr::null_mut(),
                 acl,
                 std::ptr::null(),
-            )
+            );
+            if first != 0 {
+                if let Some(sid) = current_sid() {
+                    SetNamedSecurityInfoW(
+                        target.as_ptr(),
+                        SE_FILE_OBJECT,
+                        OWNER_SECURITY_INFORMATION
+                            | DACL_SECURITY_INFORMATION
+                            | PROTECTED_DACL_SECURITY_INFORMATION,
+                        sid.as_ptr() as *mut _,
+                        std::ptr::null_mut(),
+                        acl,
+                        std::ptr::null(),
+                    )
+                } else {
+                    first
+                }
+            } else {
+                0
+            }
         } else {
             1
         };
@@ -628,5 +725,29 @@ mod tests {
                 .is_err()
         );
         assert_eq!(raw_windows_timezone(), "Tokyo Standard Time");
+    }
+
+    #[test]
+    fn windows_owned_accepts_default_and_explicit_user_owners() {
+        let dir = std::env::temp_dir().join(format!(
+            "rf-win-owned-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let default_file = dir.join("default-owner.json");
+        let explicit_file = dir.join("explicit-owner.json");
+        std::fs::write(&default_file, b"{}").unwrap();
+        std::fs::write(&explicit_file, b"{}").unwrap();
+        fixture_owner(&explicit_file);
+        assert!(owned(&dir));
+        assert!(owned(&default_file));
+        assert!(owned(&explicit_file));
+        preserve_file_permissions(&default_file, &explicit_file).unwrap();
+        assert!(owned(&explicit_file));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -89,16 +89,12 @@ impl Fixture {
         let pid = std::process::id();
         let p = std::env::temp_dir().join(format!("rf-cleaner-test-{pid}-{id}-{unique}"));
         fs::create_dir(&p).unwrap();
-        #[cfg(windows)]
-        crate::windows::fixture_owner(&p);
         Self(canonicalize(p).unwrap())
     }
     fn file(&self, name: &str, value: &str) {
         let p = self.0.join(name);
         fs::create_dir_all(p.parent().unwrap()).unwrap();
         fs::write(&p, value).unwrap();
-        #[cfg(windows)]
-        for path in p.ancestors().take_while(|path| path.starts_with(&self.0)) { crate::windows::fixture_owner(path); }
     }
 }
 impl Drop for Fixture {

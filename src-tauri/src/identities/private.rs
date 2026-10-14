@@ -1,6 +1,6 @@
 // [INPUT]: 标准库文件系统、当前用户身份与 Windows ACL API。
 // [OUTPUT]: 私有目录/文件、链接与所有权检查、同步原子写入。
-// [POS]: 身份保险库的磁盘边界；Windows 创建时明确用户所有者/DACL，既有文件仍拒绝所有者变化。
+// [POS]: 身份保险库的磁盘边界；Windows 创建时明确用户所有者/DACL，已有父目录仅校验安全属性而不覆写系统 DACL。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use std::{fs, io::Write, path::Path};
 #[cfg(windows)]
@@ -171,8 +171,9 @@ pub fn directory(path: &Path) -> Result<(), String> {
                 Ok(())
             }
         })?;
+        return protect(path);
     }
-    protect(path)
+    safe(path)
 }
 pub fn create(path: &Path) -> Result<fs::File, String> {
     parents(path.parent().ok_or("身份路径无效。")?)?;

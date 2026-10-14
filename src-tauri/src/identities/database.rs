@@ -26,6 +26,7 @@ pub(super) fn error(_: rusqlite::Error) -> String {
 impl Database {
     pub fn open(root: &Path) -> Result<Self, String> {
         super::private::directory(root)?;
+        super::private::protect(root)?;
         let path = root.join("identities.sqlite");
         if !path.exists() {
             super::private::create(&path)?
