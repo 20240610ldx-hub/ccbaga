@@ -1,5 +1,5 @@
 // [INPUT]: 临时应用数据目录、虚构浏览器资料与身份绑定配置。
-// [OUTPUT]: Cookie/缓存/种子隔离、手动换指纹持久化、旧资料保留与路径逃逸拒绝回归。
+// [OUTPUT]: SQLite 句柄释放后的三平台临时目录清理、Cookie/缓存/种子隔离、手动换指纹持久化、旧资料保留与路径逃逸拒绝回归。
 // [POS]: 浏览器存储边界的离线证明，不启动真实用户的浏览器或访问钥匙串。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -46,6 +46,7 @@ fn linked_profiles_keep_separate_data_and_configs_without_compressing_or_copying
     for bad in ["../escape", "/tmp", "", "Default", "AABB"] {
         assert!(workspaces::slot_path(&root, bad).is_err());
     }
+    drop(db);
     fs::remove_dir_all(fixture).unwrap();
 }
 #[test]
@@ -63,5 +64,6 @@ fn recovery_refuses_profile_launch_preparation() {
         )
         .unwrap();
     assert!(workspaces::ensure(&root).unwrap_err().contains("恢复"));
+    drop(connection);
     fs::remove_dir_all(fixture).unwrap();
 }

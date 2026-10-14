@@ -1,5 +1,5 @@
 // [INPUT]: rusqlite/内嵌 SQLite、私有保险库目录和脱敏身份元数据与本机加盐的账号索引。
-// [OUTPUT]: 身份目录、保留策略、当前身份、SQLite v3 浏览器绑定与持久切换/恢复状态和身份移除事务。
+// [OUTPUT]: 默认联动/显式关闭保留、首身份预留编号与身份目录、保留策略、当前身份、SQLite v3 浏览器绑定与持久切换/恢复状态和身份移除事务。
 // [POS]: 保险库的索引事务；凭据和会话正文仅进入加密归档，不进入数据库。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use rusqlite::{params, Connection, OptionalExtension};
@@ -59,6 +59,13 @@ impl Database {
             return Err("身份目录版本较新，请更新应用。".into());
         }
         tx.execute_batch("CREATE TABLE IF NOT EXISTS browser_bindings(identity TEXT PRIMARY KEY,slot TEXT NOT NULL UNIQUE,seed INTEGER NOT NULL UNIQUE); PRAGMA user_version=3;").map_err(error)?;
+        // 未设置过的用户默认联动；显式关闭和已有资料指针始终保留。
+        tx.execute_batch("INSERT OR IGNORE INTO state VALUES('browser.enabled','1'); INSERT OR IGNORE INTO state VALUES('browser.active','legacy');").map_err(error)?;
+        tx.execute(
+            "INSERT OR IGNORE INTO state VALUES('browser.draft',?1)",
+            [super::new_id()?],
+        )
+        .map_err(error)?;
         tx.commit().map_err(error)?;
         Ok(Self { connection })
     }

@@ -1017,3 +1017,12 @@
 "关联浏览器资料正在使用，不能删除。": "Linked browser data is in use and cannot be deleted."
 "身份已删除，关联浏览器资料未完全删除，请检查。": "Identity deleted. Linked browser data was not fully removed. Please check."
 "浏览器身份已变化，请重试。": "The browser identity changed. Please retry."
+
+"浏览器身份": "Browser identity"
+"本地身份": "Local identity"
+"通用浏览器资料": "Shared browser data"
+"正在读取身份": "Reading identity"
+"身份待核对": "Identity not verified"
+"身份待同步": "Identity out of sync"
+"身份已联动": "Identity linked"
+"未联动": "Not linked"

@@ -1,5 +1,5 @@
-// [INPUT]: 打包的起始页、一次启动的随机令牌、机器上下文、共享界面语言、共用出口服务目录和浏览器实测。
-// [OUTPUT]: 仅 127.0.0.1 的起始页、实时机器/界面语言上下文与带接收时间的观测接口；HTML/脚本/样式/字体与图片 MIME 白名单，资源限定在打包目录；服务存活到会话令牌被替换或清空。
+// [INPUT]: 只读有界身份显示摘要、打包的起始页、一次启动的随机令牌、机器上下文、共享界面语言、共用出口服务目录和浏览器实测。
+// [OUTPUT]: 仅 127.0.0.1 的起始页、实时绑定身份/机器/界面语言上下文与带接收时间的观测接口；HTML/脚本/样式/字体与图片 MIME 白名单，资源限定在打包目录；服务存活到会话令牌被替换或清空。
 // [POS]: Chromium 与工具箱之间的窄桥；不提供文件写入、脚本执行或 Tauri 命令。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::{network::Report, Browser, Context};
@@ -18,18 +18,29 @@ fn answer(stream: &mut TcpStream, status: &str, kind: &str, body: &[u8]) {
 pub fn nonce() -> Result<String, String> {
     #[cfg(unix)]
     {
-    let mut bytes = [0u8; 24];
-    std::fs::File::open("/dev/urandom")
-        .and_then(|mut f| f.read_exact(&mut bytes))
-        .map_err(|_| "无法创建本地会话令牌。")?;
-    Ok(bytes.iter().map(|x| format!("{x:02x}")).collect())
+        let mut bytes = [0u8; 24];
+        std::fs::File::open("/dev/urandom")
+            .and_then(|mut f| f.read_exact(&mut bytes))
+            .map_err(|_| "无法创建本地会话令牌。")?;
+        Ok(bytes.iter().map(|x| format!("{x:02x}")).collect())
     }
     #[cfg(windows)]
     {
-        use windows_sys::Win32::Security::Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG};
+        use windows_sys::Win32::Security::Cryptography::{
+            BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
+        };
         let mut bytes = [0u8; 24];
-        let status = unsafe { BCryptGenRandom(std::ptr::null_mut(), bytes.as_mut_ptr(), bytes.len() as u32, BCRYPT_USE_SYSTEM_PREFERRED_RNG) };
-        if status != 0 { return Err("无法创建本地会话令牌。".into()); }
+        let status = unsafe {
+            BCryptGenRandom(
+                std::ptr::null_mut(),
+                bytes.as_mut_ptr(),
+                bytes.len() as u32,
+                BCRYPT_USE_SYSTEM_PREFERRED_RNG,
+            )
+        };
+        if status != 0 {
+            return Err("无法创建本地会话令牌。".into());
+        }
         Ok(bytes.iter().map(|x| format!("{x:02x}")).collect())
     }
 }
@@ -118,6 +129,18 @@ fn handle(
     if method == "GET" && path == "context" {
         let mut current = context.clone();
         current.ui_language = crate::ui_language::ui_language_read(app.clone());
+        match super::identity_context(app) {
+            Ok(identity) => current.identity = identity,
+            Err(_) => {
+                answer(
+                    stream,
+                    "503 Service Unavailable",
+                    "text/plain",
+                    b"Identity state unavailable",
+                );
+                return;
+            }
+        }
         match super::config::machine() {
             Ok(machine) => current.machine = machine,
             Err(_) => {
@@ -147,7 +170,12 @@ fn handle(
         let session = browser.session.lock().unwrap();
         let observed = session.as_ref().filter(|s| s.token == token);
         let body = serde_json::json!({"report": observed.and_then(|s| s.report.as_ref()), "received_at": observed.and_then(|s| s.received_at)});
-        answer(stream, "200 OK", "application/json", &serde_json::to_vec(&body).unwrap());
+        answer(
+            stream,
+            "200 OK",
+            "application/json",
+            &serde_json::to_vec(&body).unwrap(),
+        );
         return;
     }
     if method == "POST" && path == "report" {
@@ -193,18 +221,20 @@ fn handle(
     serve_resource(stream, root, path);
 }
 fn media_type(path: &Path) -> Option<&'static str> {
-    Some(match path.extension().and_then(|x| x.to_str()).unwrap_or("") {
-        "html" => "text/html; charset=utf-8",
-        "js" => "text/javascript",
-        "css" => "text/css",
-        "woff2" => "font/woff2",
-        "jpg" | "jpeg" => "image/jpeg",
-        "png" => "image/png",
-        "svg" => "image/svg+xml",
-        "webp" => "image/webp",
-        "avif" => "image/avif",
-        _ => return None,
-    })
+    Some(
+        match path.extension().and_then(|x| x.to_str()).unwrap_or("") {
+            "html" => "text/html; charset=utf-8",
+            "js" => "text/javascript",
+            "css" => "text/css",
+            "woff2" => "font/woff2",
+            "jpg" | "jpeg" => "image/jpeg",
+            "png" => "image/png",
+            "svg" => "image/svg+xml",
+            "webp" => "image/webp",
+            "avif" => "image/avif",
+            _ => return None,
+        },
+    )
 }
 fn serve_resource(stream: &mut TcpStream, root: &Path, relative: &str) {
     let Some(path)=resource(root,relative) else{answer(stream,"404 Not Found","text/plain",b"Not found");return;};
@@ -218,31 +248,40 @@ mod tests {
     use super::*;
     #[test]
     fn bundled_logo_is_served_over_the_actual_static_http_path() {
-        let root=std::env::temp_dir().join(format!("ccbaga-http-{}",nonce().unwrap()));
+        let root = std::env::temp_dir().join(format!("ccbaga-http-{}", nonce().unwrap()));
         std::fs::create_dir_all(root.join("assets")).unwrap();
-        let logo=include_bytes!("../../../assets/browser-logo.jpg");
-        std::fs::write(root.join("assets/logo.jpg"),logo).unwrap();
-        let listener=TcpListener::bind("127.0.0.1:0").unwrap();
-        let address=listener.local_addr().unwrap();
-        let folder=root.clone();
-        let server=std::thread::spawn(move || {
-            let (mut stream,_)=listener.accept().unwrap();
-            stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
-            let mut header=Vec::new();
+        let logo = include_bytes!("../../../assets/browser-logo.jpg");
+        std::fs::write(root.join("assets/logo.jpg"), logo).unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let folder = root.clone();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut header = Vec::new();
             while !header.ends_with(b"\r\n\r\n") {
-                let mut byte=[0];stream.read_exact(&mut byte).unwrap();header.push(byte[0]);
+                let mut byte = [0];
+                stream.read_exact(&mut byte).unwrap();
+                header.push(byte[0]);
             }
-            serve_resource(&mut stream,&folder,"assets/logo.jpg");
+            serve_resource(&mut stream, &folder, "assets/logo.jpg");
         });
-        let mut client=TcpStream::connect(address).unwrap();
-        client.write_all(b"GET /test/assets/logo.jpg HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        let mut response=Vec::new();client.read_to_end(&mut response).unwrap();server.join().unwrap();
-        let split=response.windows(4).position(|x| x==b"\r\n\r\n").unwrap()+4;
-        let header=String::from_utf8_lossy(&response[..split]);
-        assert!(header.starts_with("HTTP/1.1 200 OK"));assert!(header.contains("Content-Type: image/jpeg"));
-        assert_eq!(&response[split..],logo);
-        assert!(resource(&root,"../outside").is_none());
-        assert_eq!(media_type(Path::new("unknown.bin")),None);
+        let mut client = TcpStream::connect(address).unwrap();
+        client
+            .write_all(b"GET /test/assets/logo.jpg HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .unwrap();
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).unwrap();
+        server.join().unwrap();
+        let split = response.windows(4).position(|x| x == b"\r\n\r\n").unwrap() + 4;
+        let header = String::from_utf8_lossy(&response[..split]);
+        assert!(header.starts_with("HTTP/1.1 200 OK"));
+        assert!(header.contains("Content-Type: image/jpeg"));
+        assert_eq!(&response[split..], logo);
+        assert!(resource(&root, "../outside").is_none());
+        assert_eq!(media_type(Path::new("unknown.bin")), None);
         std::fs::remove_dir_all(root).unwrap();
     }
 }

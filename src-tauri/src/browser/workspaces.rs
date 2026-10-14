@@ -42,9 +42,10 @@ pub(super) fn ensure(root: &Path) -> Result<PathBuf, String> {
     let slot = db.browser_slot()?;
     let path = slot_path(root, &slot)?;
     private::directory(&path)?;
-    let seed = db
-        .browser_seed(&slot)?
-        .unwrap_or_else(|| browser_link::seed(&slot, 0).max(1));
+    let seed = match db.browser_seed(&slot)? {
+        Some(seed) => seed,
+        None => browser_link::seed(&db.browser_draft()?.unwrap_or_else(|| slot.clone()), 0).max(1),
+    };
     let stamp = path.join("seed.owner");
     profile::check_path(root, &stamp)?;
     let bound = db.browser_link()?.enabled;

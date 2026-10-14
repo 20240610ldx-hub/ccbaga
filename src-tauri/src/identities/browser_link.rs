@@ -1,5 +1,5 @@
-// [INPUT]: 身份 SQLite 事务、本软件随机身份 ID 与浏览器资料槽位。
-// [OUTPUT]: 身份到独占浏览器资料的绑定、稳定非零种子、与身份恢复同步提交的选择指针。
+// [INPUT]: 身份 SQLite 事务、本软件随机身份 ID、浏览器资料槽位及只读有界本地账号显示字段。
+// [OUTPUT]: 身份到独占浏览器资料的绑定、稳定非零种子、同步提交的选择指针与不含凭据的绑定身份摘要。
 // [POS]: 浏览器联动的持久元数据；不读取 Cookie，不保存网站凭据，不把账号 UUID 暴露给引擎。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::{
@@ -13,6 +13,14 @@ use serde::Serialize;
 pub struct BrowserLink {
     pub enabled: bool,
     pub bound_ids: Vec<String>,
+}
+#[derive(Clone, Serialize)]
+pub struct BrowserIdentity {
+    pub linked: bool,
+    pub status: &'static str,
+    pub name: Option<String>,
+    pub email: Option<String>,
+    pub organization: Option<String>,
 }
 fn get(tx: &Transaction<'_>, key: &str) -> Result<Option<String>, String> {
     tx.query_row("SELECT value FROM state WHERE key=?1", [key], |r| r.get(0))
@@ -172,16 +180,73 @@ pub(super) fn merge(tx: &Transaction<'_>, old: &str, retained: &str) -> Result<(
     Ok(())
 }
 impl Database {
-    pub(super) fn browser_draft(&self) -> Result<Option<String>, String> {
+    pub(crate) fn browser_draft(&self) -> Result<Option<String>, String> {
         if !self.browser_link()?.enabled {
             return Ok(None);
         }
         let slot = self.browser_slot()?;
-        if !valid_id(&slot) {
-            return Ok(None);
+        let draft = if valid_id(&slot) {
+            slot.clone()
+        } else {
+            self.get("browser.draft")?.ok_or("浏览器资料选择无效。")?
+        };
+        if !valid_id(&draft) {
+            return Err("浏览器资料选择无效。".into());
         }
-        let occupied:i64=self.connection.query_row("SELECT (SELECT COUNT(*) FROM identities WHERE id=?1)+(SELECT COUNT(*) FROM browser_bindings WHERE slot=?1 OR identity=?1)",[&slot],|r|r.get(0)).map_err(error)?;
-        Ok((occupied == 0).then_some(slot))
+        let occupied:i64=self.connection.query_row("SELECT (SELECT COUNT(*) FROM identities WHERE id=?1)+(SELECT COUNT(*) FROM browser_bindings WHERE slot=?2 OR identity=?1)",params![draft,slot],|r|r.get(0)).map_err(error)?;
+        Ok((occupied == 0).then_some(draft))
+    }
+    pub fn browser_identity(
+        &self,
+        vault: &std::path::Path,
+        home: &std::path::Path,
+    ) -> Result<BrowserIdentity, String> {
+        let linked = self.browser_link()?.enabled;
+        if !linked {
+            return Ok(BrowserIdentity {
+                linked,
+                status: "unlinked",
+                name: None,
+                email: None,
+                organization: None,
+            });
+        }
+        let slot = self.browser_slot()?;
+        let bound=self.connection.query_row("SELECT i.id,i.name FROM browser_bindings b JOIN identities i ON i.id=b.identity WHERE b.slot=?1",[slot],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).optional().map_err(error)?;
+        let current = super::profile::read(home);
+        let local = super::catalog::current_id(vault, home, self);
+        let unavailable = current.unavailable || local.is_err();
+        let matches = bound
+            .as_ref()
+            .is_some_and(|(id, _)| local.as_ref().ok().and_then(|id| id.as_ref()) == Some(id));
+        let status = if unavailable {
+            "unknown"
+        } else if bound.is_some() && !matches {
+            "mismatch"
+        } else if !current.present {
+            "empty"
+        } else if matches {
+            "linked"
+        } else {
+            "draft"
+        };
+        let show_local = !unavailable && (matches || bound.is_none());
+        let name = if show_local {
+            current
+                .display_name
+                .clone()
+                .or_else(|| current.email.clone())
+                .or_else(|| bound.as_ref().map(|(_, name)| name.clone()))
+        } else {
+            bound.map(|(_, name)| name)
+        };
+        Ok(BrowserIdentity {
+            linked,
+            status,
+            name,
+            email: show_local.then_some(current.email).flatten(),
+            organization: show_local.then_some(current.organization).flatten(),
+        })
     }
     pub fn browser_link(&self) -> Result<BrowserLink, String> {
         let mut query=self.connection.prepare("SELECT identity FROM browser_bindings WHERE identity IN (SELECT id FROM identities)").map_err(error)?;

@@ -14,7 +14,7 @@ import '../src/index.css';
 import '../src/style.css';
 const id=(number:number)=>number.toString(16).padStart(32,'0');
 const user={present:true,display_name:'Fixture user',email:'fixture@example.invalid',organization:'Fixture team',unavailable:false};
-const state:IdentityState={browser:{enabled:false,bound_ids:[]},browser_warning:null,active:id(1),recovery:null,running:true,current:{...user},records:Array.from({length:40},(_,n)=>({id:id(n+1),name:`Identity ${n+1}`,saved_at:1780000000000+n,bytes:2048,policy:{...defaultPolicy}}))};
+const state:IdentityState={browser:{enabled:true,bound_ids:[]},browser_warning:null,active:id(1),recovery:null,running:true,current:{...user},records:Array.from({length:40},(_,n)=>({id:id(n+1),name:`Identity ${n+1}`,saved_at:1780000000000+n,bytes:2048,policy:{...defaultPolicy}}))};
 const commands:{command:string;args:any}[]=[];
 let fail='';
 const fixture={commands,state,language:setLocale,setFailure:(command:string)=>{fail=command;},recover:()=>{state.recovery=id(1);}};

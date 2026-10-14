@@ -1,5 +1,5 @@
 // [INPUT]: 本机指纹引擎（优先 /Applications/CCBaga-B.app，回退 ~/Applications）、配置/资料边界、真实浏览器观测、宿主界面语言与共享操作日志。
-// [OUTPUT]: 浏览器设置/启动/清理与环境核验；宿主重启重新连接现有浏览器，回报时间明确标识通讯状态；上下文提供当前界面语言；launch.args 与 SQLite 当前身份共用独占资料/指纹参数，恢复期间阻断启动。
+// [OUTPUT]: 有界绑定身份上下文与浏览器设置/启动/清理和环境核验；宿主重启重新连接现有浏览器，回报时间明确标识通讯状态；上下文提供当前界面语言；launch.args 与 SQLite 当前身份共用独占资料/指纹参数，恢复期间阻断启动。
 // [POS]: 独立浏览器模块的唯一编排入口；改变资料前必须退出浏览器；不自行改系统默认浏览器，只发起系统确认。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 pub(crate) mod config;
@@ -69,6 +69,7 @@ struct Session {
 }
 #[derive(Clone, Serialize)]
 pub struct Context {
+    identity: crate::identities::browser_link::BrowserIdentity,
     ui_language: String,
     exit_services: &'static [&'static str],
     region: Option<&'static crate::regions::Region>,
@@ -94,6 +95,16 @@ pub struct Snapshot {
     report_received_at: Option<u64>,
     machine_exit: Option<Exit>,
     checks: Vec<Check>,
+}
+fn identity_context(
+    app: &tauri::AppHandle,
+) -> Result<crate::identities::browser_link::BrowserIdentity, String> {
+    let root = root(app)?;
+    let vault = root
+        .parent()
+        .ok_or("应用目录不可用。")?
+        .join("identity-vault");
+    workspaces::database(&root)?.browser_identity(&vault, &crate::cleaner::identity::root()?)
 }
 fn root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(app
@@ -185,6 +196,7 @@ fn open_session(
     let token = server::nonce()?;
     let page = format!("http://127.0.0.1:{port}/{token}/browser.html");
     let context = Context {
+        identity: identity_context(app)?,
         ui_language: crate::ui_language::ui_language_read(app.clone()),
         exit_services: &network::SERVICES,
         region: crate::regions::matching(&config.language(machine), &config.timezone(machine)),

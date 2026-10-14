@@ -1,6 +1,6 @@
 /**
  * [INPUT]: Node.js 标准管道、已锁定 playwright-core、固定引擎、Vite 与 tests/ 的虚构 Tauri IPC。
- * [OUTPUT]: 工牌顺序/数量、横滚弹簧/视差、双语、保留选项与确认/删除/失败/恢复的真实 DOM 交互验收。
+ * [OUTPUT]: 默认勾选/关闭确认取消与工牌顺序/数量、横滚弹簧/视差、双语、保留选项与确认/删除/失败/恢复的真实 DOM 交互验收。
  * [POS]: 发布前无头行为回归；无截图、无真实账号/文件修改，不加载原生宿主，不允许外网请求。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -42,15 +42,19 @@ try{
  assert.match(await cards.first().innerText(),/清空本地登录身份/);checks++;
  const geometry=await cards.evaluateAll(nodes=>nodes.slice(0,3).map(node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};}));
  assert.equal(geometry[0].y,geometry[2].y);assert(geometry[2].x+geometry[2].width<1040-150);assert(Math.abs(geometry[0].width/geometry[0].height-54/85.6)<.01);checks++;
+ assert.equal(await page.getByRole('checkbox',{name:'联动浏览器',exact:true}).isChecked(),true);
  await page.getByRole('checkbox',{name:'联动浏览器',exact:true}).click();
  let linking=page.getByRole('dialog');await linking.waitFor();
- assert.equal(await linking.getByRole('checkbox',{name:'将现有浏览器资料关联给当前身份'}).isChecked(),false);
  await linking.getByRole('button',{name:'取消',exact:true}).click();
- assert.equal(await page.getByRole('checkbox',{name:'联动浏览器',exact:true}).isChecked(),false);
+ assert.equal(await page.getByRole('checkbox',{name:'联动浏览器',exact:true}).isChecked(),true);
  await page.getByRole('checkbox',{name:'联动浏览器',exact:true}).click();
  await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
- await page.waitForFunction(()=>(window as any).identityFixture.state.browser.enabled===true);
- assert.equal(await page.getByRole('checkbox',{name:'联动浏览器',exact:true}).isChecked(),true);checks++;
+ await page.waitForFunction(()=>(window as any).identityFixture.state.browser.enabled===false);
+ await page.getByRole('checkbox',{name:'联动浏览器',exact:true}).click();
+ linking=page.getByRole('dialog');
+ assert.equal(await linking.getByRole('checkbox',{name:'将现有浏览器资料关联给当前身份'}).isChecked(),false);
+ await linking.getByRole('button',{name:'确认',exact:true}).click();
+ await page.waitForFunction(()=>(window as any).identityFixture.state.browser.enabled===true);checks++;
  const current=page.locator('.identity-card.current');
  const light=await current.evaluate(node=>getComputedStyle(node,'::before').boxShadow);assert.match(light,/67, 228, 132/);
  await page.mouse.move(geometry[1].x+150,geometry[1].y+85);

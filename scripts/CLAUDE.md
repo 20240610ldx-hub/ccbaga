@@ -11,8 +11,8 @@ claude-cli.ps1: Windows 唯一目录暂存/逐文件哈希回滚与失败保留�
 package-browser.ps1: Windows 固定引擎前置核验，不打包用户资料或私钥。
 test-skill-install.ts: Agent Skills metadata/完整公开文件与 npm skills 1.7.2 的四项真实安装；临时 HOME 和缓存，关闭统计，验证共享目录、完整文件与无 symlink。
 test-network-diagnostics.ts: 共用隔离引擎验证真实网络页的 Claude 出口四态、逐域 403 原因、命令异常/空返回拒绝、重测清旧结果和双语；不访问真实网络。
-test-browser-verification.ts: 复用隔离 Playwright 引擎，真实 browser.html 的三态背景/波纹、原因、图片实际解码、紧凑布局、重测和双语 DOM 回归；虚构本机 HTTP 回报，无截图/真实账号。
-test-identities-ui.ts: Node.js 标准管道 + 固定引擎 + playwright-core 的隔离 DOM 模拟；40 个虚构账号验证当前槽位去重/无最近使用卡片、竖式工牌、弹簧/视差、Alert 安全默认、双语、保留选择与切换/删除/失败/恢复，临时 HOME/XDG，不调用真实 IPC、不截图或外连。
+test-browser-verification.ts: 顶部身份卡顺序、双语与不匹配/空身份/未联动 DOM 回归； 复用隔离 Playwright 引擎，真实 browser.html 的三态背景/波纹、原因、图片实际解码、紧凑布局、重测和双语 DOM 回归；虚构本机 HTTP 回报，无截图/真实账号。
+test-identities-ui.ts: 默认勾选、关闭确认/取消与恢复联动； Node.js 标准管道 + 固定引擎 + playwright-core 的隔离 DOM 模拟；40 个虚构账号验证当前槽位去重/无最近使用卡片、竖式工牌、弹簧/视差、Alert 安全默认、双语、保留选择与切换/删除/失败/恢复，临时 HOME/XDG，不调用真实 IPC、不截图或外连。
 test-windows.py: Windows 原生/npm/WinGet 程序隔离样本的卸载重装；离线原生安装器字节/文本响应、安装/版本失败恢复哈希、junction 阻断回滚保留备份、下载/解析失败保留旧程序、安装失败不报告成功与自定义启动器拒绝；CI 实际语言/区域写入、输入法保留和完整还原。
 fetch-browser.py: 固定上游引擎与 SHA-256，核验版本/架构；在目标旁完整复制后公开三平台引擎，失败清理暂存目录，清理失败报告路径；干净 CI 检出不依赖维护者本机引擎。
 test-fetch-browser.py: 三平台真实临时文件树与显式下载/摘要/平台工具替身，回归复制失败后可重试、完整资源/权限/链接、既有引擎不变与清理失败路径；不下载或运行真实引擎。
