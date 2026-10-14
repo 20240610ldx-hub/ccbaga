@@ -20,7 +20,7 @@ Saving a recognized account updates its existing slot and preserves its custom n
 
 Each update writes a new immutable archive generation. The archive is synchronized and fully authenticated before SQLite commits its pointer together with the recovery marker. Old generations are collected only after a committed replacement; a rejected database update leaves the previous generation intact. The recovery checkpoint is independent and cannot overwrite the snapshot needed for rollback.
 
-SQLite v1 catalogs migrate transactionally to v2. Legacy snapshots are indexed after archive verification. Duplicate recognized slots converge after a completed operation. Damaged and unidentified snapshots are not silently merged.
+SQLite v1/v2 catalogs migrate transactionally to v3. Legacy snapshots are indexed after archive verification. Duplicate recognized slots converge after a completed operation. Damaged and unidentified snapshots are not silently merged.
 
 New archives use [Zstandard](https://github.com/facebook/zstd) level 3 with a checksum inside the existing AES-256-GCM authenticated container. Old gzip archives remain readable. Decoders validate the encrypted terminator, reject appended or truncated data and bound the Zstd window. Scratch extraction files do not need per-file synchronization because the durable authenticated archive remains the recovery source; restored workspace files are synchronized before completion.
 
@@ -39,3 +39,15 @@ cargo test --manifest-path src-tauri/Cargo.toml synthetic_switch_and_compression
 A local macOS debug run with 500 synthetic 256 KiB session files measured approximately 0.72 seconds to stash and 3.19 seconds to restore. A separate 13.5 MB JSONL sample compressed to 1.56 MB with Zstd versus 1.69 MB with gzip. These are synthetic measurements, not a latency or size guarantee for real accounts or other platforms. The normal test suite does not enforce machine-dependent timing thresholds.
 
 The vault is protected local storage, not an isolation boundary against other programs running as the same user or an administrator. Encryption does not remove server records or guarantee that installed software cannot discover the vault.
+
+## Linked browser data
+
+Enable **Link browser** in Claude identities to associate each identity with a separate Chromium user data directory and configuration. The default is a new directory; adopting existing browser data requires an explicit choice. Each directory uses Chromium's internal `Default` profile, with separate cookies and site storage. Switching closes the linked browser normally and reopens the selected directory. Save browser work first.
+
+SQLite commits the browser selection with the identity switch and restores the previous selection during rollback. An interrupted identity operation blocks browser startup until recovery. An empty identity receives a fresh browser directory. Reopening a saved identity reuses its directory; browser data is not compressed, copied or merged during switching. A failure to reopen the browser is reported separately after a committed identity change, with a retry action.
+
+The initial nonzero 32-bit fingerprint seed is derived from CCBaga's own random identity ID using SHA-256, with collisions registered and resolved locally. An unbound fresh browser directory reserves its random ID for the first saved identity, avoiding a seed change at that first save. It is not derived from an Anthropic account UUID or token. Renaming or refreshing credentials does not change it. Explicit fingerprint changes remain local to that identity and persist across switches.
+
+Browser data remains outside the encrypted identity archive. Chromium and the OS manage its storage protection; this feature does not make the browser directory a CCBaga-encrypted vault. Unlinking returns to the original shared browser directory and retains identity directories. Deleting a saved identity retains browser data by default; deleting the associated browser data requires a separate selection and refuses a directory that is in use. No claim of secure disk erasure is made.
+
+First use still requires website sign-in. Restoring Code/Desktop credentials does not create website cookies or verify that all clients use the same account. Separate profiles do not change the public IP, prevent server-side correlation, or guarantee that browsers, extensions and websites make no external connections. Custom profiles created manually inside Chromium remain outside the identity-card model. See the [Chromium user data directory reference](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/user_data_dir.md).

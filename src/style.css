@@ -459,3 +459,8 @@ h3 { margin: 0; font-size: 13px; font-weight: 500; }
 .identity-delete-warning strong { font-size:12px; font-weight:550; line-height:1.6; }
 .identity-delete-alert .identity-delete-button { background:linear-gradient(#c94b3a,#b73828); color:#fff; border-color:#a62b20; }
 .identity-delete-alert .identity-delete-button:hover { background:linear-gradient(#d65341,#c43e2d); }
+
+/* ----- 身份与浏览器联动：复用卡片与确认窗，保持横栏克制 ----- */
+.identity-library-controls { display:flex;align-items:center;gap:20px;flex-wrap:wrap; }
+.identity-library-controls label { font-size:12px; }
+.identity-browser-badge { align-self:flex-start;font-size:10px;line-height:1.5;color:#b4b4a9;border:1px solid #ffffff24;padding:2px 6px;border-radius:4px;margin-block:4px; }

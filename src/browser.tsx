@@ -1,6 +1,6 @@
 /**
  * [INPUT]: Cromma UI、原生浏览器命令、带回报时间的真实观测事件、共用地区契约与共享活动日志和 YAML 文案。
- * [OUTPUT]: 指纹配置、独立浏览器启动、缓存/站点数据清理、目标地区与机器一致性核验、任务锁状态与 CCBaga-B 一键设为默认浏览器（系统确认）。
+ * [OUTPUT]: 当前身份的指纹配置、独立浏览器启动、缓存/站点数据清理、目标地区与机器一致性核验、任务锁状态与 CCBaga-B 一键设为默认浏览器（系统确认）。
  * [POS]: 浏览器交互边界；只展示配置、操作与真实观测，页面加载只读，系统对齐和登录删除必须由用户选择；永久站点删除使用 AlertDialog 警告。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -88,7 +88,7 @@ export function BrowserPanel({ onBusy }: {
     const cache = state?.cache.filter(x => !x.login) || [];
     function edit<K extends keyof BrowserConfig>(key: K, value: BrowserConfig[K]) { setDraft(old => old ? { ...old, [key]: value } : old); }
     return <section className="system-page browser-page"><div className="cleanup-title"><div><h1>{t("浏览器环境")}</h1></div><Button size="small" variant="secondary" disabled={!!busy} onClick={() => void act('browser_read')}>{t("刷新状态")}</Button></div>
-    <div className="browser-default"><strong>{state?.running ? t("运行中") : t("未运行")}</strong><Button variant="secondary" size="small" disabled={asking || !preferred?.installed || preferred?.is_default} loading={asking} onClick={() => void makeDefault()}>{preferred?.is_default ? t("已是默认浏览器") : t("设为默认浏览器")}</Button></div>
+    <div className="browser-default"><strong>{state?.running ? t("运行中") : t("未运行")}{state?.identity_linked&&<> · {t("独立浏览器")}</>}</strong><Button variant="secondary" size="small" disabled={asking || !preferred?.installed || preferred?.is_default} loading={asking} onClick={() => void makeDefault()}>{preferred?.is_default ? t("已是默认浏览器") : t("设为默认浏览器")}</Button></div>
     {defaultNote && <p className="system-feedback" role="status">{t(defaultNote)}</p>}
     {error && <p role="alert" className="system-feedback error">{t(error)}</p>}
     <div className="browser-actions"><Button variant="ink" disabled={disabled || !state?.engine_ready || !!changed} loading={busy === 'browser_launch'} onClick={() => void act('browser_launch')}>{state?.running ? t("重新打开实测页") : t("打开浏览器并实测")}</Button><Button variant="secondary" disabled={disabled || !state?.running} loading={busy === 'browser_quit'} onClick={() => void act('browser_quit')}>{t("正常退出浏览器")}</Button><Button variant="secondary" disabled={disabled} loading={busy === 'browser_check'} onClick={() => void act('browser_check')}>{t("检测机器出口")}</Button><Button variant="ghost" disabled={disabled || state?.running || !!changed} onClick={() => setConfirm('align')}>{t("对齐美国系统环境")}</Button></div>

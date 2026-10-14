@@ -66,10 +66,16 @@ fn repeated_accounts_update_one_slot_and_keep_latest_tokens_and_history() {
     let r = Reporter::channel(None);
     let p = Policy::default();
     let mut s = store::Store::open(&f.vault, &f.home).unwrap();
+    s.db.configure_browser(true,false,None).unwrap();
+    let initial_browser = s.db.browser_slot().unwrap();
     f.login("A", "one", "a-first");
     f.write(".claude/history.jsonl", b"a-history");
     s.switch("empty", "A custom", &p, &r).unwrap();
     let a = s.records()[0].id.clone();
+    assert_eq!(a, initial_browser);
+    assert_eq!(s.db.browser_for(&a).unwrap().as_deref(), Some(initial_browser.as_str()));
+    let browser_b = s.db.browser_slot().unwrap();
+    assert_ne!(browser_b, initial_browser);
     f.login("B", "one", "b-first");
     f.write(".claude/history.jsonl", b"b-history");
     s.switch(&a, "B custom", &p, &r).unwrap();
@@ -101,6 +107,8 @@ fn repeated_accounts_update_one_slot_and_keep_latest_tokens_and_history() {
             format!("a-new-{n}").as_bytes()
         );
         assert_eq!(s.records().len(), 2);
+        assert_eq!(s.db.browser_slot().unwrap(), initial_browser);
+        assert_eq!(s.db.browser_for(&b).unwrap().as_deref(),Some(browser_b.as_str()));
     }
     assert_eq!(
         s.records().iter().find(|row| row.id == a).unwrap().name,

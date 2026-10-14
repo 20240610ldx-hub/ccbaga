@@ -1,5 +1,5 @@
 // [INPUT]: rusqlite/内嵌 SQLite、私有保险库目录和脱敏身份元数据与本机加盐的账号索引。
-// [OUTPUT]: 身份目录、保留策略、当前身份、持久切换/恢复状态与身份移除事务。
+// [OUTPUT]: 身份目录、保留策略、当前身份、SQLite v3 浏览器绑定与持久切换/恢复状态和身份移除事务。
 // [POS]: 保险库的索引事务；凭据和会话正文仅进入加密归档，不进入数据库。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use rusqlite::{params, Connection, OptionalExtension};
@@ -18,9 +18,9 @@ pub struct Record {
     pub account_key: Option<String>,
 }
 pub struct Database {
-    connection: Connection,
+    pub(super) connection: Connection,
 }
-fn error(_: rusqlite::Error) -> String {
+pub(super) fn error(_: rusqlite::Error) -> String {
     "身份数据库无法读写；未提交身份切换。".into()
 }
 impl Database {
@@ -55,9 +55,10 @@ impl Database {
                 "ALTER TABLE identities ADD COLUMN account_key TEXT; PRAGMA user_version=2;",
             )
             .map_err(error)?;
-        } else if version > 2 {
+        } else if version > 3 {
             return Err("身份目录版本较新，请更新应用。".into());
         }
+        tx.execute_batch("CREATE TABLE IF NOT EXISTS browser_bindings(identity TEXT PRIMARY KEY,slot TEXT NOT NULL UNIQUE,seed INTEGER NOT NULL UNIQUE); PRAGMA user_version=3;").map_err(error)?;
         tx.commit().map_err(error)?;
         Ok(Self { connection })
     }
@@ -116,10 +117,11 @@ impl Database {
         }
         let records = self.records()?;
         let tx = self.connection.transaction().map_err(error)?;
-        let mut seen = std::collections::HashMap::new();
+        let mut seen = std::collections::HashMap::<String, String>::new();
         for record in records {
             if let Some(key) = record.account_key.filter(|k| !k.is_empty()) {
                 if let Some(id) = seen.get(&key) {
+                    super::browser_link::merge(&tx, &record.id, id)?;
                     tx.execute(
                         "UPDATE state SET value=?2 WHERE key='active' AND value=?1",
                         params![record.id, id],
@@ -189,10 +191,12 @@ impl Database {
         .map_err(error)?;
         tx.execute("INSERT OR REPLACE INTO state VALUES('target',?1)", [target])
             .map_err(error)?;
+        super::browser_link::pending(&tx, record, target)?;
         tx.commit().map_err(error)
     }
     pub fn complete(&mut self, active: &str) -> Result<(), String> {
         let tx = self.connection.transaction().map_err(error)?;
+        super::browser_link::complete(&tx, active)?;
         tx.execute("INSERT OR REPLACE INTO state VALUES('active',?1)", [active])
             .map_err(error)?;
         tx.execute("DELETE FROM state WHERE key IN ('recovery','target')", [])

@@ -11,6 +11,7 @@ import {tmpdir} from 'node:os';
 import {createServer} from 'vite';
 import {chromium} from 'playwright-core';
 import {testBrowserVerification} from './test-browser-verification.ts';
+import {testBrowserProfiles} from './test-browser-profiles.ts';
 import {testNetworkDiagnostics} from './test-network-diagnostics.ts';
 const engine=process.platform==='darwin'?'Browser.app/Contents/MacOS/Chromium':process.platform==='win32'?'WindowsBrowser/chrome.exe':'LinuxBrowser/chrome';
 const server=await createServer({server:{host:'127.0.0.1',port:0,strictPort:false,watch:{ignored:['**/src-tauri/**','**/browser-runtime/**','**/releases/**','**/dist/**']}},optimizeDeps:{include:['@tauri-apps/api/mocks']}});
@@ -41,6 +42,15 @@ try{
  assert.match(await cards.first().innerText(),/清空本地登录身份/);checks++;
  const geometry=await cards.evaluateAll(nodes=>nodes.slice(0,3).map(node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};}));
  assert.equal(geometry[0].y,geometry[2].y);assert(geometry[2].x+geometry[2].width<1040-150);assert(Math.abs(geometry[0].width/geometry[0].height-54/85.6)<.01);checks++;
+ await page.getByRole('checkbox',{name:'联动浏览器',exact:true}).click();
+ let linking=page.getByRole('dialog');await linking.waitFor();
+ assert.equal(await linking.getByRole('checkbox',{name:'将现有浏览器资料关联给当前身份'}).isChecked(),false);
+ await linking.getByRole('button',{name:'取消',exact:true}).click();
+ assert.equal(await page.getByRole('checkbox',{name:'联动浏览器',exact:true}).isChecked(),false);
+ await page.getByRole('checkbox',{name:'联动浏览器',exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'确认',exact:true}).click();
+ await page.waitForFunction(()=>(window as any).identityFixture.state.browser.enabled===true);
+ assert.equal(await page.getByRole('checkbox',{name:'联动浏览器',exact:true}).isChecked(),true);checks++;
  const current=page.locator('.identity-card.current');
  const light=await current.evaluate(node=>getComputedStyle(node,'::before').boxShadow);assert.match(light,/67, 228, 132/);
  await page.mouse.move(geometry[1].x+150,geometry[1].y+85);
@@ -74,6 +84,11 @@ try{
  await target.getByRole('button',{name:'切换',exact:true}).click();
  await page.getByRole('dialog').getByRole('button',{name:'确认暂存并切换'}).click();await page.getByText('Fixture team',{exact:true}).waitFor();checks++;
  assert.equal(await target.count(),0);checks++;
+ const bound=cards.filter({has:page.getByRole('heading',{name:'Identity 1',exact:true})});
+ await bound.getByRole('button',{name:'删除',exact:true}).click();
+ const browserDeletion=page.getByRole('alertdialog');
+ assert.equal(await browserDeletion.getByRole('checkbox',{name:'同时永久删除关联浏览器资料'}).isChecked(),false);
+ await browserDeletion.getByRole('button',{name:'取消',exact:true}).click();checks++;
  const other=page.locator('.identity-card:not(.current)').filter({has:page.getByRole('heading',{name:'Identity 4',exact:true})});
  await other.getByRole('button',{name:'重命名',exact:true}).click();
  await page.getByRole('dialog').getByRole('textbox',{name:'身份名称'}).fill('Renamed fixture');
@@ -106,5 +121,6 @@ try{
  assert.equal(errors.length,0,errors.join('\n'));
  checks+=await testBrowserVerification(browser,base);
  checks+=await testNetworkDiagnostics(browser,base);
+ checks+=await testBrowserProfiles(resolve('browser-runtime',engine),base,temporary,env);
  console.log(`${checks} identity, browser and network UI simulation checks passed; no native commands or user data used.`);
 }finally{await browser.close();await server.close();await rm(temporary,{recursive:true,force:true});}

@@ -133,6 +133,7 @@ fn main() {
             cleaner::cleaner_stop,
             cleaner::cleaner_processes,
             identities::identities_read,
+            identities::identities_browser,
             identities::identities_stop,
             identities::identities_switch,
             identities::identities_rename,

@@ -1,5 +1,5 @@
 /*
- * [INPUT]: LaunchServices 启动 CCBaga-B 时的参数；宿主写入的 launch.args（每行一个 Chromium 参数），缺失时仅指定同一独立资料目录。
+ * [INPUT]: LaunchServices 参数、宿主写入的 launch.args 与身份切换阻断文件；新宿主必须发布本次启动参数。
  * [OUTPUT]: 宿主 CCBaga-A 未运行时在后台带起它；读取宿主写入的 start.url（宿主刚启动时最多等 8 秒，并确认回环端口可连），
  *           作为首个标签追加在参数末尾；随后以原进程编号 exec 同目录的 Chromium。链接打开经 Apple Event 送达，不受影响。
  * [POS]: CCBaga-B 应用包的 CFBundleExecutable。宿主直接启动 Contents/MacOS/Chromium，不经过本入口。
@@ -121,13 +121,19 @@ int main(int argc, char **argv) {
         const char *home = getenv("HOME");
         char file[PATH_MAX];
         snprintf(file, sizeof(file), "%s/Library/Application Support/" HOST_ID "/browser/launch.args", home ? home : "");
+        char pending[PATH_MAX];
+        snprintf(pending, sizeof(pending), "%s/Library/Application Support/" HOST_ID "/browser/identity-switch.pending", home ? home : "");
+        struct stat args_stat;
+        int ready = 0;
+        for (int attempt = 0; attempt < 80; attempt++) {
+            if (access(pending, F_OK) != 0 && stat(file, &args_stat) == 0 && (!fresh_host || args_stat.st_mtime >= began)) { ready = 1; break; }
+            usleep(100 * 1000);
+        }
+        if (!ready) { fputs("CCBaga-B: 等待宿主完成身份资料选择，请在主应用中恢复或重试。\n", stderr); return 1; }
         FILE *f = fopen(file, "r");
         if (!f) {
-            /* 宿主尚未写入参数：至少沿用同一独立资料，不落到 Chromium 默认资料。 */
-            char profile[PATH_MAX + 32];
-            snprintf(profile, sizeof(profile), "--user-data-dir=%s/Library/Application Support/" HOST_ID "/browser/profile", home ? home : "");
-            next[n++] = strdup(profile);
-            next[n++] = "--profile-directory=Default";
+            /* 不回退到其他资料，避免联动身份与网页登录错位。 */
+            return 1;
         }
         if (f) {
             char line[8192];

@@ -4,9 +4,9 @@
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 #[cfg(target_os = "linux")]
 use crate::linux::*;
+use crate::native::decode;
 #[cfg(target_os = "windows")]
 use crate::windows::*;
-use crate::native::decode;
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "macos")]
 use std::ffi::c_char;
@@ -122,7 +122,12 @@ pub fn load(root: &Path) -> Result<Config, String> {
     }
 }
 pub fn save(root: &Path, config: &Config) -> Result<(), String> {
-    super::profile::write_json(&root.join("config.json"), config)
+    super::profile::check_path(root, &root.join("config.json"))?;
+    crate::identities::private::directory(root)?;
+    crate::identities::private::write(
+        &root.join("config.json"),
+        &serde_json::to_vec_pretty(config).map_err(|_| "配置编码失败。")?,
+    )
 }
 pub fn arguments(
     config: &Config,

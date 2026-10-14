@@ -120,9 +120,10 @@ fn start_windows_companion(app: &tauri::AppHandle, urls: &[String]) -> Result<()
     let engine = prepare_engine(app)?;
     crate::startup_trace("engine ready");
     let root = root(app)?;
-    let profile = root.join("profile");
+    let settings = workspaces::ensure(&root)?;
+    let profile = settings.join("profile");
     profile::check_path(&root, &profile)?;
-    let config = config::load(&root)?;
+    let config = config::load(&settings)?;
     crate::startup_trace("config ready");
     let machine = config::machine()?;
     crate::startup_trace("machine ready");
@@ -131,6 +132,7 @@ fn start_windows_companion(app: &tauri::AppHandle, urls: &[String]) -> Result<()
         profile::preferences(&profile, &config, &machine)?;
     }
     write_launch_args(&root, &config, &machine, &profile, &version(&engine))?;
+    workspaces::unblock(&root)?;
     crate::startup_trace("preferences ready");
     let page = open_session(app, &config, &machine, version(&engine))?;
     crate::startup_trace("session ready");

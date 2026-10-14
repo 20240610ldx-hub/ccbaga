@@ -76,15 +76,17 @@ fn start_linux_companion(app: &tauri::AppHandle, urls: &[String]) -> Result<(), 
     let _guard = state.gate.lock().unwrap();
     let engine = prepare_engine(app)?;
     let root = root(app)?;
-    let profile = root.join("profile");
+    let settings = workspaces::ensure(&root)?;
+    let profile = settings.join("profile");
     profile::check_path(&root, &profile)?;
-    let config = config::load(&root)?;
+    let config = config::load(&settings)?;
     let machine = config::machine()?;
     config.validate(&machine)?;
     if !profile::running(&profile)? {
         profile::preferences(&profile, &config, &machine)?;
     }
     write_launch_args(&root, &config, &machine, &profile, &version(&engine))?;
+    workspaces::unblock(&root)?;
     let page = open_session(app, &config, &machine, version(&engine))?;
     let mut child = Command::new(binary(&engine))
         .args(config::arguments(

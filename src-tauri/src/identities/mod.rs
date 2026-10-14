@@ -1,13 +1,16 @@
 // [INPUT]: SQLite 身份目录、加密压缩保险库、Cleaner 全局事务锁与 Tauri 进度通道。
-// [OUTPUT]: 当前/空/已保存身份、有界账号显示信息、用户保留选项、确认后的切换/恢复/重命名/直接删除命令。
+// [OUTPUT]: 当前/空/已保存身份、有界账号显示信息、用户保留选项、浏览器联动确认及确认后的切换/恢复/重命名/直接删除命令。
 // [POS]: GUI 身份管理的原生入口；不提供凭据读取、任意文件或网络接口。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 mod archive;
+pub(crate) mod browser_link;
+#[cfg(test)]
+mod browser_link_tests;
 mod catalog;
 mod codec;
 mod compression;
 mod credentials;
-mod database;
+pub(crate) mod database;
 #[cfg(test)]
 mod optimization_tests;
 pub(crate) mod private;
@@ -68,6 +71,8 @@ impl Policy {
 }
 #[derive(Serialize)]
 pub struct State {
+    pub browser: browser_link::BrowserLink,
+    pub browser_warning: Option<String>,
     pub records: Vec<database::Record>,
     pub active: String,
     pub recovery: Option<String>,
@@ -104,6 +109,13 @@ fn vault(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 fn state(app: &tauri::AppHandle) -> Result<State, String> {
     let db = database::Database::open(&vault(app)?)?;
     Ok(State {
+        browser: db.browser_link()?,
+        browser_warning: app
+            .state::<crate::browser::Browser>()
+            .warning
+            .lock()
+            .unwrap()
+            .clone(),
         records: db.records()?.into_iter().filter(|r| !r.empty).collect(),
         active: catalog::current_id(&vault(app)?, &crate::cleaner::identity::root()?, &db)?
             .unwrap_or_else(|| "current".into()),
@@ -148,7 +160,7 @@ pub async fn identities_switch(
     let worker = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let reporter = Reporter::channel(Some(on_progress));
-        let result = (|| {
+        let result = crate::browser::identity_action(&worker, &reporter, || {
             let mut store =
                 store::Store::open(&vault(&worker)?, &crate::cleaner::identity::root()?)?;
             if recover {
@@ -156,8 +168,9 @@ pub async fn identities_switch(
             } else {
                 store.switch(&target_id, &current_name, &policy, &reporter)?;
             }
-            state(&worker)
-        })();
+            Ok(())
+        })
+        .and_then(|_| state(&worker));
         if let Err(e) = &result {
             reporter.fail(e);
         }
@@ -202,6 +215,7 @@ pub async fn identities_delete(
     app: tauri::AppHandle,
     id: String,
     policy: Policy,
+    delete_browser: Option<bool>,
     on_progress: Channel<Progress>,
 ) -> Result<State, String> {
     if id != "current" && !valid_id(&id) {
@@ -212,12 +226,18 @@ pub async fn identities_delete(
     let worker = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let reporter = Reporter::channel(Some(on_progress));
-        let result = (|| {
+        let action = || {
             let mut store =
                 store::Store::open(&vault(&worker)?, &crate::cleaner::identity::root()?)?;
             store.delete(&id, &policy, &reporter)?;
-            state(&worker)
-        })();
+            Ok(())
+        };
+        let result = if id == "current" {
+            crate::browser::identity_action(&worker, &reporter, action)
+        } else {
+            crate::browser::delete_saved(&worker, &id, delete_browser.unwrap_or(false), action)
+        }
+        .and_then(|_| state(&worker));
         if let Err(e) = &result {
             reporter.fail(e);
         }
@@ -225,6 +245,32 @@ pub async fn identities_delete(
     })
     .await
     .map_err(|_| "直接删除中断；请刷新检查剩余数据。".to_string())
+    .and_then(|r| r);
+    cleaner.leave();
+    result
+}
+
+#[tauri::command]
+pub async fn identities_browser(
+    app: tauri::AppHandle,
+    enabled: bool,
+    use_existing: bool,
+) -> Result<State, String> {
+    let cleaner = app.state::<crate::cleaner::Cleaner>();
+    cleaner.enter()?;
+    let worker = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let reporter = Reporter::channel(None);
+        crate::browser::configure_identity(&worker, &reporter, || {
+            let mut db = database::Database::open(&vault(&worker)?)?;
+            let current =
+                catalog::current_id(&vault(&worker)?, &crate::cleaner::identity::root()?, &db)?;
+            db.configure_browser(enabled, use_existing, current.as_deref())
+        })?;
+        state(&worker)
+    })
+    .await
+    .map_err(|_| "浏览器联动设置被中断，请刷新。".to_string())
     .and_then(|r| r);
     cleaner.leave();
     result
