@@ -396,3 +396,66 @@ fn missing_master_key_never_replaces_a_retired_registered_archive() {
     assert!(retired.exists());
     std::fs::remove_dir_all(folder).unwrap();
 }
+
+#[test]
+fn standard_fs_written_files_are_accepted_by_profile_catalog_and_switch() {
+    let folder = canonicalize(std::env::temp_dir())
+        .unwrap()
+        .join(format!("baga-identity-test-{}", new_id().unwrap()));
+    let home = folder.join("home");
+    let vault = folder.join("vault");
+    std::fs::create_dir_all(home.join(".claude/projects/demo")).unwrap();
+    std::fs::write(
+        home.join(".claude.json"),
+        r#"{"oauthAccount":{"accountUuid":"std-fs-user","organizationUuid":"std-org","emailAddress":"stdfs@example.invalid","displayName":"StdFsUser"},"mcpServers":{"keep":{}}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        home.join(".claude/.credentials.json"),
+        r#"{"claudeAiOauth":{"accessToken":"std-fs-token"}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        home.join(".claude/history.jsonl"),
+        "{\"display\":\"hello\"}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        home.join(".claude/projects/demo/session.jsonl"),
+        "{\"session\":1}\n",
+    )
+    .unwrap();
+
+    let current = profile::read(&home);
+    assert!(current.present);
+    assert!(!current.unavailable);
+    assert_eq!(current.display_name.as_deref(), Some("StdFsUser"));
+    assert_eq!(current.email.as_deref(), Some("stdfs@example.invalid"));
+
+    let mut store = store::Store::open(&vault, &home).unwrap();
+    let reporter = Reporter::channel(None);
+    store
+        .switch("empty", "默认写入身份", &Policy::default(), &reporter)
+        .unwrap();
+    let saved = store.records().into_iter().find(|r| !r.empty).unwrap();
+    assert_eq!(saved.name, "默认写入身份");
+    assert!(catalog::current_id(&vault, &home, &store.db)
+        .unwrap()
+        .is_none());
+
+    store
+        .switch(&saved.id, "空身份", &Policy::default(), &reporter)
+        .unwrap();
+    assert_eq!(
+        catalog::current_id(&vault, &home, &store.db)
+            .unwrap()
+            .as_deref(),
+        Some(saved.id.as_str())
+    );
+    let restored = profile::read(&home);
+    assert!(restored.present);
+    assert!(!restored.unavailable);
+    assert_eq!(restored.display_name.as_deref(), Some("StdFsUser"));
+    drop(store);
+    std::fs::remove_dir_all(folder).unwrap();
+}
