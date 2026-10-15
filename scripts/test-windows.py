@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: Windows PowerShell 5.1、Rust 样本程序、可丢弃安装目录与离线官方安装器响应样本。
-# [OUTPUT]: CLI 来源保留重装、原生安装器字节/文本响应、下载失败保护与个人资产保留的回归。
+# [OUTPUT]: CLI 来源保留重装、PATH 外 npm 检测、安装器字节/文本响应、下载失败保护与个人资产保留回归。
 # [POS]: Windows 平台行为测试；仅操作临时样本，不卸载 runner 或用户的真实 Claude。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import json
@@ -167,6 +167,19 @@ throw 'private fixture diagnostic'"""
         self.npm();result=self.invoke('reinstall')
         self.assertEqual(result.returncode,0,result.stderr);self.assertIn('CC_CLI_METHOD=npm',result.stdout);self.assertIn('CC_CLI_VERSION=2.2.0',result.stdout)
         result=self.invoke('uninstall');self.assertEqual(result.returncode,0,result.stderr);self.assertFalse((self.bin/'claude.cmd').exists());self.assets()
+    def test_npm_detects_global_shim_outside_path(self):
+        self.npm()
+        prefix=self.home/'global-prefix';prefix.mkdir()
+        (self.bin/'node_modules').rename(prefix/'node_modules')
+        (self.bin/'claude.cmd').rename(prefix/'claude.cmd')
+        helper=self.home/'npm.ps1'
+        helper.write_text(helper.read_text(encoding='utf-8-sig').replace('bin\\node_modules','global-prefix\\node_modules'),encoding='utf-8-sig')
+        result=self.invoke('read')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('CC_CLI_METHOD=npm',result.stdout)
+        self.assertIn('CC_CLI_VERSION=2.1.0',result.stdout)
+        self.assertIn(str(prefix/'claude.cmd'),result.stdout)
+        self.assets()
     def test_failed_npm_reinstall_does_not_claim_success(self):
         self.npm();self.env['CC_FIXTURE_FAIL']='1';result=self.invoke('reinstall')
         self.assertNotEqual(result.returncode,0);self.assertNotIn('CC_CLI_DONE=1',result.stdout);self.assets()

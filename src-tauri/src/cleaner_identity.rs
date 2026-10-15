@@ -1,5 +1,5 @@
 // [INPUT]: Cleaner 白名单、共享 Code 登录键常量、完整目录快照、用户保留策略与 JSON 配置。
-// [OUTPUT]: 受限身份目标与配置身份键的提取/清空/恢复，保留工作区未选择的个人资产及桌面身份路径元数据检测。
+// [OUTPUT]: 受限身份目标、配置身份键与 githubRepoPaths 的提取/清空/恢复，保留工作区未选择的个人资产及桌面身份路径元数据检测。
 // [POS]: 身份保险库复用原有路径边界；不扫描项目源码、Shell 或系统代理配置。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -12,7 +12,10 @@ pub(crate) struct Source {
     pub keys: Vec<String>,
 }
 pub(crate) fn credential_keys(policy: &Policy) -> Vec<String> {
-    let mut keys = config::CREDENTIAL_KEYS.iter().map(|key| (*key).into()).collect::<Vec<String>>();
+    let mut keys = config::CREDENTIAL_KEYS
+        .iter()
+        .map(|key| (*key).into())
+        .collect::<Vec<String>>();
     if !policy.mcp {
         keys.extend(
             [
@@ -29,6 +32,12 @@ pub(crate) fn credential_keys(policy: &Policy) -> Vec<String> {
     }
     keys
 }
+pub(crate) const SETTINGS_IDENTITY_KEYS: &[&str] = &[
+    "env.CLAUDE_CODE_OAUTH_TOKEN",
+    "env.ANTHROPIC_API_KEY",
+    "env.ANTHROPIC_AUTH_TOKEN",
+    "apiKeyHelper",
+];
 fn definitions(root: &Path, policy: &Policy) -> Vec<Source> {
     let mut result: Vec<_> = targets::definitions(root)
         .into_iter()
@@ -61,6 +70,7 @@ fn definitions(root: &Path, policy: &Policy) -> Vec<Source> {
         }
         if !policy.projects {
             source.keys.push("projects".into());
+            source.keys.push("githubRepoPaths".into());
         }
     }
     if let Some(source) = result
@@ -90,12 +100,7 @@ fn definitions(root: &Path, policy: &Policy) -> Vec<Source> {
             path: root.join(".claude").join(name),
             category: "settings".into(),
             keys: if policy.settings {
-                vec![
-                    "env.CLAUDE_CODE_OAUTH_TOKEN".into(),
-                    "env.ANTHROPIC_API_KEY".into(),
-                    "env.ANTHROPIC_AUTH_TOKEN".into(),
-                    "apiKeyHelper".into(),
-                ]
+                SETTINGS_IDENTITY_KEYS.iter().map(|k| (*k).into()).collect()
             } else {
                 Vec::new()
             },
@@ -134,7 +139,11 @@ pub(crate) fn sources(root: &Path, policy: &Policy) -> Result<Vec<Source>, Strin
         };
         #[cfg(test)]
         if !linked(&meta) {
-            assert_eq!(canonicalize(&source.path).ok().as_deref(), Some(source.path.as_path()), "fixture source must be canonical");
+            assert_eq!(
+                canonicalize(&source.path).ok().as_deref(),
+                Some(source.path.as_path()),
+                "fixture source must be canonical"
+            );
         }
         if linked(&meta)
             || canonicalize(&source.path).ok().as_deref() != Some(source.path.as_path())
@@ -151,7 +160,8 @@ pub(crate) fn sources(root: &Path, policy: &Policy) -> Result<Vec<Source>, Strin
             source.keys = object
                 .keys()
                 .filter(|k| {
-                    !(policy.mcp && *k == "mcpServers") && !(policy.projects && *k == "projects")
+                    !(policy.mcp && *k == "mcpServers")
+                        && !(policy.projects && (*k == "projects" || *k == "githubRepoPaths"))
                 })
                 .cloned()
                 .collect();
@@ -191,15 +201,10 @@ pub(crate) fn allowed(root: &Path, source: &Source) -> bool {
                     .all(|k| !k.contains('.') && !k.contains('/')))
                 || source.keys.iter().all(|k| t.keys.contains(k))
                 || (source.category == "settings"
-                    && source.keys.iter().all(|k| {
-                        [
-                            "env.CLAUDE_CODE_OAUTH_TOKEN",
-                            "env.ANTHROPIC_API_KEY",
-                            "env.ANTHROPIC_AUTH_TOKEN",
-                            "apiKeyHelper",
-                        ]
-                        .contains(&k.as_str())
-                    })))
+                    && source
+                        .keys
+                        .iter()
+                        .all(|k| SETTINGS_IDENTITY_KEYS.contains(&k.as_str()))))
     });
     let special = source.keys.is_empty()
         && [

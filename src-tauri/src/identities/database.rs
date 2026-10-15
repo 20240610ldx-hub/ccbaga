@@ -1,5 +1,5 @@
 // [INPUT]: rusqlite/内嵌 SQLite、私有保险库目录和脱敏身份元数据与本机加盐的账号索引。
-// [OUTPUT]: 默认联动/显式关闭保留、首身份预留编号与身份目录、保留策略、当前身份、SQLite v3 浏览器绑定与持久切换/恢复状态和身份移除事务。
+// [OUTPUT]: 默认联动/显式关闭保留、首身份预留编号与身份目录、保留策略、当前身份、SQLite v3 浏览器绑定与持久切换/恢复状态和身份移除事务；仅在互斥的提交后回收空归档记录。
 // [POS]: 保险库的索引事务；凭据和会话正文仅进入加密归档，不进入数据库。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use rusqlite::{params, Connection, OptionalExtension};
@@ -125,8 +125,10 @@ impl Database {
         }
         let records = self.records()?;
         let tx = self.connection.transaction().map_err(error)?;
+        tx.execute("DELETE FROM identities WHERE empty != 0", [])
+            .map_err(error)?;
         let mut seen = std::collections::HashMap::<String, String>::new();
-        for record in records {
+        for record in records.into_iter().filter(|r| !r.empty) {
             if let Some(key) = record.account_key.filter(|k| !k.is_empty()) {
                 if let Some(id) = seen.get(&key) {
                     super::browser_link::merge(&tx, &record.id, id)?;

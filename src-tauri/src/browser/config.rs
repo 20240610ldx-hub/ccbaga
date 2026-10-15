@@ -1,5 +1,5 @@
 // [INPUT]: 原生机器快照、独立浏览器配置和实际引擎版本。
-// [OUTPUT]: 含规范化有效国家的机器快照、独立目标地区与 Default 资料 Chromium 参数；默认跟随 TUN 网络，保持真实系统版本、CPU 与设备图形。
+// [OUTPUT]: 含有效国家的机器快照、独立目标地区与 Default 资料参数；仅显式代理时增加回环正向豁免，保留真实设备与 TUN 默认路由。
 // [POS]: 浏览器配置真相源；路径来自宿主，输入不能变成额外命令参数。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 #[cfg(target_os = "linux")]
@@ -185,9 +185,14 @@ pub fn arguments(
             "--proxy-server={}",
             config.proxy.replace("socks5h://", "socks5://")
         ));
+        // 不使用 <-loopback>：它会减去隐式回环豁免，不能把带令牌的本地页面交给代理。
+        args.push("--proxy-bypass-list=127.0.0.1;localhost;[::1]".into());
         if let Ok(Some(url)) = proxy(&config.proxy) {
             if url.scheme().starts_with("socks") {
-                args.push(format!("--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE {}, EXCLUDE 127.0.0.1, EXCLUDE localhost",url.host_str().unwrap()));
+                let host = url.host_str().unwrap().trim_matches(['[', ']']);
+                args.push(format!(
+                    "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE {host}, EXCLUDE 127.0.0.1, EXCLUDE localhost, EXCLUDE ::1"
+                ));
             }
         }
     }

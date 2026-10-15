@@ -134,6 +134,7 @@ fn execute_script(
                 || line.starts_with("无法读取 ")
                 || line.starts_with("无法暂存原程序")
                 || line.starts_with("发现未识别的 ")
+                || line.starts_with("检测到自定义 ")
                 || line.starts_with("仍有其他 ")
         });
         return Err(message
@@ -307,19 +308,21 @@ mod tests {
     }
     #[test]
     fn native_reinstall_restores_original_and_preserves_backup_if_rollback_is_blocked() {
-        for mode in ["install-failure", "invalid-version", "blocked-rollback"] {
+        for mode in ["install-failure", "install-failure-no-launcher", "invalid-version", "blocked-rollback"] {
             let fixture = Fixture::new();
             fixture.file(".claude/settings.json", "keep");
             let original = "#!/bin/sh\nprintf '2.0.0 (Claude Code)\\n'\n";
             let binary = fixture.executable(".local/share/claude/versions/2.0.0", original);
             fs::create_dir_all(fixture.0.join(".local/bin")).unwrap();
-            symlink(&binary, fixture.0.join(".local/bin/claude")).unwrap();
+            if mode != "install-failure-no-launcher" {
+                symlink(&binary, fixture.0.join(".local/bin/claude")).unwrap();
+            }
             fixture.executable(
                 "bin/curl",
                 "#!/bin/sh\n/bin/cat \"$CC_CLI_USER_DIR/fixture-installer\"\n",
             );
             let installer = match mode {
-                "install-failure" => "#!/bin/bash\nexit 1\n",
+                "install-failure" | "install-failure-no-launcher" => "#!/bin/bash\nexit 1\n",
                 "invalid-version" => "#!/bin/bash\nmkdir -p \"$CC_CLI_USER_DIR/.local/share/claude/versions\"\nexit 0\n",
                 _ => "#!/bin/bash\n/bin/ln -s \"$CC_CLI_USER_DIR/outside\" \"$CC_CLI_USER_DIR/.local/share/claude\"\nexit 1\n",
             };
@@ -347,10 +350,11 @@ mod tests {
             } else {
                 assert!(error.contains("已恢复原程序"), "{error}");
                 assert_eq!(fs::read_to_string(&binary).unwrap(), original);
-                assert_eq!(
-                    fs::read_link(fixture.0.join(".local/bin/claude")).unwrap(),
-                    binary
-                );
+                if mode == "install-failure-no-launcher" {
+                    assert!(!fixture.0.join(".local/bin/claude").exists());
+                } else {
+                    assert_eq!(fs::read_link(fixture.0.join(".local/bin/claude")).unwrap(), binary);
+                }
             }
             assert_eq!(
                 fs::read_to_string(fixture.0.join("outside/keep")).unwrap(),

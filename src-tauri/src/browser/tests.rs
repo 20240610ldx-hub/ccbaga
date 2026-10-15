@@ -1,5 +1,5 @@
 // [INPUT]: 临时样本、指纹参数、固定清理边界与本机 HTTP 限流样本。
-// [OUTPUT]: 模块共用临时目录样本，配置/缓存/链接/地区核验与 HTTP 429 服务备援回归。
+// [OUTPUT]: 临时配置/缓存/密码密钥与设置保留、链接/地区、代理不直连与回环参数、严格时区和 HTTP 服务备援回归。
 // [POS]: 浏览器模块行为验证；不访问用户实际资料。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -48,7 +48,20 @@ fn proxy_and_real_hardware() {
     assert!(a.contains(&"--profile-directory=Default".into()));
     assert!(a.contains(&"--fingerprint-platform-version=27.2.0".into()));
     assert!(a.contains(&"--fingerprint-hardware-concurrency=10".into()));
+    assert!(a.contains(&"--proxy-bypass-list=127.0.0.1;localhost;[::1]".into()));
+    assert!(!a.iter().any(|argument| argument.contains("<-loopback>")));
     assert!(a.iter().any(|x| x.starts_with("--host-resolver-rules=")));
+    c.proxy = "socks5://[::1]:7898".into();
+    let ipv6_args = config::arguments(
+        &c,
+        &machine(),
+        Path::new("/profile"),
+        "http://127.0.0.1/page",
+        "148.0.7778.215",
+    );
+    assert!(ipv6_args
+        .iter()
+        .any(|x| x.contains("EXCLUDE ::1") && !x.contains("EXCLUDE [::1]")));
     assert!(!a
         .iter()
         .any(|x| x.contains("load-extension") || x.contains("disable-web-security")));
@@ -61,6 +74,10 @@ fn cache_isolation_and_direct_delete() {
         "Default/Network/Cookies",
         "Default/Bookmarks",
         "Default/Login Data",
+        "Local State",
+        "Default/Preferences",
+        "Default/Web Data",
+        "Default/History",
     ] {
         let p = root.join(name);
         fs::create_dir_all(p.parent().unwrap()).unwrap();
@@ -78,7 +95,19 @@ fn cache_isolation_and_direct_delete() {
     assert!(!root.join("Default/Network/Cookies").exists());
     assert!(root.join("Default/Bookmarks").exists());
     assert!(root.join("Default/Login Data").exists());
-    assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+    for name in [
+        "Local State",
+        "Default/Preferences",
+        "Default/Web Data",
+        "Default/History",
+    ] {
+        assert_eq!(
+            fs::read(root.join(name)).unwrap(),
+            b"fixture",
+            "preserve {name}"
+        );
+    }
+    assert_eq!(fs::read_dir(&root).unwrap().count(), 2);
     fs::remove_dir_all(root).unwrap();
 }
 #[test]
@@ -90,7 +119,18 @@ fn reject_links_and_malformed_preferences() {
     #[cfg(unix)]
     std::os::unix::fs::symlink(&outside, root.join("Default/Cache")).unwrap();
     #[cfg(windows)]
-    assert!(Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(root.join("Default/Cache").to_string_lossy().replace('/', "\\")).arg(outside.to_string_lossy().replace('/', "\\")).output().unwrap().status.success());
+    assert!(Command::new("cmd.exe")
+        .args(["/D", "/C", "mklink", "/J"])
+        .arg(
+            root.join("Default/Cache")
+                .to_string_lossy()
+                .replace('/', "\\")
+        )
+        .arg(outside.to_string_lossy().replace('/', "\\"))
+        .output()
+        .unwrap()
+        .status
+        .success());
     assert!(profile::clear(&root, false, |_, _| {}).is_err());
     assert!(outside.join("keep").exists());
     let prefs = root.join("Default/Preferences");
@@ -265,6 +305,59 @@ fn linux_platform_and_unknown_location_cannot_be_misreported_as_mac_or_disabled(
 }
 
 #[test]
+fn invalid_or_unreachable_proxy_never_falls_back_to_direct() {
+    let origin = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    origin.set_nonblocking(true).unwrap();
+    let url = format!("http://{}/", origin.local_addr().unwrap());
+    let unused = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let unavailable_proxy = format!("http://{}", unused.local_addr().unwrap());
+    drop(unused);
+    for proxy in ["http://[invalid", unavailable_proxy.as_str()] {
+        assert!(tauri::async_runtime::block_on(network::probe_urls(proxy, &[&url])).is_err());
+        assert_eq!(
+            origin.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    }
+}
+
+#[test]
+fn distinct_iana_timezones_remain_conflicts_on_every_platform() {
+    let mut machine = machine();
+    machine.timezone = "Europe/Berlin".into();
+    machine.languages = vec!["de".into()];
+    machine.locale_country = "DE".into();
+    let report = network::Report {
+        language: "de".into(),
+        languages: machine.languages.clone(),
+        timezone: "Europe/Paris".into(),
+        platform: "MacIntel".into(),
+        cores: machine.cores,
+        user_agent: "fixture".into(),
+        platform_version: machine.version.clone(),
+        browser_version: "148".into(),
+        geolocation: "denied".into(),
+        error: String::new(),
+        exit: Some(network::Exit {
+            ip: "203.0.113.2".into(),
+            country: "DE".into(),
+            city: String::new(),
+            timezone: "Europe/Berlin".into(),
+            isp: String::new(),
+        }),
+    };
+    let checks = network::checks(&machine, &Config::default(), Some(&report), None, "148");
+    assert_eq!(
+        checks
+            .iter()
+            .find(|check| check.title == "时区一致")
+            .unwrap()
+            .status,
+        "mismatch"
+    );
+}
+
+#[test]
 fn machine_proxy_credentials_never_leave_native_code() {
     let mut m = machine();
     m.system_proxy = "http://private-user:private-password@localhost:8080".into();
@@ -275,12 +368,35 @@ fn machine_proxy_credentials_never_leave_native_code() {
 
 #[test]
 fn windows_report_requires_real_platform_cpu_and_version() {
-    let mut m = machine(); m.platform = "windows".into(); m.version = "10.0.26100".into();
-    let mut report = network::Report { language: "en-US".into(), languages: vec!["en-US".into()], timezone: m.timezone.clone(), platform: "Win32".into(), cores: m.cores, user_agent: "fixture".into(), platform_version: m.version.clone(), browser_version: "148".into(), geolocation: "denied".into(), error: String::new(), exit: None };
-    let result = |r: &network::Report| network::checks(&m, &Config::default(), Some(r), None, "148").into_iter().find(|c| c.title == "真实设备与 CPU").unwrap().status;
+    let mut m = machine();
+    m.platform = "windows".into();
+    m.version = "10.0.26100".into();
+    let mut report = network::Report {
+        language: "en-US".into(),
+        languages: vec!["en-US".into()],
+        timezone: m.timezone.clone(),
+        platform: "Win32".into(),
+        cores: m.cores,
+        user_agent: "fixture".into(),
+        platform_version: m.version.clone(),
+        browser_version: "148".into(),
+        geolocation: "denied".into(),
+        error: String::new(),
+        exit: None,
+    };
+    let result = |r: &network::Report| {
+        network::checks(&m, &Config::default(), Some(r), None, "148")
+            .into_iter()
+            .find(|c| c.title == "真实设备与 CPU")
+            .unwrap()
+            .status
+    };
     assert_eq!(result(&report), "ok");
-    report.platform = "MacIntel".into(); assert_eq!(result(&report), "mismatch");
-    report.platform = "Win32".into(); report.platform_version = "fake".into(); assert_eq!(result(&report), "mismatch");
+    report.platform = "MacIntel".into();
+    assert_eq!(result(&report), "mismatch");
+    report.platform = "Win32".into();
+    report.platform_version = "fake".into();
+    assert_eq!(result(&report), "mismatch");
 }
 
 #[test]
@@ -344,10 +460,18 @@ fn follow_machine_taiwan_preserves_language_script_and_checks_actual_country() {
 fn refreshed_context_recomputes_target_from_effective_machine_country() {
     let mut context = Context {
         identity: crate::identities::browser_link::BrowserIdentity {
-            linked: false, status: "unlinked", name: None, email: None, organization: None,
+            linked: false,
+            status: "unlinked",
+            name: None,
+            email: None,
+            organization: None,
         },
-        ui_language: "zh".into(), exit_services: &network::SERVICES,
-        config: Config::default(), region: None, machine: machine(), engine_version: "148".into(),
+        ui_language: "zh".into(),
+        exit_services: &network::SERVICES,
+        config: Config::default(),
+        region: None,
+        machine: machine(),
+        engine_version: "148".into(),
     };
     let mut taiwan = machine();
     taiwan.timezone = "Asia/Taipei".into();

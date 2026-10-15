@@ -1,12 +1,12 @@
 // [INPUT]: 宿主独立资料目录、原生进程核验与已验证配置。
-// [OUTPUT]: 浏览资料占用保护、窄范围 Preferences 更新及缓存/登录数据清理。
+// [OUTPUT]: 浏览资料占用保护、窄范围 Preferences 更新及缓存/登录数据清理；站点清理保留密码密钥、个人偏好和自动填充。
 // [POS]: 文件边界；清理只遍历固定位置，拒绝链接，不生成备份。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 #[cfg(target_os = "linux")]
 use crate::linux::*;
+use crate::native::decode;
 #[cfg(target_os = "windows")]
 use crate::windows::*;
-use crate::native::decode;
 use serde::Serialize;
 use serde_json::{json, Value};
 #[cfg(target_os = "macos")]
@@ -129,6 +129,8 @@ pub const CACHE: &[&str] = &[
     "Default/Code Cache",
     "Default/GPUCache",
     "Default/DawnCache",
+    "Default/DawnGraphiteCache",
+    "Default/DawnWebGPUCache",
     "Default/Service Worker/CacheStorage",
     "Default/Service Worker/ScriptCache",
     "ShaderCache",
@@ -139,6 +141,12 @@ pub const CACHE: &[&str] = &[
 pub const SITE_DATA: &[&str] = &[
     "Default/Network/Cookies",
     "Default/Network/Cookies-journal",
+    "Default/Network/Trust Tokens",
+    "Default/Network/Trust Tokens-journal",
+    "Default/Network/TransportSecurity",
+    "Default/Network/Network Persistent State",
+    "Default/Network/Reporting and Nel",
+    "Default/Network/Reporting and Nel-journal",
     "Default/Cookies",
     "Default/Cookies-journal",
     "Default/Local Storage",
@@ -148,6 +156,15 @@ pub const SITE_DATA: &[&str] = &[
     "Default/WebStorage",
     "Default/Storage",
     "Default/Sessions",
+    "Default/Shared Dictionary",
+    "Default/SharedStorage",
+    "Default/SharedStorage-wal",
+    "Default/DIPS",
+    "Default/DIPS-journal",
+    "Default/DIPS-wal",
+    "Default/DIPS-shm",
+    "Default/BrowsingTopicsState",
+    "Default/blob_storage",
 ];
 fn size(path: &Path) -> Result<u64, String> {
     let meta = fs::symlink_metadata(path).map_err(|_| "无法读取缓存项目。")?;

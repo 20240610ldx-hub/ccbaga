@@ -182,6 +182,15 @@ mod tests {
         }
         assert!(find("us; touch /tmp/injected").is_err());
     }
+    #[test]
+    fn catalog_does_not_expand_or_equate_distinct_iana_zones() {
+        assert_eq!(REGIONS.len(), 13);
+        assert!(matching("en-US", "America/Chicago").is_none());
+        assert!(matching("en-US", "America/Phoenix").is_none());
+        assert!(matching("en-US", "US/Pacific").is_none());
+        assert!(matching("de", "Europe/Paris").is_none());
+        assert!(matching_country("DE", "Europe/Paris").is_none());
+    }
 }
 
 // 通过既有语言与时区识别目标地区；自定义组合无法识别时保持未核验。

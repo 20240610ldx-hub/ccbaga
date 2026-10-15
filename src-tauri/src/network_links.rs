@@ -1,5 +1,5 @@
 // [INPUT]: Skill 的 providers.json 固定配置、资源编号与系统 URL 打开工具。
-// [OUTPUT]: 固定资源导航与四域名只读连通性诊断；下载探针只在 HTTP 200 且有界公开版本正文通过校验时成功，不输出正文或冒充出口核验。
+// [OUTPUT]: 固定资源导航与四域名只读连通性诊断；重定向仅认可官方 HTTPS 目标且不跟随，下载探针验证有界版本正文，不输出正文或冒充出口核验。
 // [POS]: 应用网络页原生接口；不读取密钥、不执行 SSH、不接收任意 URL，诊断不上传凭据。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use serde::{Deserialize, Serialize};
@@ -83,6 +83,24 @@ fn valid_release_version(bytes: &[u8]) -> bool {
     })
 }
 
+fn valid_redirect_location(request_url: &str, location: Option<&str>) -> bool {
+    let Some(target) = location
+        .filter(|value| !value.trim().is_empty())
+        .and_then(|value| reqwest::Url::parse(request_url).ok()?.join(value).ok())
+    else {
+        return false;
+    };
+    target.scheme() == "https"
+        && target.port_or_known_default() == Some(443)
+        && target.username().is_empty()
+        && target.password().is_none()
+        && target.host_str().is_some_and(|host| {
+            ["claude.ai", "claude.com", "anthropic.com"]
+                .iter()
+                .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
+        })
+}
+
 async fn validate_release_metadata(mut response: reqwest::Response) -> Result<(), &'static str> {
     if response.status() != reqwest::StatusCode::OK {
         return Err("下载版本信息响应异常");
@@ -123,7 +141,7 @@ async fn diagnose(client: reqwest::Client, domain: String, url: String) -> Domai
         ip: None,
         message: String::new(),
     };
-    match client.get(url).send().await {
+    match client.get(&url).send().await {
         Ok(response) => {
             let status = response.status().as_u16();
             // 展示真实连接对端，不把独立 DNS 查询误称为这次连接的路由。
@@ -149,11 +167,23 @@ async fn diagnose(client: reqwest::Client, domain: String, url: String) -> Domai
                     .headers()
                     .get("cf-mitigated")
                     .is_some_and(|value| value.as_bytes().eq_ignore_ascii_case(b"challenge"));
-            result.ok = (200..400).contains(&status) || status == 401 || status == 404 || challenge;
+            let redirect_ok = valid_redirect_location(
+                &url,
+                response
+                    .headers()
+                    .get(reqwest::header::LOCATION)
+                    .and_then(|value| value.to_str().ok()),
+            );
+            result.ok = (200..300).contains(&status)
+                || ((300..400).contains(&status) && redirect_ok)
+                || status == 401
+                || status == 404
+                || challenge;
             result.message = match status {
                 200..=299 => "连接正常",
                 401 | 404 => "服务响应正常",
-                300..=399 => "服务要求重定向",
+                300..=399 if redirect_ok => "服务要求重定向",
+                300..=399 => "受到安全拦截或限制",
                 403 if challenge => "服务可达，需浏览器验证",
                 403 => "受到安全拦截或限制",
                 _ => "服务响应异常",
@@ -303,6 +333,39 @@ mod tests {
         ] {
             assert!(!valid_release_version(version));
         }
+    }
+
+    #[test]
+    fn redirects_only_accept_official_https_without_credentials() {
+        for location in [
+            "/login",
+            "login?next=home",
+            "https://platform.claude.com/",
+            "//claude.ai/login",
+            "https://api.anthropic.com/",
+        ] {
+            assert!(
+                valid_redirect_location("https://claude.ai/", Some(location)),
+                "{location}"
+            );
+        }
+        for location in [
+            "",
+            " ",
+            "http://claude.ai/",
+            "https://claude.ai:444/",
+            "https://user:password@claude.ai/",
+            "https://captive.example.invalid/",
+            "https://claude.ai.example.invalid/",
+            "https://notclaude.ai/",
+            "javascript:alert(1)",
+        ] {
+            assert!(
+                !valid_redirect_location("https://claude.ai/", Some(location)),
+                "{location}"
+            );
+        }
+        assert!(!valid_redirect_location("https://claude.ai/", None));
     }
 
     #[test]
@@ -458,7 +521,7 @@ mod tests {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let server = std::thread::spawn(move || {
-            for _ in 0..4 {
+            for _ in 0..5 {
                 let (mut stream, _) = listener.accept().unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(3)))
@@ -482,10 +545,21 @@ mod tests {
                     "403 Forbidden\r\ncf-mitigated: challenge"
                 } else if request.starts_with("GET /redirect ") {
                     "302 Found"
+                } else if request.starts_with("GET /portal ") {
+                    "302 Found\r\nLocation: https://captive.example.invalid/"
                 } else {
                     "401 Unauthorized"
                 };
-                write!(stream,"HTTP/1.1 {status}\r\nLocation: http://127.0.0.1:1/never-follow\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+                let location = if request.starts_with("GET /portal ") {
+                    ""
+                } else {
+                    "Location: https://claude.ai/login\r\n"
+                };
+                write!(
+                    stream,
+                    "HTTP/1.1 {status}\r\n{location}Content-Length: 0\r\nConnection: close\r\n\r\n"
+                )
+                .unwrap();
             }
         });
         let urls = [
@@ -493,12 +567,14 @@ mod tests {
             format!("http://{address}/blocked"),
             format!("http://{address}/redirect"),
             format!("http://{address}/challenge"),
+            format!("http://{address}/portal"),
         ];
         let results = tauri::async_runtime::block_on(diagnose_urls(&[
             ("auth", &urls[0]),
             ("blocked", &urls[1]),
             ("redirect", &urls[2]),
             ("challenge", &urls[3]),
+            ("portal", &urls[4]),
         ]));
         server.join().unwrap();
         assert!(results[0].ok);
@@ -509,6 +585,8 @@ mod tests {
         assert_eq!(results[3].status_code, Some(403));
         assert_eq!(results[3].message, "服务可达，需浏览器验证");
         assert_eq!(results[1].message, "受到安全拦截或限制");
+        assert!(!results[4].ok);
+        assert_eq!(results[4].message, "受到安全拦截或限制");
         assert!(results
             .iter()
             .all(|result| result.ip.as_deref() == Some("127.0.0.1")));

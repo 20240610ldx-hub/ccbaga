@@ -20,7 +20,7 @@ CCBaga 是面向 macOS、Linux 和 Windows 的本地工具，用于管理 Claude
 从 [GitHub Releases](https://github.com/liseami/CCBaga/releases/latest) 下载由项目所有者 **liseami** 发布的官方安装包。
 
 - **macOS 12+，Apple Silicon：**下载包含 A、B 两个应用的 DMG，将两者拖入 Applications，然后启动 CCBaga-A。详见 [macOS 安装说明（英文）](README.md#macos)。
-- **Linux x86_64：**提供 DEB、RPM、AppImage 和 Arch/pacman 包，包含伴生浏览器。依赖与限制见 [Linux 说明](docs/linux.md)。
+- **Linux x86_64：**提供基于 Ubuntu 22.04（glibc 2.35）的 DEB、RPM、AppImage，以及面向当前 Arch 的 pacman 包，均包含伴生浏览器。依赖与限制见 [Linux 说明](docs/linux.md)。
 - **Windows 10/11 x86_64：**使用包含 A、B 的 NSIS 安装器。安装器未进行 Authenticode 签名，可能出现 SmartScreen 提示或被组织策略阻止。详见 [Windows 说明](docs/windows.md)。
 
 ## 常用操作

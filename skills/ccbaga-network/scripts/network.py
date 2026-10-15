@@ -111,6 +111,8 @@ def key_data(pem, ppk, public):
         if not isinstance(name, str) or not name:
             raise ValueError('Provide PEM, PPK and PUB file paths')
         path = Path(name).expanduser()
+        if path.is_symlink() or (os.name == 'nt' and path.is_junction()):
+            raise ValueError('Refusing linked key file')
         if path.suffix != suffix or not path.is_file() or not 0 < path.stat().st_size <= 65536:
             raise ValueError('Provide one nonempty PEM/PPK/PUB file, each under 64 KiB')
         values.append(path.read_text(encoding='utf-8'))
@@ -136,6 +138,7 @@ class Key:
     def __init__(self, conf):
         private, expected = key_data(conf['pem'], conf['ppk'], conf['pub'])
         self.temp = tempfile.TemporaryDirectory(prefix='ccbaga-key-')
+        if os.name == 'nt': win.protect(self.temp.name)
         self.path = Path(self.temp.name).resolve() / 'identity.pem'
         private_write(self.path, private)
         result = subprocess.run([program('ssh-keygen'), '-y', '-P', '', '-f', str(self.path)], capture_output=True, text=True)

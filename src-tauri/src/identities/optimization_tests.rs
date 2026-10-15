@@ -1,5 +1,5 @@
 // [INPUT]: 虚构 UUID/组织/凭据、隔离文件系统和归档格式。
-// [OUTPUT]: A/B 往返去重、刷新凭据覆盖、跨组织隔离、旧版迁移与覆盖故障回归。
+// [OUTPUT]: A/B 往返去重、刷新凭据覆盖、跨组织隔离、旧版迁移与覆盖故障、不同 Desktop 账号/个人设置和共享代理保留回归。
 // [POS]: 账号匹配与不可变归档代次的离线证明，不读取真实用户数据。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -66,14 +66,17 @@ fn repeated_accounts_update_one_slot_and_keep_latest_tokens_and_history() {
     let r = Reporter::channel(None);
     let p = Policy::default();
     let mut s = store::Store::open(&f.vault, &f.home).unwrap();
-    s.db.configure_browser(true,false,None).unwrap();
+    s.db.configure_browser(true, false, None).unwrap();
     let initial_browser = s.db.browser_slot().unwrap();
     f.login("A", "one", "a-first");
     f.write(".claude/history.jsonl", b"a-history");
     s.switch("empty", "A custom", &p, &r).unwrap();
     let a = s.records()[0].id.clone();
     assert_eq!(a, initial_browser);
-    assert_eq!(s.db.browser_for(&a).unwrap().as_deref(), Some(initial_browser.as_str()));
+    assert_eq!(
+        s.db.browser_for(&a).unwrap().as_deref(),
+        Some(initial_browser.as_str())
+    );
     let browser_b = s.db.browser_slot().unwrap();
     assert_ne!(browser_b, initial_browser);
     f.login("B", "one", "b-first");
@@ -108,7 +111,10 @@ fn repeated_accounts_update_one_slot_and_keep_latest_tokens_and_history() {
         );
         assert_eq!(s.records().len(), 2);
         assert_eq!(s.db.browser_slot().unwrap(), initial_browser);
-        assert_eq!(s.db.browser_for(&b).unwrap().as_deref(),Some(browser_b.as_str()));
+        assert_eq!(
+            s.db.browser_for(&b).unwrap().as_deref(),
+            Some(browser_b.as_str())
+        );
     }
     assert_eq!(
         s.records().iter().find(|row| row.id == a).unwrap().name,
@@ -230,7 +236,8 @@ fn updating_an_archive_commits_the_new_generation_with_its_recovery_marker() {
         old.archive
     );
     s.db.pending(&new, "empty").unwrap();
-    s.clear(&store::Store::selected(&stage, &p), &r, "clear").unwrap();
+    s.clear(&store::Store::selected(&stage, &p), &r, "clear")
+        .unwrap();
     drop(stage);
     drop(s);
     let mut s = store::Store::open(&f.vault, &f.home).unwrap();
@@ -383,4 +390,187 @@ fn version_one_gzip_catalog_migrates_and_old_duplicate_targets_remain_usable() {
     assert_eq!(f.token(), "legacy-1");
     assert_eq!(s.records().len(), 1);
     assert_eq!(s.records()[0].id, ids[1]);
+}
+#[test]
+fn switching_from_empty_identity_does_not_leak_empty_sqlite_rows_or_archives() {
+    let f = Fixture::new();
+    let r = Reporter::channel(None);
+    let p = Policy::default();
+    let mut s = store::Store::open(&f.vault, &f.home).unwrap();
+    f.login("A", "one", "a-token");
+    s.switch("empty", "A slot", &p, &r).unwrap();
+    let a = s.records()[0].id.clone();
+    // 处于空身份时再次切回已暂存身份，不应残留 empty=1 记录或空归档。
+    s.switch(&a, "ignored", &p, &r).unwrap();
+    s.switch("empty", "A slot", &p, &r).unwrap();
+    s.switch(&a, "ignored", &p, &r).unwrap();
+    let connection = rusqlite::Connection::open(f.vault.join("identities.sqlite")).unwrap();
+    let empty_rows: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM identities WHERE empty != 0",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(empty_rows, 0);
+    let bagas = fs::read_dir(&f.vault)
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".baga"))
+        .count();
+    assert_eq!(bagas, 1);
+}
+#[test]
+fn opening_and_switching_preserve_distinct_desktop_accounts_and_personal_settings() {
+    let f = Fixture::new();
+    f.login("code-a", "org-a", "code-token");
+    #[cfg(windows)]
+    let desktop = "AppData/Roaming/Claude";
+    #[cfg(not(windows))]
+    let desktop = "Library/Application Support/Claude";
+    let retained = [
+        (
+            "config.json",
+            r#"{"lastKnownAccountUuid":"desktop-b","theme":"dark"}"#,
+        ),
+        ("Preferences", r#"{"personal":"keep"}"#),
+        (
+            "Local State",
+            r#"{"os_crypt":{"encrypted_key":"fixture-key"}}"#,
+        ),
+        ("mcp-user-tool-toggles.json", r#"{"keep":true}"#),
+        ("developer_settings.json", r#"{"keep":true}"#),
+        ("window-state.json", r#"{"keep":true}"#),
+        (
+            "local-agent-mode-sessions/desktop-b/session.json",
+            "keep session",
+        ),
+        (
+            "local-agent-mode-sessions/skills-plugin/org-b/SKILL.md",
+            "keep skill",
+        ),
+    ];
+    for (name, text) in retained {
+        f.write(&format!("{desktop}/{name}"), text.as_bytes());
+    }
+    f.write(
+        &format!("{desktop}/Local Storage/state"),
+        b"desktop-b-login",
+    );
+    let assert_retained = || {
+        for (name, text) in retained {
+            assert_eq!(
+                fs::read(f.home.join(desktop).join(name)).unwrap(),
+                text.as_bytes()
+            );
+        }
+    };
+    let mut s = store::Store::open(&f.vault, &f.home).unwrap();
+    assert_retained();
+    assert!(f.home.join(desktop).join("Local Storage/state").exists());
+    let p = Policy {
+        history: true,
+        cache: true,
+        ..Policy::default()
+    };
+    let r = Reporter::channel(None);
+    s.switch("empty", "Account A", &p, &r).unwrap();
+    assert_retained();
+    assert!(!f.home.join(desktop).join("Local Storage").exists());
+    let saved = s.records().into_iter().find(|row| !row.empty).unwrap();
+    s.switch(&saved.id, "Empty", &p, &r).unwrap();
+    assert_retained();
+    assert_eq!(
+        fs::read(f.home.join(desktop).join("Local Storage/state")).unwrap(),
+        b"desktop-b-login"
+    );
+    assert_eq!(f.token(), "code-token");
+}
+
+#[test]
+fn retained_proxy_and_account_repo_paths_follow_the_selected_policy() {
+    let f = Fixture::new();
+    let r = Reporter::channel(None);
+    f.write(
+        ".claude.json",
+        &serde_json::to_vec(&serde_json::json!({
+            "oauthAccount": {"accountUuid": "acct-a", "organizationUuid": "org-a"},
+            "changelogLastFetched": 1791955499521u64,
+            "lastClawdEntranceVersion": "2.1.299",
+            "githubRepoPaths": {"owner-a/repo": ["/workspace/a"]},
+            "projects": {"/workspace/a": {"allowedTools": []}},
+        }))
+        .unwrap(),
+    );
+    f.write(
+        ".claude/.credentials.json",
+        br#"{"claudeAiOauth":{"accessToken":"token-a"}}"#,
+    );
+    f.write(
+        ".claude/settings.json",
+        br#"{"theme":"dark","env":{"HTTPS_PROXY":"http://127.0.0.1:10801","NO_PROXY":"localhost,127.0.0.1","SHARED_FLAG":"1"}}"#,
+    );
+    f.write(
+        ".claude/.oauth_refresh.lock.owner",
+        br#"{"pid":1872,"pidSpace":"HOST-A"}"#,
+    );
+
+    let mut policy = Policy::default();
+    policy.projects = false;
+
+    let mut s = store::Store::open(&f.vault, &f.home).unwrap();
+    s.switch("empty", "Account A", &policy, &r).unwrap();
+
+    // 选择保留设置时，共享代理保持可用；账号与仓库索引按各自保留策略处理。
+    assert!(!f.home.join(".claude/.oauth_refresh.lock.owner").exists());
+    let empty_claude: serde_json::Value =
+        serde_json::from_slice(&fs::read(f.home.join(".claude.json")).unwrap()).unwrap();
+    assert!(empty_claude.get("changelogLastFetched").is_none());
+    assert!(empty_claude.get("lastClawdEntranceVersion").is_none());
+    assert!(empty_claude.get("githubRepoPaths").is_none());
+    let empty_settings: serde_json::Value =
+        serde_json::from_slice(&fs::read(f.home.join(".claude/settings.json")).unwrap()).unwrap();
+    assert_eq!(empty_settings["theme"], "dark");
+    assert_eq!(empty_settings["env"]["SHARED_FLAG"], "1");
+    assert_eq!(
+        empty_settings["env"]["HTTPS_PROXY"],
+        "http://127.0.0.1:10801"
+    );
+    assert_eq!(empty_settings["env"]["NO_PROXY"], "localhost,127.0.0.1");
+
+    // 用户随后修改的共享代理不能被旧身份快照覆盖。
+    f.write(
+        ".claude.json",
+        &serde_json::to_vec(&serde_json::json!({
+            "oauthAccount": {"accountUuid": "acct-b", "organizationUuid": "org-b"},
+            "githubRepoPaths": {"owner-b/repo": ["/workspace/b"]},
+        }))
+        .unwrap(),
+    );
+    f.write(
+        ".claude/.credentials.json",
+        br#"{"claudeAiOauth":{"accessToken":"token-b"}}"#,
+    );
+    f.write(
+        ".claude/settings.json",
+        br#"{"theme":"dark","env":{"HTTPS_PROXY":"http://127.0.0.1:10802","SHARED_FLAG":"1"}}"#,
+    );
+    let a_id = s.records().into_iter().find(|rec| !rec.empty).unwrap().id;
+    s.switch(&a_id, "Account B", &policy, &r).unwrap();
+
+    let restored_settings: serde_json::Value =
+        serde_json::from_slice(&fs::read(f.home.join(".claude/settings.json")).unwrap()).unwrap();
+    assert_eq!(
+        restored_settings["env"]["HTTPS_PROXY"],
+        "http://127.0.0.1:10802"
+    );
+    assert!(restored_settings["env"].get("NO_PROXY").is_none());
+    let restored_claude: serde_json::Value =
+        serde_json::from_slice(&fs::read(f.home.join(".claude.json")).unwrap()).unwrap();
+    assert!(restored_claude["githubRepoPaths"]
+        .get("owner-a/repo")
+        .is_some());
+    assert!(restored_claude["githubRepoPaths"]
+        .get("owner-b/repo")
+        .is_none());
 }

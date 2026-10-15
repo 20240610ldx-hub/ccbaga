@@ -21,7 +21,7 @@ export function BrowserPanel({ onBusy }: {
     const gate = useRef(false), live = useRef(true);
     const activity = useCleanupActivity();
     const [preferred, setPreferred] = useState<DefaultBrowser | null>(null), [asking, setAsking] = useState(false), [defaultNote, setDefaultNote] = useState('');
-    useEffect(() => { onBusy?.(!!busy || asking); return () => onBusy?.(false); }, [busy, asking, onBusy]);
+    useEffect(() => { onBusy?.(!!busy); return () => onBusy?.(false); }, [busy, onBusy]);
     async function readDefault() { try {
         const next = await invoke<DefaultBrowser>('browser_default_read');
         if (live.current)

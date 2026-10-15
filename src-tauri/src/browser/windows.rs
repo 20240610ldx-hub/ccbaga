@@ -128,23 +128,26 @@ fn start_windows_companion(app: &tauri::AppHandle, urls: &[String]) -> Result<()
     let machine = config::machine()?;
     crate::startup_trace("machine ready");
     config.validate(&machine)?;
-    if !profile::running(&profile)? {
+    let running = profile::running(&profile)?;
+    if !running {
         profile::preferences(&profile, &config, &machine)?;
     }
     write_launch_args(&root, &config, &machine, &profile, &version(&engine))?;
     workspaces::unblock(&root)?;
     crate::startup_trace("preferences ready");
-    let page = open_session(app, &config, &machine, version(&engine))?;
-    crate::startup_trace("session ready");
+    let reuse_running = !urls.is_empty() && running && state.session.lock().unwrap().is_some();
+    let mut cmd_args = if reuse_running {
+        let mut a = config::arguments(&config, &machine, &profile, "", &version(&engine));
+        a.pop();
+        a
+    } else {
+        let page = open_session(app, &config, &machine, version(&engine))?;
+        crate::startup_trace("session ready");
+        config::arguments(&config, &machine, &profile, &page, &version(&engine))
+    };
+    cmd_args.extend_from_slice(urls);
     let mut child = Command::new(binary(&engine))
-        .args(config::arguments(
-            &config,
-            &machine,
-            &profile,
-            &page,
-            &version(&engine),
-        ))
-        .args(urls)
+        .args(cmd_args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -164,7 +167,8 @@ fn default_read() -> Result<DefaultBrowser, String> {
     };
     let http = read("http");
     let https = read("https");
-    let is_default = http.eq_ignore_ascii_case("CCBaga-B.URL") && https.eq_ignore_ascii_case("CCBaga-B.URL");
+    let is_default =
+        http.eq_ignore_ascii_case("CCBaga-B.URL") && https.eq_ignore_ascii_case("CCBaga-B.URL");
     let exe = std::env::current_exe().map_err(|_| "无法定位 CCBaga-A。")?;
     let installed = exe
         .parent()

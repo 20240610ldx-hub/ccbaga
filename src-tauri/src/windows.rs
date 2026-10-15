@@ -1,5 +1,5 @@
 // [INPUT]: Windows 当前用户/默认所有者 SID、时区、注册表状态、系统工具、受限进程接口与 Win32 文件路径。
-// [OUTPUT]: Windows 平台 JSON 桥；兼容令牌默认所有者，提供不扩张组信任的文件检查与绝对路径的 \\?\ 长路径调用。
+// [OUTPUT]: Windows 平台 JSON 桥；用户/实际默认所有者文件检查、长路径调用、真实显示语言和仅原生使用的系统代理。
 // [POS]: 仅原生识别与用户触发的系统操作；不含网络客户端，不向 UI 输出进程参数或代理秘密。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use serde_json::{json, Value};
@@ -455,38 +455,37 @@ fn locale() -> String {
     }
     String::from_utf16_lossy(&value[..count as usize - 1]).replace('-', "_")
 }
-fn session_language() -> String {
-    use windows_sys::Win32::Globalization::{GetUserPreferredUILanguages, MUI_LANGUAGE_NAME};
-    let mut count = 0;
-    let mut size = 0;
-    unsafe {
-        GetUserPreferredUILanguages(
-            MUI_LANGUAGE_NAME,
-            &mut count,
-            std::ptr::null_mut(),
-            &mut size,
-        );
+pub(crate) fn normalize_language_tag(tag: &str) -> String {
+    let trimmed = tag.trim();
+    match trimmed {
+        "zh-CN" | "zh-SG" | "zh-Hans" => "zh-Hans".into(),
+        "zh-TW" | "zh-HK" | "zh-MO" | "zh-Hant" => "zh-Hant".into(),
+        s if s.starts_with("zh-Hans-") => "zh-Hans".into(),
+        s if s.starts_with("zh-Hant-") => "zh-Hant".into(),
+        s if s.starts_with("fr-") => "fr".into(),
+        s if s.starts_with("de-") => "de".into(),
+        s if s.starts_with("ja-") => "ja".into(),
+        s if s.starts_with("ko-") => "ko".into(),
+        s if s.starts_with("es-") => "es".into(),
+        s if s.starts_with("it-") => "it".into(),
+        _ => trimmed.into(),
     }
-    let mut buffer = vec![0u16; size as usize];
-    if size == 0
-        || unsafe {
-            GetUserPreferredUILanguages(
-                MUI_LANGUAGE_NAME,
-                &mut count,
-                buffer.as_mut_ptr(),
-                &mut size,
-            )
-        } == 0
-    {
+}
+fn ui_display_language() -> String {
+    use windows_sys::Win32::Globalization::{GetUserDefaultUILanguage, LCIDToLocaleName};
+    let mut name = [0u16; 85];
+    let length = unsafe {
+        LCIDToLocaleName(
+            GetUserDefaultUILanguage() as u32,
+            name.as_mut_ptr(),
+            name.len() as i32,
+            0,
+        )
+    };
+    if length <= 1 {
         return String::new();
     }
-    let first = buffer.split(|c| *c == 0).next().unwrap_or_default();
-    let language = String::from_utf16_lossy(first);
-    match language.as_str() {
-        "zh-CN" | "zh-SG" => "zh-Hans".into(),
-        "zh-TW" | "zh-HK" => "zh-Hant".into(),
-        _ => language,
-    }
+    normalize_language_tag(&String::from_utf16_lossy(&name[..length as usize - 1]))
 }
 pub(super) fn registry_string(
     root: windows_sys::Win32::System::Registry::HKEY,
@@ -518,15 +517,119 @@ pub(super) fn registry_string(
             .into(),
     )
 }
+pub(super) fn registry_dword(
+    root: windows_sys::Win32::System::Registry::HKEY,
+    key: &str,
+    name: &str,
+) -> Option<u32> {
+    use windows_sys::Win32::System::Registry::{RegGetValueW, RRF_RT_REG_DWORD};
+    let key: Vec<u16> = key.encode_utf16().chain(Some(0)).collect();
+    let name: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
+    let mut value: u32 = 0;
+    let mut bytes = std::mem::size_of::<u32>() as u32;
+    let status = unsafe {
+        RegGetValueW(
+            root,
+            key.as_ptr(),
+            name.as_ptr(),
+            RRF_RT_REG_DWORD,
+            std::ptr::null_mut(),
+            (&mut value as *mut u32).cast(),
+            &mut bytes,
+        )
+    };
+    if status != 0 {
+        return None;
+    }
+    Some(value)
+}
+
+pub(crate) fn parse_windows_proxy_server(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if trimmed.contains('=') {
+        let pairs: Vec<(&str, &str)> = trimmed
+            .split(';')
+            .filter_map(|part| part.trim().split_once('='))
+            .map(|(k, v)| (k.trim(), v.trim()))
+            .filter(|(_, v)| !v.is_empty())
+            .collect();
+        for kind in ["https", "http", "socks", "socks5"] {
+            if let Some((_, addr)) = pairs.iter().find(|(k, _)| k.eq_ignore_ascii_case(kind)) {
+                if addr.contains("://") {
+                    return (*addr).into();
+                }
+                let scheme = match kind {
+                    "socks" => "socks4",
+                    "socks5" => "socks5h",
+                    _ => "http",
+                };
+                return format!("{scheme}://{addr}");
+            }
+        }
+        return String::new();
+    }
+    let first = trimmed
+        .split(';')
+        .map(str::trim)
+        .find(|s| !s.is_empty())
+        .unwrap_or("");
+    if first.is_empty() {
+        String::new()
+    } else if first.contains("://") {
+        first.into()
+    } else {
+        format!("http://{first}")
+    }
+}
+
+pub(crate) fn system_proxy() -> String {
+    if let Some(env_proxy) = [
+        "ALL_PROXY",
+        "all_proxy",
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+    ]
+    .iter()
+    .filter_map(|k| std::env::var(k).ok())
+    .map(|v| v.trim().to_string())
+    .find(|v| !v.is_empty())
+    {
+        return env_proxy;
+    }
+    use windows_sys::Win32::System::Registry::HKEY_CURRENT_USER;
+    let key = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings";
+    if registry_dword(HKEY_CURRENT_USER, key, "ProxyEnable").unwrap_or(0) != 0 {
+        if let Some(server) = registry_string(HKEY_CURRENT_USER, key, "ProxyServer") {
+            return parse_windows_proxy_server(&server);
+        }
+    }
+    String::new()
+}
+
 fn location_enabled() -> Option<bool> {
-    use windows_sys::Win32::System::Registry::HKEY_LOCAL_MACHINE;
-    match registry_string(
+    use windows_sys::Win32::System::Registry::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    let hklm = registry_string(
         HKEY_LOCAL_MACHINE,
         r"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location",
         "Value",
-    )?
-    .as_str()
-    {
+    );
+    if hklm.as_deref() == Some("Deny") {
+        return Some(false);
+    }
+    for subkey in [
+        r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location",
+        r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location\NonPackaged",
+    ] {
+        if registry_string(HKEY_CURRENT_USER, subkey, "Value").as_deref() == Some("Deny") {
+            return Some(false);
+        }
+    }
+    match hklm.as_deref()? {
         "Allow" => Some(true),
         "Deny" => Some(false),
         _ => None,
@@ -539,7 +642,7 @@ fn snapshot() -> Value {
         "timezone": timezone(),
         "timezones": timezones(),
         "automatic_timezone": null,
-        "languages": [session_language()],
+        "languages": [ui_display_language()],
         "location_enabled": location_enabled(),
         "accessibility": false
     })
@@ -563,18 +666,7 @@ pub unsafe fn rf_browser_machine() -> *mut c_char {
         .map(|n| n.get())
         .unwrap_or(1));
     state["locale"] = json!(locale());
-    let proxy = [
-        "ALL_PROXY",
-        "all_proxy",
-        "HTTPS_PROXY",
-        "https_proxy",
-        "HTTP_PROXY",
-        "http_proxy",
-    ]
-    .iter()
-    .find_map(|k| std::env::var(k).ok())
-    .unwrap_or_default();
-    state["system_proxy"] = json!(proxy);
+    state["system_proxy"] = json!(system_proxy());
     response(Ok(state))
 }
 
@@ -641,7 +733,7 @@ fn region_settings(language: &str, region: Option<&str>) -> Result<Value, String
         }
         .into()
     };
-    let active_language = session_language();
+    let display_language = ui_display_language();
     let script = include_str!("../../scripts/windows-region.ps1").trim_start_matches('\u{feff}');
     let result = Command::new("powershell")
         .creation_flags(0x08000000)
@@ -660,7 +752,10 @@ fn region_settings(language: &str, region: Option<&str>) -> Result<Value, String
     if region.is_some_and(|r| locale() != r) {
         return Err("Windows 区域格式修改未通过核验。".into());
     }
-    if !language_matches(&active_language, language) {
+    // 新首选项不证明当前登录会话已切换；修改前后都须是目标显示语言。
+    if !language_matches(&display_language, language)
+        || !language_matches(&ui_display_language(), language)
+    {
         open_settings("language")?;
         return Err(
             "首选语言与区域已保存；安装所需语言包并注销、重新登录后再核验显示语言。".into(),
@@ -690,90 +785,5 @@ pub unsafe fn rf_system_location() -> *mut c_char {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn ci_timezone_write_is_verified_and_restored() {
-        for region in crate::regions::get_regions() {
-            assert!(iana_to_windows_tz(region.timezone).is_some());
-        }
-        if std::env::var("GITHUB_ACTIONS").as_deref() != Ok("true") {
-            return;
-        }
-        struct Restore(String);
-        impl Drop for Restore {
-            fn drop(&mut self) {
-                output("tzutil", &["/s", &self.0]).expect("restore CI timezone");
-            }
-        }
-        let before = Restore(raw_windows_timezone());
-        assert!(!before.0.is_empty());
-        let requested = CString::new("Asia/Tokyo").unwrap();
-        let state: Value =
-            crate::native::decode(unsafe { rf_system_timezone(requested.as_ptr()) }).unwrap();
-        assert!(state["state"].is_object());
-        assert_eq!(raw_windows_timezone(), "Tokyo Standard Time");
-        let invalid = CString::new("Asia/Tokyo; malicious").unwrap();
-        assert!(
-            crate::native::decode::<Value>(unsafe { rf_system_timezone(invalid.as_ptr()) })
-                .is_err()
-        );
-        assert_eq!(raw_windows_timezone(), "Tokyo Standard Time");
-    }
-
-    #[test]
-    fn windows_paths_preserve_namespaces_and_only_extend_absolute_paths() {
-        for (input, expected) in [
-            (r"C:\Users\me\file", r"\\?\C:\Users\me\file"),
-            ("C:/Users/me/file", r"\\?\C:\Users\me\file"),
-            (r"\\server\share\file", r"\\?\UNC\server\share\file"),
-            (r"relative\file", r"relative\file"),
-            (r"C:relative", r"C:relative"),
-            (r"C:\parent\..\file", r"C:\parent\..\file"),
-            (r"C:\parent\.\file", r"C:\parent\.\file"),
-            (r"\\?\C:\raw/file", r"\\?\C:\raw/file"),
-            (r"\\.\pipe\test", r"\\.\pipe\test"),
-        ] {
-            let actual = wide_path(std::path::Path::new(input));
-            assert_eq!(actual.last(), Some(&0));
-            assert_eq!(
-                String::from_utf16(&actual[..actual.len() - 1]).unwrap(),
-                expected
-            );
-        }
-        assert!(!current_owner_sids().is_empty());
-        assert!(
-            current_owner_sids().len() <= 2,
-            "group membership is not ownership"
-        );
-    }
-
-    #[test]
-    fn windows_owned_accepts_default_and_explicit_user_owners() {
-        let dir = std::env::temp_dir().join(format!(
-            "rf-win-owned-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        let default_file = dir.join("default-owner.json");
-        let explicit_file = dir.join("explicit-owner.json");
-        std::fs::write(&default_file, b"{}").unwrap();
-        std::fs::write(&explicit_file, b"{}").unwrap();
-        fixture_owner(&explicit_file);
-        assert!(owned(&dir));
-        assert!(owned(&default_file));
-        assert!(owned(&explicit_file));
-        let default_owner = file_owner_sid(&default_file).unwrap();
-        let user = current_sid().unwrap();
-        assert!(current_owner_sids()
-            .iter()
-            .all(|sid| sid == user || sid == &default_owner));
-        preserve_file_permissions(&default_file, &explicit_file).unwrap();
-        assert!(owned(&explicit_file));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}
+#[path = "windows_tests.rs"]
+mod tests;

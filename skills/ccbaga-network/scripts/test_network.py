@@ -66,6 +66,10 @@ class NetworkTests(unittest.TestCase):
             copy = key
         self.assertFalse(copy.exists())
         if os.name != 'nt': self.assertEqual(pem.stat().st_mode & 0o777,0o644)
+        linked = self.root/'linked.pem'
+        linked.symlink_to(pem)
+        with self.assertRaisesRegex(ValueError, 'linked key'):
+            n.key_data(str(linked),str(ppk),str(pub))
         ppk.write_text(f'PuTTY-User-Key-File-3: {algorithm}\nPublic-Lines: 1\nAAAA\n')
         with self.assertRaises(ValueError): n.Key(conf)
         with self.assertRaises(ValueError): n.key_data(None,str(ppk),str(pub))

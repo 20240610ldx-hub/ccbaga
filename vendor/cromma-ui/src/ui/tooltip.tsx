@@ -1,7 +1,7 @@
 /**
  * [INPUT]: 依赖 radix-ui 的 Tooltip，.cn 的 cn。
  * [OUTPUT]: 提供 TooltipProvider/Tooltip/TooltipTrigger/TooltipContent 与 Tip。TooltipProvider/Tooltip/TooltipTrigger/TooltipContent 与 Tip是一行式包装，可给方位与离距。
- * [POS]: cromma-ui的提示原子——Laper的浅色表面 bg-popover + outline-border + shadow-md，600ms 延迟。
+ * [POS]: Cromma 提示原子；共享浅色表面与600ms延迟，浮层高于模态遮罩以保持动作提示可读。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 import type { ReactNode } from 'react';
@@ -18,7 +18,7 @@ export function TooltipContent({ className, sideOffset = 8, ...props }: TooltipP
       <TooltipPrimitive.Content
         sideOffset={sideOffset}
         className={cn(
-          'laper-tooltip-motion z-3 flex max-w-72 flex-col rounded-md bg-popover px-2.5 py-1.5 text-sm text-popover-foreground shadow-md outline outline-border',
+          'laper-tooltip-motion z-[1600] flex max-w-72 flex-col rounded-md bg-popover px-2.5 py-1.5 text-sm text-popover-foreground shadow-md outline outline-border',
           className,
         )}
         {...props}

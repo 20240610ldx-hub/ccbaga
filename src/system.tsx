@@ -115,7 +115,8 @@ export function SystemPanel({ onBusy }: {
     catch (e) {
         setError(String(e));
     } }
-    const zones = state ? Object.fromEntries(state.timezones.filter(value => value === zone || value.toLowerCase().includes(filter.toLowerCase())).map(value => [value, value.replaceAll('_', ' ')])) : {};
+    const normalizedFilter = filter.trim().toLowerCase().replaceAll('_', ' ');
+    const zones = state ? Object.fromEntries(state.timezones.filter(value => value === zone || value.toLowerCase().replaceAll('_', ' ').includes(normalizedFilter)).map(value => [value, value.replaceAll('_', ' ')])) : {};
     const disabled = busy !== null || !state;
     return <section className="system-page">
     <div className="cleanup-title"><div><h1>{t("电脑环境")}</h1></div><Button variant="secondary" size="small" loading={busy === 'read'} disabled={busy !== null} leftIcon={<ArrowClockwiseIcon size={16}/>} onClick={() => void reload()}>{t("刷新状态")}</Button></div>

@@ -1,5 +1,5 @@
 // [INPUT]: 临时 Claude 文件、虚构账号配置、隔离 SQLite 保险库与注入的进程状态。
-// [OUTPUT]: 文件范围、凭据脱敏/资产保留、快照过期/不完整、运行/恢复阻断及部分失败回归。
+// [OUTPUT]: 文件范围、凭据脱敏、Desktop 个人配置/虚拟机资产保留、快照过期/不完整、运行/恢复阻断及部分失败回归。
 // [POS]: 文件残留入口的离线安全验收；不改 HOME、不检查真实进程、不访问钥匙串或现有账号。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -51,6 +51,36 @@ impl Drop for Fixture {
 }
 fn ids(scan: &Scan) -> Vec<String> {
     scan.items.iter().map(|item| item.id.clone()).collect()
+}
+
+#[test]
+fn desktop_personal_assets_are_never_residue_cleanup_targets() {
+    let f = Fixture::new();
+    #[cfg(windows)]
+    let desktop = "AppData/Roaming/Claude";
+    #[cfg(not(windows))]
+    let desktop = "Library/Application Support/Claude";
+    for name in [
+        "config.json",
+        "Preferences",
+        "Local State",
+        "window-state.json",
+        "Web Data",
+        "developer_settings.json",
+        "mcp-user-tool-toggles.json",
+        "extensions-blocklist.json",
+        "git-worktrees.json",
+        "claude-code-vm/disk",
+    ] {
+        f.file(&format!("{desktop}/{name}"), "personal asset");
+    }
+    f.file(&format!("{desktop}/Local Storage/state"), "login state");
+    let scan = collect(&f.0);
+    assert_eq!(scan.items.len(), 1);
+    assert!(scan.items[0].path.ends_with("Local Storage"));
+    assert!(f.clean(&scan, &ids(&scan), || Ok(false)).unwrap().completed);
+    assert!(!f.0.join(desktop).join("Local Storage").exists());
+    assert_eq!(fs::read_dir(f.0.join(desktop)).unwrap().count(), 10);
 }
 
 #[test]

@@ -31,7 +31,10 @@ fn packaged_browser_paths_preserve_both_layouts() {
     let isolated = root.join("usr/libexec/CCBaga-B");
     fs::create_dir_all(&isolated).unwrap();
     fs::write(binary(&isolated), "isolated engine").unwrap();
-    assert_eq!(packaged_engine(&resources).canonicalize().unwrap(), isolated);
+    assert_eq!(
+        packaged_engine(&resources).canonicalize().unwrap(),
+        isolated
+    );
     let legacy = resources.join("browser-runtime/LinuxBrowser");
     fs::create_dir_all(&legacy).unwrap();
     fs::write(binary(&legacy), "source/Arch engine").unwrap();
@@ -82,21 +85,24 @@ fn start_linux_companion(app: &tauri::AppHandle, urls: &[String]) -> Result<(), 
     let config = config::load(&settings)?;
     let machine = config::machine()?;
     config.validate(&machine)?;
-    if !profile::running(&profile)? {
+    let running = profile::running(&profile)?;
+    if !running {
         profile::preferences(&profile, &config, &machine)?;
     }
     write_launch_args(&root, &config, &machine, &profile, &version(&engine))?;
     workspaces::unblock(&root)?;
-    let page = open_session(app, &config, &machine, version(&engine))?;
+    let reuse_running = !urls.is_empty() && running && state.session.lock().unwrap().is_some();
+    let mut cmd_args = if reuse_running {
+        let mut a = config::arguments(&config, &machine, &profile, "", &version(&engine));
+        a.pop();
+        a
+    } else {
+        let page = open_session(app, &config, &machine, version(&engine))?;
+        config::arguments(&config, &machine, &profile, &page, &version(&engine))
+    };
+    cmd_args.extend_from_slice(urls);
     let mut child = Command::new(binary(&engine))
-        .args(config::arguments(
-            &config,
-            &machine,
-            &profile,
-            &page,
-            &version(&engine),
-        ))
-        .args(urls)
+        .args(cmd_args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

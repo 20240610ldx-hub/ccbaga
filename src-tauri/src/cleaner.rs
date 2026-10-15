@@ -4,9 +4,9 @@
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use crate::native;
 use crate::progress::{Progress, Reporter};
-use serde::Serialize;
 #[cfg(windows)]
 use dunce::canonicalize;
+use serde::Serialize;
 #[cfg(not(windows))]
 use std::fs::canonicalize;
 #[cfg(unix)]
@@ -28,14 +28,14 @@ mod config;
 mod file_io;
 #[path = "cleaner_folder.rs"]
 mod folder;
+#[path = "cleaner_identity.rs"]
+pub(crate) mod identity;
+#[path = "cleaner_residue.rs"]
+pub(crate) mod residue;
 #[path = "cleaner_targets.rs"]
 mod targets;
 #[path = "cleaner_transaction.rs"]
 mod transaction;
-#[path = "cleaner_residue.rs"]
-pub(crate) mod residue;
-#[path = "cleaner_identity.rs"]
-pub(crate) mod identity;
 #[cfg(test)]
 use transaction::perform_items;
 #[cfg(test)]
@@ -109,9 +109,13 @@ fn stamp(m: &fs::Metadata) -> Stamp {
 }
 pub(crate) fn linked(meta: &fs::Metadata) -> bool {
     #[cfg(windows)]
-    { crate::windows::linked(meta) }
+    {
+        crate::windows::linked(meta)
+    }
     #[cfg(unix)]
-    { meta.file_type().is_symlink() }
+    {
+        meta.file_type().is_symlink()
+    }
 }
 fn generation() -> u128 {
     std::time::SystemTime::now()
@@ -159,10 +163,8 @@ fn home() -> Result<PathBuf, String> {
     let var = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
     #[cfg(not(windows))]
     let var = std::env::var_os("HOME");
-    canonicalize(PathBuf::from(
-        var.ok_or("无法定位用户目录。")?,
-    ))
-    .map_err(|_| "无法读取用户目录。".into())
+    canonicalize(PathBuf::from(var.ok_or("无法定位用户目录。")?))
+        .map_err(|_| "无法读取用户目录。".into())
 }
 fn add_target(scan: &mut Scan, target: targets::Target, batch: u128) {
     let path = target.path;
@@ -223,7 +225,10 @@ fn add_target(scan: &mut Scan, target: targets::Target, batch: u128) {
     }
     let (bytes, files, tree_stamp) = match targets::measure(&path) {
         Ok(measured) => measured,
-        Err(error) => { scan.warnings.push(error); return; }
+        Err(error) => {
+            scan.warnings.push(error);
+            return;
+        }
     };
     scan.items.push(Item {
         id: format!("{batch}-{}", scan.items.len()),
@@ -355,7 +360,7 @@ fn diagnostics(scan: &mut Scan) {
     });
     #[cfg(target_os = "windows")]
     {
-        let enabled = [
+        let env_enabled = [
             "ALL_PROXY",
             "all_proxy",
             "HTTPS_PROXY",
@@ -365,9 +370,13 @@ fn diagnostics(scan: &mut Scan) {
         ]
         .iter()
         .any(|key| std::env::var_os(key).is_some());
+        let sys_enabled = !crate::windows::system_proxy().is_empty();
+        let enabled = env_enabled || sys_enabled;
         scan.diagnostics.push(Diagnostic {
             title: "代理环境".into(),
-            detail: if enabled {
+            detail: if sys_enabled {
+                "系统代理已开启。此处仅检查，不改动现有 Clash 路由。".into()
+            } else if env_enabled {
                 "检测到代理环境变量；桌面代理设置未独立核验，请验证实际出口。".into()
             } else {
                 "未发现代理环境变量；TUN 是推荐的网络环境。".into()
@@ -431,9 +440,9 @@ fn process_row(line: &str, desktop: &[i32], uid: u32) -> Option<ClaudeProcess> {
             .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
         && home().ok().is_some_and(|root| {
             let expected = root.join(".local/share/claude/versions");
-            Path::new(&executable)
-                .parent()
-                .is_some_and(|p| p.components().collect::<Vec<_>>() == expected.components().collect::<Vec<_>>())
+            Path::new(&executable).parent().is_some_and(|p| {
+                p.components().collect::<Vec<_>>() == expected.components().collect::<Vec<_>>()
+            })
         });
     if !desktop_app
         && !native_cli
@@ -511,7 +520,11 @@ pub(crate) fn cli_running() -> Result<bool, String> {
     Ok(processes()?.iter().any(|process| {
         matches!(
             process.name.as_str(),
-            "Claude Code" | "claude" | "claude.exe" | "claude-code" | "claude-code-vm"
+            "Claude Code"
+                | "claude"
+                | "claude.exe"
+                | "claude-code"
+                | "claude-code-vm"
         )
     }))
 }
@@ -658,7 +671,9 @@ pub(crate) fn stop_processes() -> Result<usize, String> {
         }
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
-    if running()? { return Err("仍有 Claude 进程在运行。".into()); }
+    if running()? {
+        return Err("仍有 Claude 进程在运行。".into());
+    }
     Ok(targets.len())
 }
 #[tauri::command]
@@ -746,11 +761,7 @@ fn identity(item: &Item, root: &Path) -> Result<(), String> {
     let wrong_user = m.uid() != unsafe { getuid() };
     #[cfg(windows)]
     let wrong_user = !crate::windows::owned(path);
-    if linked(&m)
-        || wrong_user
-        || m.is_dir() != item.directory
-        || Some(stamp(&m)) != item.stamp
-    {
+    if linked(&m) || wrong_user || m.is_dir() != item.directory || Some(stamp(&m)) != item.stamp {
         return Err("数据已变化，请退出 Claude 后重新扫描。".into());
     }
     if item.directory {

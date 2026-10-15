@@ -1,6 +1,6 @@
 // [INPUT]: SQLite 身份目录、加密压缩保险库、Cleaner 全局事务锁与 Tauri 进度通道。
 // [OUTPUT]: 当前/空/已保存身份、有界账号显示信息、用户保留选项、浏览器联动确认及真实阶段进度的停止/切换/恢复/删除命令。
-// [POS]: GUI 身份管理的原生入口；不提供凭据读取、任意文件或网络接口。
+// [POS]: GUI 身份管理的原生入口；刷新只读工作区、不回收暂存文件；不提供凭据读取、任意文件或网络接口。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 mod archive;
 pub(crate) mod browser_link;
@@ -107,7 +107,10 @@ fn vault(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
         .join("identity-vault"))
 }
 fn state(app: &tauri::AppHandle) -> Result<State, String> {
-    let db = database::Database::open(&vault(app)?)?;
+    let vault_path = vault(app)?;
+    let root_path = crate::cleaner::identity::root()?;
+    // 列表读取不能打开会回收归档/暂存目录的 Store；文件事务只在持锁的修改入口运行。
+    let db = database::Database::open(&vault_path)?;
     Ok(State {
         browser: db.browser_link()?,
         browser_warning: app
@@ -117,11 +120,11 @@ fn state(app: &tauri::AppHandle) -> Result<State, String> {
             .unwrap()
             .clone(),
         records: db.records()?.into_iter().filter(|r| !r.empty).collect(),
-        active: catalog::current_id(&vault(app)?, &crate::cleaner::identity::root()?, &db)?
+        active: catalog::current_id(&vault_path, &root_path, &db)?
             .unwrap_or_else(|| "current".into()),
         recovery: db.get("recovery")?,
         running: crate::cleaner::identity::processes_running()?,
-        current: profile::read(&crate::cleaner::identity::root()?),
+        current: profile::read(&root_path),
     })
 }
 #[tauri::command]

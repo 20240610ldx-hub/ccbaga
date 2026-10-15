@@ -80,6 +80,14 @@ function Status {
     $command=Get-Command claude -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($command) { $cli=$command.Source }
     if (-not $cli -and (Test-Path -LiteralPath $native)) { $cli=$native }
+    if (-not $cli -and $methods.Contains('npm') -and $npmRoot) {
+        $shim=Join-Path (Split-Path $npmRoot -Parent) 'claude.cmd'
+        if (Test-Path -LiteralPath $shim) { $cli=$shim }
+    }
+    if (-not $cli -and $methods.Contains('bun')) {
+        $bunCli=Join-Path $root '.bun\bin\claude.exe'
+        if (Test-Path -LiteralPath $bunCli) { $cli=$bunCli }
+    }
     if (-not $cli -and $methods.Contains('winget')) { $cli=$wingetBinary }
     $known=$false
     if ($cli -and (RealPath $cli)) {
@@ -193,7 +201,7 @@ try {
 } catch {
     $message=$_.Exception.Message
     if ($backupReady) {
-        try { RollbackNative; $message+=' Claude Code 操作失败，已恢复原程序。' }
+        try { RollbackNative; $message=if($message -like 'Claude Code *'){"$message Claude Code 操作失败，已恢复原程序。"}else{'Claude Code 操作失败，已恢复原程序。'} }
         catch { $message='Claude Code 回滚未完成，恢复文件保留在原生程序目录旁。' }
     }
     [Console]::Error.WriteLine($message)

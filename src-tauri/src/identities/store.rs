@@ -163,18 +163,17 @@ impl Store {
                 }
                 let mut s = s.clone();
                 if s.keys.is_empty() && s.category == "settings" && policy.settings {
-                    s.keys = vec![
-                        "env.CLAUDE_CODE_OAUTH_TOKEN".into(),
-                        "env.ANTHROPIC_API_KEY".into(),
-                        "env.ANTHROPIC_AUTH_TOKEN".into(),
-                        "apiKeyHelper".into(),
-                    ];
+                    s.keys = crate::cleaner::identity::SETTINGS_IDENTITY_KEYS
+                        .iter()
+                        .map(|k| (*k).into())
+                        .collect();
                 }
                 if s.path == stage.manifest.home.join(".claude.json") && policy.settings {
                     s.keys.retain(|k| {
                         crate::cleaner::identity::account_key(k)
                             || k == "mcpServers"
                             || k == "projects"
+                            || k == "githubRepoPaths"
                     });
                 }
                 if policy.mcp {
@@ -193,7 +192,7 @@ impl Store {
                     s.keys.retain(|k| k != "pluginSecrets");
                 }
                 if policy.projects {
-                    s.keys.retain(|k| k != "projects");
+                    s.keys.retain(|k| k != "projects" && k != "githubRepoPaths");
                 }
                 if !stage.manifest.sources[n].keys.is_empty() && s.keys.is_empty() {
                     return None;
@@ -617,7 +616,9 @@ impl Store {
         // 恢复前再保存现状，避免崩溃后用户新产生的数据被恢复操作覆盖。
         let (checkpoint, current_stage) =
             self.save_checkpoint(name, &outgoing.manifest.policy, reporter)?;
-        self.db.remember(&checkpoint)?;
+        if !checkpoint.empty {
+            self.db.remember(&checkpoint)?;
+        }
         self.clear(
             &Self::selected(&current_stage, &outgoing.manifest.policy),
             reporter,
@@ -663,6 +664,8 @@ impl Store {
             Some(1),
         );
         self.db.complete(&record.id)?;
+        self.db.compact()?;
+        let _ = self.collect_generations();
         reporter.log("commit", "ok", "恢复后的身份选择已提交。", 1, Some(1));
         reporter.log("verify", "ok", "原身份已恢复。", 1, Some(1));
         Ok(())

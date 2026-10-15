@@ -62,7 +62,7 @@ The bilingual **Usage guide** covers common actions and data boundaries. See the
 
 **Platforms:** macOS 12 or later on Apple Silicon; Linux x86_64 with GTK 3 and WebKitGTK 4.1; Windows 10/11 x86_64. Intel macOS and Linux ARM64 are not supported.
 
-Linux x86_64 packages include DEB, RPM, AppImage and Arch/pacman formats, with the companion browser included. See [Linux setup](docs/linux.md) for installation and platform limits. Official versions are published exclusively by the project owner, **liseami**.
+Linux x86_64 packages include DEB, RPM and AppImage built on Ubuntu 22.04 (glibc 2.35), plus a separate package for current Arch/pacman systems. All include the companion browser. See [Linux setup](docs/linux.md) for installation and platform limits. Official versions are published exclusively by the project owner, **liseami**.
 
 Windows x86_64 uses one NSIS setup installer containing both A and B. The installer is not Authenticode signed and may show SmartScreen; managed security policy can block it. See [Windows setup](docs/windows.md) for installation, toolchains and platform behaviors.
 

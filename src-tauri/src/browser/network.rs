@@ -266,7 +266,7 @@ pub fn checks(
                 match machine.location_enabled {
                     Some(true) => "开启",
                     Some(false) => "关闭",
-                    None => "未核验",
+                    None => "尚未核验",
                 },
                 report.map(|x| x.geolocation.as_str()).unwrap_or("待测")
             ),

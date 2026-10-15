@@ -1,5 +1,5 @@
 // [INPUT]: Win32 Toolhelp/进程句柄、当前用户 SID、精确 CLI 入口与独立浏览器资料路径。
-// [OUTPUT]: Claude 进程识别、创建时间/所有权复核后的结束，以及按完整资料参数正常关闭浏览器。
+// [OUTPUT]: 官方 CLI/固定 Desktop 路径与已核验包族的进程识别、创建时间/用户复核后的结束及独立浏览器正常关闭。
 // [POS]: Windows 进程边界；参数仅用于原生判定，不返回 UI；不对其他用户或名称相似的程序执行终止。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::{current_sid, input, process_sid, response};
@@ -229,15 +229,28 @@ fn claude_kind(image: &str, args: &[String]) -> Option<&'static str> {
     {
         return Some("Claude Code");
     }
-    if name != "claude.exe" {
-        return None;
-    }
     let local = normalized(&std::env::var("LOCALAPPDATA").ok()?);
-    if path == format!("{local}\\microsoft\\winget\\packages\\anthropic.claudecode_microsoft.winget.source_8wekyb3d8bbwe\\claude.exe") { return Some("Claude Code"); }
     if path.starts_with(&format!("{local}\\anthropicclaude\\"))
         || path.starts_with(&format!("{local}\\programs\\claude\\"))
     {
-        return Some("Claude Desktop");
+        if [
+            "claude.exe",
+            "cowork-svc.exe",
+            "claude-ssh-askpass.exe",
+            "claude-ssh-proxy.exe",
+        ]
+        .contains(&name)
+        {
+            return Some("Claude Desktop");
+        }
+    }
+    if name != "claude.exe" {
+        return None;
+    }
+    if path == format!("{local}\\microsoft\\winget\\packages\\anthropic.claudecode_microsoft.winget.source_8wekyb3d8bbwe\\claude.exe")
+        || path == format!("{local}\\microsoft\\winget\\links\\claude.exe")
+    {
+        return Some("Claude Code");
     }
     None
 }
@@ -263,7 +276,16 @@ fn processes(terminate: bool) -> Result<Vec<(u32, Handle)>, String> {
         let name = String::from_utf16_lossy(&entry.szExeFile)
             .trim_end_matches('\0')
             .to_lowercase();
-        if (["claude.exe", "node.exe", "bun.exe", "chrome.exe"].contains(&name.as_str())
+        if ([
+            "claude.exe",
+            "cowork-svc.exe",
+            "claude-ssh-askpass.exe",
+            "claude-ssh-proxy.exe",
+            "node.exe",
+            "bun.exe",
+            "chrome.exe",
+        ]
+        .contains(&name.as_str())
             || version_name(&name))
             && entry.th32ProcessID > 1
         {
@@ -278,7 +300,9 @@ fn processes(terminate: bool) -> Result<Vec<(u32, Handle)>, String> {
 pub fn claude_processes() -> Result<Vec<ClaudeProcess>, String> {
     let mut found = vec![];
     for (pid, handle) in processes(false)? {
-        let Some(image) = handle.image() else { continue; };
+        let Some(image) = handle.image() else {
+            continue;
+        };
         let args = arguments(&handle).unwrap_or_default();
         let kind = if handle.packaged_claude() {
             Some("Claude Desktop")
@@ -297,7 +321,9 @@ pub fn claude_processes() -> Result<Vec<ClaudeProcess>, String> {
     Ok(found)
 }
 pub fn kill_process(target: &ClaudeProcess) -> Result<(), String> {
-    let Some(handle) = Handle::open(target.pid as u32, true) else { return Ok(()); };
+    let Some(handle) = Handle::open(target.pid as u32, true) else {
+        return Ok(());
+    };
     if handle.created() != Some(target.created)
         || handle.image().as_deref() != Some(target.executable.as_str())
     {
@@ -416,10 +442,28 @@ mod tests {
             "C:\\空 格\\profile"
         ));
         let home = std::env::var("USERPROFILE").unwrap();
+        let local = std::env::var("LOCALAPPDATA").unwrap();
         assert_eq!(
             claude_kind(&format!(r"{home}\.bun\bin\claude.exe"), &[]),
             Some("Claude Code")
         );
+        assert_eq!(
+            claude_kind(
+                &format!(r"{local}\AnthropicClaude\app\resources\cowork-svc.exe"),
+                &[]
+            ),
+            Some("Claude Desktop")
+        );
+        for unrelated in [
+            format!(r"{home}\.claude\claude-code-helper.exe"),
+            format!(r"{home}\.local\share\claude\claude-code-helper.exe"),
+            format!(r"{local}\AnthropicClaudeOther\resources\cowork-svc.exe"),
+            format!(r"{local}\Programs\Unrelated\cowork-svc.exe"),
+            format!(r"{home}\scoop\shims\claude.exe"),
+            format!(r"{home}\.volta\bin\claude.exe"),
+        ] {
+            assert_eq!(claude_kind(&unrelated, &[]), None, "{unrelated}");
+        }
         assert!(current_sid().is_some());
         assert!(Handle::open(std::process::id(), false).is_some());
     }
