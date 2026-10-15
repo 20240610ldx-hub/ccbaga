@@ -1,6 +1,6 @@
 /*
  * [INPUT]: Foundation/CoreLocation 状态、SystemConfiguration 代理、LaunchServices 注册/默认处理程序与 proc 进程身份。
- * [OUTPUT]: 真实机器快照、浏览器应用注册、按包标识查询运行、默认浏览器读取与系统确认式设置、资料进程查询和正常退出、美国区域设置。
+ * [OUTPUT]: 含有效区域国家（保留原始 locale）的真实机器快照、浏览器应用注册、按包标识查询运行、默认浏览器读取与系统确认式设置、资料进程查询和正常退出、美国区域设置。
  * [POS]: 浏览器的只读机器来源和进程边界；不伪造硬件，不读取浏览器凭据。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -67,11 +67,13 @@ char *rf_browser_machine(void) {
     }
     id languages = CFBridgingRelease(CFPreferencesCopyValue(CFSTR("AppleLanguages"), kCFPreferencesAnyApplication, kCFPreferencesCurrentUser, kCFPreferencesAnyHost));
     id locale = CFBridgingRelease(CFPreferencesCopyValue(CFSTR("AppleLocale"), kCFPreferencesAnyApplication, kCFPreferencesCurrentUser, kCFPreferencesAnyHost));
+    NSString *localeIdentifier = [locale isKindOfClass:NSString.class] ? locale : NSLocale.currentLocale.localeIdentifier;
+    NSString *localeCountry = [[NSLocale alloc] initWithLocaleIdentifier:localeIdentifier].countryCode ?: @"";
     [NSTimeZone resetSystemTimeZone];
     return browserResponse(@{@"platform": @"macos", @"version": [NSString stringWithFormat:@"%ld.%ld.%ld", (long)v.majorVersion, (long)v.minorVersion, (long)v.patchVersion],
         @"cores": @(NSProcessInfo.processInfo.activeProcessorCount), @"timezone": NSTimeZone.systemTimeZone.name,
         @"languages": [languages isKindOfClass:NSArray.class] ? languages : NSLocale.preferredLanguages,
-        @"locale": [locale isKindOfClass:NSString.class] ? locale : NSLocale.currentLocale.localeIdentifier,
+        @"locale": localeIdentifier, @"locale_country": localeCountry,
         @"location_enabled": @([CLLocationManager locationServicesEnabled]), @"timezones": NSTimeZone.knownTimeZoneNames,
         @"system_proxy": systemProxy});
 }

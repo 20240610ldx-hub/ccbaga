@@ -1,5 +1,5 @@
 // [INPUT]: 显式代理地址、ipwho.is/ipapi.co HTTPS 出口信息与真实浏览器上报。
-// [OUTPUT]: 共用检测服务目录、出口解析与按同一路由切换服务的检测；无上报或失败保持未核验。
+// [OUTPUT]: 独立目标国家与配置语言核验、共用检测服务目录、出口解析与按同一路由切换服务的检测；无上报或失败保持未核验。
 // [POS]: 环境核验边界；只把出口观测当证据，配置值不能冒充实际结果。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use serde::{Deserialize, Serialize};
@@ -158,7 +158,7 @@ pub fn checks(
         },
         detail,
     };
-    let target = crate::regions::matching(&config.language(machine), &config.timezone(machine));
+    let target = config.region(machine);
     vec![
         check(
             "目标地区网络出口",
@@ -207,16 +207,19 @@ pub fn checks(
         ),
         check(
             "目标语言与系统区域",
-            target.zip(report).map(|(target, r)| {
-                r.language == target.language
-                    && machine
-                        .languages
-                        .first()
-                        .map(|x| {
-                            x == target.language || x.starts_with(&format!("{}-", target.language))
-                        })
-                        .unwrap_or(false)
-                    && machine.locale.starts_with(target.locale)
+            target.zip(report).and_then(|(target, r)| {
+                let language = config.language(machine);
+                let first = machine.languages.first()?;
+                if machine.locale_country.is_empty() || first.is_empty() || r.language.is_empty() {
+                    return None;
+                }
+                Some(
+                    r.language == language
+                        && (first == &language
+                            || first.starts_with(&format!("{language}-"))
+                            || (config.follow_machine && first == "en" && language == "en-US"))
+                        && machine.locale_country == target.country,
+                )
             }),
             format!(
                 "机器：{} / {}；浏览器：{}",

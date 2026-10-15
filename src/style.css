@@ -1,6 +1,6 @@
 /**
  * [INPUT]: index.css 的系统字体、Cromma UI 控件、Laper 最新 LandingRailLayout/LineworkTokens/HeroDotBackground 几何与 Cromma 控件令牌。
- * [OUTPUT]: 黑白斜纹与点阵壳、细线操作网格、立体身份卡片、文件残留紧凑清单与网络/更新布局；实测页全宽紧凑 2/3/4 列、红/黄/绿背景、检测波纹和逐项失败原因，复用斜纹/点阵令牌。
+ * [OUTPUT]: 黑白斜纹与点阵壳、细线操作网格、立体身份卡片、文件残留紧凑清单与网络/更新布局；实测页全宽紧凑 2/3/4 列、红/黄/绿背景、检测波纹、单项未知黄标和逐项失败原因，复用斜纹/点阵令牌。
  * [POS]: 应用布局层；信息只分标题、操作和结果，删除装饰文案与重复说明区；按钮边缘、内高光、阴影和悬停效果沿用 Cromma UI。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -145,6 +145,7 @@ h3 { margin: 0; font-size: 13px; font-weight: 500; }
 .verification-check h2 { font-size: 12px; color: var(--muted-foreground); font-weight: 400; }
 .verification-check header > span { color: #16703c; font-size: 17px; font-weight: 600; }
 .verification-check.failed header > span { color: #b42318; }
+.verification-check.pending header > span { color: #9a6700; }
 .verification-check > strong { display: block; font: 15px ui-monospace, monospace; overflow-wrap: anywhere; user-select: text; }
 .verification-check p { font-size: 11px; line-height: 1.6; margin-top: 8px; color: var(--muted-foreground); }
 .verification-loading { padding: 24px 20px; color: var(--muted-foreground); font-size: 13px; text-align: center; }
