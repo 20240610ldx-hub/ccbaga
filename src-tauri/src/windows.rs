@@ -1,5 +1,5 @@
-// [INPUT]: Windows 当前用户/默认所有者/管理员组 SID、时区、注册表状态、系统工具与受限进程接口。
-// [OUTPUT]: Windows 平台 JSON 桥；支持时区/语言/区域/定位状态、Win32 剪贴板、兼容管理员令牌的当前用户文件所有权和安全进程接口。
+// [INPUT]: Windows 当前用户/默认所有者 SID、时区、注册表状态、系统工具、受限进程接口与 Win32 文件路径。
+// [OUTPUT]: Windows 平台 JSON 桥；兼容令牌默认所有者，提供不扩张组信任的文件检查与绝对路径的 \\?\ 长路径调用。
 // [POS]: 仅原生识别与用户触发的系统操作；不含网络客户端，不向 UI 输出进程参数或代理秘密。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use serde_json::{json, Value};
@@ -13,8 +13,8 @@ use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
 use windows_sys::Win32::Security::Authorization::{GetNamedSecurityInfoW, SE_FILE_OBJECT};
 use windows_sys::Win32::Security::OWNER_SECURITY_INFORMATION;
 use windows_sys::Win32::Security::{
-    GetLengthSid, GetTokenInformation, IsValidSid, TokenGroups, TokenOwner, TokenUser,
-    TOKEN_GROUPS, TOKEN_OWNER, TOKEN_QUERY, TOKEN_USER,
+    GetLengthSid, GetTokenInformation, IsValidSid, TokenOwner, TokenUser, TOKEN_OWNER, TOKEN_QUERY,
+    TOKEN_USER,
 };
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 #[path = "windows_process.rs"]
@@ -178,8 +178,6 @@ pub(super) fn current_sid() -> Option<&'static Vec<u8>> {
     SID.get_or_init(|| unsafe { process_sid(GetCurrentProcess()) })
         .as_ref()
 }
-const SE_GROUP_OWNER_ATTR: u32 = 0x0000_0008;
-const BUILTIN_ADMINS_SID: [u8; 16] = [1, 2, 0, 0, 0, 0, 0, 5, 32, 0, 0, 0, 32, 2, 0, 0];
 
 unsafe fn copy_sid(sid: *mut std::ffi::c_void) -> Option<Vec<u8>> {
     if sid.is_null() || IsValidSid(sid) == 0 {
@@ -196,6 +194,7 @@ fn push_unique_sid(sids: &mut Vec<Vec<u8>>, candidate: Option<Vec<u8>>) {
     }
 }
 
+// 仅信任进程用户与实际默认所有者；组成员（包括 deny-only 管理员组）不证明文件属于本人。
 unsafe fn current_process_owner_sids() -> Vec<Vec<u8>> {
     let mut sids = Vec::new();
     push_unique_sid(&mut sids, current_sid().cloned());
@@ -219,32 +218,6 @@ unsafe fn current_process_owner_sids() -> Vec<Vec<u8>> {
             push_unique_sid(&mut sids, copy_sid(owner.Owner));
         }
     }
-    size = 0;
-    GetTokenInformation(token, TokenGroups, std::ptr::null_mut(), 0, &mut size);
-    if size > 0 {
-        let mut buffer = vec![0usize; (size as usize).div_ceil(std::mem::size_of::<usize>())];
-        if GetTokenInformation(
-            token,
-            TokenGroups,
-            buffer.as_mut_ptr().cast(),
-            size,
-            &mut size,
-        ) != 0
-        {
-            let groups = &*(buffer.as_ptr().cast::<TOKEN_GROUPS>());
-            let items =
-                std::slice::from_raw_parts(groups.Groups.as_ptr(), groups.GroupCount as usize);
-            for group in items {
-                if let Some(sid) = copy_sid(group.Sid) {
-                    if (group.Attributes & SE_GROUP_OWNER_ATTR) != 0
-                        || sid.as_slice() == BUILTIN_ADMINS_SID
-                    {
-                        push_unique_sid(&mut sids, Some(sid));
-                    }
-                }
-            }
-        }
-    }
     CloseHandle(token);
     sids
 }
@@ -255,9 +228,58 @@ pub(super) fn current_owner_sids() -> &'static [Vec<u8>] {
         .as_slice()
 }
 
-pub fn owned(path: &std::path::Path) -> bool {
+// Win32 名称 API 对普通路径有 MAX_PATH(260) 限制；绝对且不含相对段的路径把
+// 分隔符统一为反斜杠后转为 \\?\ verbatim 形式再补 NUL，其余路径原样返回。
+pub fn wide_path(path: &std::path::Path) -> Vec<u16> {
     use std::os::windows::ffi::OsStrExt;
-    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+    // 已有设备/扩展路径保持原样；仅普通 Win32 路径统一分隔符。
+    if wide.starts_with(&[92, 92, 63, 92]) || wide.starts_with(&[92, 92, 46, 92]) {
+        wide.push(0);
+        return wide;
+    }
+    // verbatim 路径不做规范化；正斜杠必须先统一为反斜杠。
+    for c in wide.iter_mut() {
+        if *c == b'/' as u16 {
+            *c = b'\\' as u16;
+        }
+    }
+    let backslash = |c: &u16| *c == b'\\' as u16;
+    let has_prefix = |text: &str| wide.starts_with(&text.encode_utf16().collect::<Vec<u16>>());
+    let disk = wide.len() >= 3
+        && matches!(wide[0], 0x41..=0x5A | 0x61..=0x7A)
+        && wide[1] == ':' as u16
+        && wide[2] == '\\' as u16;
+    let unc = !disk && wide.len() >= 2 && backslash(&wide[0]) && backslash(&wide[1]);
+    if (disk || unc) && !has_prefix(r"\\?\") && !has_prefix(r"\\.\") {
+        let dot = [b'.' as u16];
+        let dotdot = [b'.' as u16, b'.' as u16];
+        let mut segments = wide.split(backslash);
+        // verbatim 不做规范化；盘符段或 UNC 前两个空段之后必须全是普通段。
+        if unc {
+            segments.next();
+            segments.next();
+        } else {
+            segments.next();
+        }
+        if segments.all(|segment| {
+            !segment.is_empty() && segment != dot.as_slice() && segment != dotdot.as_slice()
+        }) {
+            let mut verbatim: Vec<u16> = r"\\?\".encode_utf16().collect();
+            if unc {
+                verbatim.extend(r"UNC\".encode_utf16());
+                verbatim.extend_from_slice(&wide[2..]);
+            } else {
+                verbatim.extend_from_slice(&wide);
+            }
+            wide = verbatim;
+        }
+    }
+    wide.push(0);
+    wide
+}
+fn file_owner_sid(path: &std::path::Path) -> Option<Vec<u8>> {
+    let wide = wide_path(path);
     unsafe {
         let mut owner = std::ptr::null_mut();
         let mut descriptor = std::ptr::null_mut();
@@ -271,22 +293,19 @@ pub fn owned(path: &std::path::Path) -> bool {
             std::ptr::null_mut(),
             &mut descriptor,
         );
-        let matches = status == 0
-            && copy_sid(owner).is_some_and(|actual| {
-                current_owner_sids()
-                    .iter()
-                    .any(|sid| sid.as_slice() == actual.as_slice())
-            });
+        let actual = if status == 0 { copy_sid(owner) } else { None };
         if !descriptor.is_null() {
             LocalFree(descriptor.cast());
         }
-        matches
+        actual
     }
+}
+pub fn owned(path: &std::path::Path) -> bool {
+    file_owner_sid(path).is_some_and(|actual| current_owner_sids().contains(&actual))
 }
 #[cfg(test)]
 pub(crate) fn fixture_owner(path: &std::path::Path) {
-    use std::os::windows::ffi::OsStrExt;
-    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let wide = wide_path(path);
     let mut owner = current_sid().expect("test user SID").clone();
     assert_eq!(
         unsafe {
@@ -307,17 +326,11 @@ pub fn preserve_file_permissions(
     source: &std::path::Path,
     target: &std::path::Path,
 ) -> Result<(), String> {
-    use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Security::Authorization::SetNamedSecurityInfoW;
     use windows_sys::Win32::Security::{
         DACL_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
     };
-    let wide = |path: &std::path::Path| {
-        path.as_os_str()
-            .encode_wide()
-            .chain(Some(0))
-            .collect::<Vec<u16>>()
-    };
+    let wide = |path: &std::path::Path| wide_path(path);
     let source = wide(source);
     let target = wide(target);
     unsafe {
@@ -335,7 +348,7 @@ pub fn preserve_file_permissions(
             &mut descriptor,
         );
         let status = if read == 0 && !owner.is_null() && !acl.is_null() {
-            let first = SetNamedSecurityInfoW(
+            SetNamedSecurityInfoW(
                 target.as_ptr(),
                 SE_FILE_OBJECT,
                 OWNER_SECURITY_INFORMATION
@@ -345,26 +358,7 @@ pub fn preserve_file_permissions(
                 std::ptr::null_mut(),
                 acl,
                 std::ptr::null(),
-            );
-            if first != 0 {
-                if let Some(sid) = current_sid() {
-                    SetNamedSecurityInfoW(
-                        target.as_ptr(),
-                        SE_FILE_OBJECT,
-                        OWNER_SECURITY_INFORMATION
-                            | DACL_SECURITY_INFORMATION
-                            | PROTECTED_DACL_SECURITY_INFORMATION,
-                        sid.as_ptr() as *mut _,
-                        std::ptr::null_mut(),
-                        acl,
-                        std::ptr::null(),
-                    )
-                } else {
-                    first
-                }
-            } else {
-                0
-            }
+            )
         } else {
             1
         };
@@ -728,6 +722,33 @@ mod tests {
     }
 
     #[test]
+    fn windows_paths_preserve_namespaces_and_only_extend_absolute_paths() {
+        for (input, expected) in [
+            (r"C:\Users\me\file", r"\\?\C:\Users\me\file"),
+            ("C:/Users/me/file", r"\\?\C:\Users\me\file"),
+            (r"\\server\share\file", r"\\?\UNC\server\share\file"),
+            (r"relative\file", r"relative\file"),
+            (r"C:relative", r"C:relative"),
+            (r"C:\parent\..\file", r"C:\parent\..\file"),
+            (r"C:\parent\.\file", r"C:\parent\.\file"),
+            (r"\\?\C:\raw/file", r"\\?\C:\raw/file"),
+            (r"\\.\pipe\test", r"\\.\pipe\test"),
+        ] {
+            let actual = wide_path(std::path::Path::new(input));
+            assert_eq!(actual.last(), Some(&0));
+            assert_eq!(
+                String::from_utf16(&actual[..actual.len() - 1]).unwrap(),
+                expected
+            );
+        }
+        assert!(!current_owner_sids().is_empty());
+        assert!(
+            current_owner_sids().len() <= 2,
+            "group membership is not ownership"
+        );
+    }
+
+    #[test]
     fn windows_owned_accepts_default_and_explicit_user_owners() {
         let dir = std::env::temp_dir().join(format!(
             "rf-win-owned-{}-{}",
@@ -746,6 +767,11 @@ mod tests {
         assert!(owned(&dir));
         assert!(owned(&default_file));
         assert!(owned(&explicit_file));
+        let default_owner = file_owner_sid(&default_file).unwrap();
+        let user = current_sid().unwrap();
+        assert!(current_owner_sids()
+            .iter()
+            .all(|sid| sid == user || sid == &default_owner));
         preserve_file_permissions(&default_file, &explicit_file).unwrap();
         assert!(owned(&explicit_file));
         let _ = std::fs::remove_dir_all(&dir);
