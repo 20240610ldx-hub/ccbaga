@@ -115,7 +115,7 @@ def main():
                 run(source, '--appimage-extract', cwd=root, stdout=subprocess.DEVNULL)
                 root /= 'squashfs-root'
             payload.verify(root, engine)
-            payload.verify_glibc((root / 'usr').rglob('*'))
+            payload.verify_glibc(root.rglob('*'))
         target = output / f'CCBaga-{version}-linux-x86_64.{extension}'
         shutil.copy2(source, target)
         manifests.append(f'{payload.digest(target)}  {target.name}\n')
