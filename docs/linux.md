@@ -1,5 +1,5 @@
 <!--
-[INPUT]: Linux 原生实现、构建配方与实际验证边界。
+[INPUT]: Linux 原生实现、Ubuntu 22.04 构建基线、产物 ELF 符号验收与平台边界。
 [OUTPUT]: 社区开发依赖、源码构建和平台限制；不提供官方发布流程。
 [POS]: README 的 Linux 开发入口，与原生平台边界对应。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -12,7 +12,7 @@ CCBaga-A builds on Linux x86_64. The pinned Fingerprint Chromium 148.0.7778.215 
 
 Download the Linux x86_64 package for your distribution from [GitHub Releases](https://github.com/liseami/CCBaga/releases/latest): DEB for Ubuntu/Debian, RPM for compatible Fedora systems, AppImage for compatible desktops, or `.pkg.tar.zst` for Arch/pacman. A and its companion B engine are included in each package.
 
-Ubuntu packages and AppImages are built on Ubuntu 24.04; older glibc distributions are not validated. Arch packages are built separately on Arch. Linux updates use the package manager or a new downloaded package; the in-app updater currently supports macOS only.
+DEB, RPM and AppImage packages are built on Ubuntu 22.04 (glibc 2.35). Every packaged ELF is checked for newer glibc requirements before publication, including the host and bundled browser libraries. A compatible desktop with GTK 3 and WebKitGTK 4.1 is required; AppImage does not replace the system's glibc. Arch packages are built separately on Arch and target current Arch systems. Linux updates use the package manager or a new downloaded package; in-app updates support macOS and Windows.
 
 ## Dependencies
 
@@ -26,6 +26,8 @@ sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev \
   openssh-client xdg-utils wl-clipboard xclip libnss3 libnspr4 \
   libgbm1 libasound2t64 libxss1
 ```
+
+On Ubuntu 22.04, use `libasound2` instead of `libasound2t64`; install a separate Python 3.12+ for source builds. The downloaded application does not require Python for local identity or browser operations.
 
 Arch Linux:
 

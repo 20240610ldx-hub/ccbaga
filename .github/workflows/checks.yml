@@ -22,7 +22,7 @@ jobs:
       matrix:
         include:
           - platform: Ubuntu
-            runner: ubuntu-24.04
+            runner: ubuntu-22.04
           - platform: macOS
             runner: macos-15
           - platform: Windows

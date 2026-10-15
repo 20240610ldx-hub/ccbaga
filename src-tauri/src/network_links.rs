@@ -1,11 +1,13 @@
 // [INPUT]: Skill 的 providers.json 固定配置、资源编号与系统 URL 打开工具。
-// [OUTPUT]: 两个原始供应商地址的 URL 组装、仓库 Skill 安装入口与四个固定核心域名的并发只读 HTTP 诊断与真实连接对端（不是出口核验）。
+// [OUTPUT]: 固定资源导航与四域名只读连通性诊断；下载探针只在 HTTP 200 且有界公开版本正文通过校验时成功，不输出正文或冒充出口核验。
 // [POS]: 应用网络页原生接口；不读取密钥、不执行 SSH、不接收任意 URL，诊断不上传凭据。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use serde::{Deserialize, Serialize};
 #[cfg(not(windows))]
 use std::process::Command;
 use std::time::{Duration, Instant};
+
+const RELEASE_VERSION_LIMIT: usize = 64;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DomainCheckResult {
@@ -68,8 +70,51 @@ pub async fn network_open_resource(provider: String) -> Result<(), String> {
     .map_err(|_| "无法打开供应商网站。".to_string())?
 }
 
+fn valid_release_version(bytes: &[u8]) -> bool {
+    std::str::from_utf8(bytes).ok().is_some_and(|text| {
+        let mut parts = text.trim_ascii().split('.');
+        (0..3).all(|_| {
+            parts.next().is_some_and(|part| {
+                !part.is_empty()
+                    && part.bytes().all(|byte| byte.is_ascii_digit())
+                    && (part == "0" || !part.starts_with('0'))
+            })
+        }) && parts.next().is_none()
+    })
+}
+
+async fn validate_release_metadata(mut response: reqwest::Response) -> Result<(), &'static str> {
+    if response.status() != reqwest::StatusCode::OK {
+        return Err("下载版本信息响应异常");
+    }
+    if response
+        .content_length()
+        .is_some_and(|size| size > RELEASE_VERSION_LIMIT as u64)
+    {
+        return Err("下载版本信息过大");
+    }
+    let mut bytes = Vec::with_capacity(RELEASE_VERSION_LIMIT);
+    while let Some(chunk) = response.chunk().await.map_err(|error| {
+        if error.is_timeout() {
+            "请求超时"
+        } else {
+            "下载版本信息读取失败"
+        }
+    })? {
+        if chunk.len() > RELEASE_VERSION_LIMIT - bytes.len() {
+            return Err("下载版本信息过大");
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    if !valid_release_version(&bytes) {
+        return Err("下载版本信息无效");
+    }
+    Ok(())
+}
+
 async fn diagnose(client: reqwest::Client, domain: String, url: String) -> DomainCheckResult {
     let started = Instant::now();
+    let release_metadata = domain == "downloads.claude.ai";
     let mut result = DomainCheckResult {
         domain,
         ok: false,
@@ -86,6 +131,18 @@ async fn diagnose(client: reqwest::Client, domain: String, url: String) -> Domai
                 .remote_addr()
                 .map(|address| address.ip().to_string());
             result.status_code = Some(status);
+            // 下载源必须交付有效版本正文，不能把对象不存在、重定向或质询当成下载可用。
+            if release_metadata {
+                match validate_release_metadata(response).await {
+                    Ok(()) => {
+                        result.ok = true;
+                        result.message = "下载版本信息已验证".into();
+                    }
+                    Err(message) => result.message = message.into(),
+                }
+                result.latency_ms = Some(started.elapsed().as_millis() as u64);
+                return result;
+            }
             // Cloudflare 对无脚本客户端返回可由浏览器完成的质询，说明已到达站点边缘；拦截规则不带此标记。
             let challenge = status == 403
                 && response
@@ -224,6 +281,146 @@ mod tests {
             CLAUDE_TARGETS[3].1,
             "https://downloads.claude.ai/claude-code-releases/latest"
         );
+    }
+
+    #[test]
+    fn release_version_requires_three_numeric_components() {
+        for version in [b"2.1.300".as_slice(), b"0.0.1\n", b" 2.1.300\r\n"] {
+            assert!(valid_release_version(version));
+        }
+        for version in [
+            b"".as_slice(),
+            b" \r\n",
+            b"2.1",
+            b"2.1.300.1",
+            b"v2.1.300",
+            b"2.01.300",
+            b"2.1.-1",
+            b"2.1.300-beta",
+            b"<html>2.1.300</html>",
+            b"2.1.300\0",
+            b"2.1.\xff",
+        ] {
+            assert!(!valid_release_version(version));
+        }
+    }
+
+    #[test]
+    fn downloads_require_complete_bounded_http_200_version_metadata() {
+        let response = |status: &str, body: &[u8]| {
+            let mut bytes = format!(
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .into_bytes();
+            bytes.extend_from_slice(body);
+            bytes
+        };
+        let cases = [
+            (response("200 OK", b"2.1.300\n"), true, "下载版本信息已验证"),
+            (response("200 OK", b""), false, "下载版本信息无效"),
+            (
+                response("200 OK", b"<html>OK</html>"),
+                false,
+                "下载版本信息无效",
+            ),
+            (
+                response("200 OK", b"2.1.300\xff"),
+                false,
+                "下载版本信息无效",
+            ),
+            (
+                response("200 OK", &[b'1'; RELEASE_VERSION_LIMIT + 1]),
+                false,
+                "下载版本信息过大",
+            ),
+            (
+                response(
+                    "302 Found\r\nLocation: http://127.0.0.1:1/never-follow",
+                    b"2.1.300",
+                ),
+                false,
+                "下载版本信息响应异常",
+            ),
+            (
+                response("401 Unauthorized", b"2.1.300"),
+                false,
+                "下载版本信息响应异常",
+            ),
+            (
+                response("403 Forbidden\r\ncf-mitigated: challenge", b"2.1.300"),
+                false,
+                "下载版本信息响应异常",
+            ),
+            (
+                response("404 Not Found", b"2.1.300"),
+                false,
+                "下载版本信息响应异常",
+            ),
+            (
+                response("206 Partial Content", b"2.1.300"),
+                false,
+                "下载版本信息响应异常",
+            ),
+            (
+                response("500 Internal Server Error", b"2.1.300"),
+                false,
+                "下载版本信息响应异常",
+            ),
+            // 没有 Content-Length 时仍按实际收到的块限制；正文截断不能只凭已到达的数字报告成功。
+            (
+                [
+                    b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".as_slice(),
+                    &[b'1'; RELEASE_VERSION_LIMIT + 1],
+                ]
+                .concat(),
+                false,
+                "下载版本信息过大",
+            ),
+            (
+                b"HTTP/1.1 200 OK\r\nContent-Length: 12\r\nConnection: close\r\n\r\n2.1.300"
+                    .to_vec(),
+                false,
+                "下载版本信息读取失败",
+            ),
+        ];
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let expected: Vec<_> = cases
+            .iter()
+            .map(|(_, ok, message)| (*ok, *message))
+            .collect();
+        let server = std::thread::spawn(move || {
+            for (response, _, _) in cases {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                let mut reader = BufReader::new(&stream);
+                let mut request = String::new();
+                loop {
+                    let mut line = String::new();
+                    assert!(reader.read_line(&mut line).unwrap() > 0);
+                    request.push_str(&line);
+                    if line == "\r\n" {
+                        break;
+                    }
+                }
+                let lower = request.to_ascii_lowercase();
+                assert!(!lower.contains("authorization:") && !lower.contains("cookie:"));
+                stream.write_all(&response).unwrap();
+            }
+        });
+        let url = format!("http://{address}/claude-code-releases/latest");
+        // 顺序请求让每个畸形响应对应固定断言；全部流量限制在临时回环服务。
+        for (ok, message) in expected {
+            let results =
+                tauri::async_runtime::block_on(diagnose_urls(&[("downloads.claude.ai", &url)]));
+            assert_eq!(results[0].ok, ok);
+            assert_eq!(results[0].message, message);
+            assert_eq!(results[0].ip.as_deref(), Some("127.0.0.1"));
+        }
+        server.join().unwrap();
     }
 
     #[test]

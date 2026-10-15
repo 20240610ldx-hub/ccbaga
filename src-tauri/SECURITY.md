@@ -13,13 +13,13 @@
 | 边界 | 读取与输出 | 限制与依据 |
 | --- | --- | --- |
 | `src/linux.rs` | 当前用户 `/proc` 的进程可执行路径/参数；系统时区、CPU、会话语言和桌面定位偏好 | 参数只用于原生识别，不序列化给 WebView；没有网络客户端。仅用户复制操作写剪贴板，不读取剪贴板。 |
-| `src/windows.rs` / `windows_process.rs` | 当前用户 SID、文件所有权、系统状态与精确程序/MSIX 包族身份 | 不枚举 Credential Manager 密码；只写剪贴板。参数和创建时间不序列化；结束时重新核验 SID、程序和 live handle，浏览器仅按完整资料目录关闭。 |
+| `src/windows.rs` / `windows_process.rs` | 当前用户 SID、令牌实际默认所有者、文件所有权、系统状态与精确程序/MSIX 包族身份 | 文件仅接受 TokenUser/TokenOwner，不泛化管理员组；保留既有父目录 DACL。Win32 名称调用使用扩展长路径。不枚举 Credential Manager 密码；只写剪贴板。参数和创建时间不序列化；结束时重新核验 SID、程序和 live handle，浏览器仅按完整资料目录关闭。 |
 | `src/identities/` / `src/cleaner_identity.rs` | Claude 白名单元数据与待暂存配置；界面接收预览和脱敏结果 | 快照、当前用户所有权、规范路径、链接与进程状态核验；用户确认后先压缩加密暂存并完整验收，再从工作区移除或替换；失败恢复，崩溃保留恢复状态。个人资产的保留由用户选择；桌面范围限定会话/登录子目录与选定配置，未知个人文件不纳入。Linux 只按精确 XDG 白名单补充缓存，不扩大文件夹清理范围。 |
 | `src/cleaner_residue.rs` | 用户手动扫描默认 Claude 文件残留；仅返回路径、元数据统计、固定键名和影响 | 专用一次性快照，清理只接收扫描 ID；复用 Cleaner 全局锁、完整快照和精确进程复核，未完成身份恢复时拒绝修改。缓存、历史、Claude 自身配置备份和本地账号文件分别选择，不自动结束 Claude；窄 JSON 改写保留项目/MCP/设置与共享凭据。完全不访问钥匙串，不扫描 Shell/共享代理、Skills/插件、身份保险库或浏览器资料；不代表清除服务端记录或全部登录凭据。 |
 | `src/browser/config.rs` | 本机环境与用于出口探测的系统代理 | `Machine.system_proxy` 使用 `skip_serializing`，代理凭据不进入 WebView、浏览器回环 JSON 或 UI 日志；对应回归验证。 |
 | `src/browser/server.rs` | 环境观测与有界本地身份显示字段在 A/B 之间交换 | 仅随机令牌 `127.0.0.1` 会话，限制请求大小与资源根目录；context 可显示本地绑定的名称/邮箱/组织，不包含令牌、账号 UUID 或匹配摘要，不代表网站登录认证；只读回报接口返回同会话的匿名环境观测/接收时间，不提供文件写入、命令执行或远程监听。 |
 | `src/browser/network.rs` / 前端出口探测 | 向 `ipwho.is`、`ipapi.co` 请求出口信息 | 外部服务会看到请求出口 IP；不发送本地文件、账号、密钥或浏览记录。服务失败使用同一路由备用服务，不伪造成功。 |
-| `src/network_links.rs` | 固定 VPS/家宽/Skill 公开入口与用户触发的 claude.ai/api.anthropic.com/platform.claude.com/downloads.claude.ai（官方安装器公开版本号路径）四个固定 HTTPS 探针 | 仅白名单地址与供应商配置编译内嵌；应用不选择密钥、不收集家宽资料、不注册 SSH/部署命令。探针不发送账号/Cookie/令牌/本地文件，不继承代理认证、不跟随重定向，仅显示状态/延迟/连接对端，Cloudflare 浏览器质询只表示已到达站点边缘；不证明出口、DNS 或分流规则正确。 |
+| `src/network_links.rs` | 固定 VPS/家宽/Skill 公开入口与用户触发的 claude.ai/api.anthropic.com/platform.claude.com/downloads.claude.ai（官方安装器公开版本号路径）四个固定 HTTPS 探针 | 仅白名单地址与供应商配置编译内嵌；应用不选择密钥、不收集家宽资料、不注册 SSH/部署命令。探针不发送账号/Cookie/令牌/本地文件，不继承代理认证、不跟随重定向。下载版本探针只接受 HTTP 200，流式读取最多 64 字节并校验三段数字版本；空白、畸形、超限和截断正文均失败，正文不进入 UI。仅显示状态/延迟/连接对端，其他域名的 Cloudflare 浏览器质询只表示已到达站点边缘；不证明安装器完整可下载、账号可用、出口、DNS 或分流规则正确。 |
 | `skills/ccbaga-network/scripts/network.py` | 用户主动提供的附件、VPS 地址与家宽连接资料 | AI 经标准输入提交配置，验证后保存 Git/Skill 外的 0600 文件；拒绝覆盖和链接路径。配对后临时 PEM 0600，事务结束移除；仅所选 VPS 经 SSH 接收家宽配置，秘密不进入 argv/公开日志。用户交给 AI 的资料可能由其服务提供商处理，不能声称完全不进入模型。 |
 | `scripts/claude-cli.sh` | 用户选择的 CLI 卸载/重装 | 明确确认后只修改已识别 CLI 程序；保留配置、会话、技能和项目。重装使用官方安装地址或既有包管理器，并核验实际版本。原生程序在唯一目录暂存，捕获失败恢复（Windows 比对哈希），回滚受阻保留备份；没有任意安装器环境变量入口，强制终止不承诺自动回滚。 |
 | `scripts/install-linux.py` | 用户选择的本地构建产物 | 拒绝外部启动器、链接安装父目录和仍运行的 A/B；替换失败回滚，不迁移或读取用户资料。 |

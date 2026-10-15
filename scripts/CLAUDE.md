@@ -37,9 +37,9 @@ test-assemble-release.py: 临时完整产物验证九文件白名单；逐平台
 sign-windows-update.py: 已验收安装器的独立版本绑定更新签名和官方更新器核验；更新私钥不进入构建或测试。
 release-windows.py: Windows x64 MSVC 无凭据构建，check/build/verify 阶段在 CI 分开呈现，原生/40 身份 UI 模拟/CLI/Skill/npm 安装回归与真实 NSIS 安装、启动、升级、卸载验证，交付单安装器与内部引擎哈希清单。
 verify-windows-installer.py: 仅在空白 CI runner 对刚创建的样本复用 Skill 私有 ACL 层，按子项到父目录顺序明确当前用户所有者与独占 ACL，避免继承 ACE 迁移中断及管理员默认所有者误触生产保护；UTF-8 控制台诊断保留中文启动错误；复用 browser_ui 核对已安装页面的实际资源引用；使用原生 Known Folder 和一致的父子进程环境定位空白 CI 数据；拒绝预存 Claude/应用目录再创建可丢弃用户资产样本，通过已持有句柄的宿主树/本次唯一安装目录回收 CI 程序，不给 GUI 沙箱套额外 Job，PowerShell 5.1 优先自身模块以保证 CIM 进程查询，查询错误即时报告、统一 Windows 8.3 别名/扩展路径/分隔符，只记录匹配布尔值；严格核对安装后引擎/图标/UI、实际浏览器 JS 回报的平台/CPU/版本与 A/B 回环、升级和卸载资产保留；验收后的 PermissionError 仅在本次固定 Chromium Cache 子树允许交由一次性 runner 销毁，其他路径/错误仍失败。
-release-linux.py: 无 Apple/更新凭据的 x86_64 三格式构建，先运行身份 UI 模拟、Skill 离线/npm 安装回归与脚本语法检查；Tauri 以完整工具日志交付 DEB/AppImage，标准 rpmbuild 从相同 /usr 文件树生成 RPM，避免上游 RPM 打包停滞且禁止剥离厂商引擎；引擎位于 libexec，避免 Qt 可选适配库被宿主 linuxdeploy 错当必备依赖；真实解包核对宿主、UI、B 入口、图标与引擎字节，生成独立校验清单。
+release-linux.py: 无凭据的 Ubuntu 22.04 x86_64 三格式构建，先跑身份 UI/Skill 回归；Tauri 交付 DEB/AppImage，rpmbuild 从同一文件树生成 RPM，厂商引擎不剥离且隔离在 libexec；真实解包核对宿主、UI、B 入口、引擎字节及全部 ELF 的 glibc 2.35 上限，生成校验清单。
 test-rpm.py: 临时 DEB 文件树经真实 rpmbuild 转换，回归 RPM 版本/架构、桌面入口与引擎字节，不执行样本程序。
-verify-linux-package.py: 共用 browser_ui 的实际页面资源引用检查；Linux 安装包只读载荷契约，供 Ubuntu/Arch 共用，拒绝缺失 UI、入口或被改写的引擎文件/链接。
+verify-linux-package.py: 共用页面引用与只读载荷验收，Ubuntu/Arch 均拒绝缺失 UI、入口或引擎改写；独立 verify_glibc 对标准发行包实际 ELF 符号需求执行 2.35 上限，Arch 不套旧系统基线。
 build-arch.sh: 固定摘要容器准备 Node.js 等构建/测试依赖，以非 root makepkg、原生回归与解包验收，公开源码与 Cargo 缓存挂载；不接触 macOS 凭据。
 
 package-linux-browser.py: 旧目录移动与新目录提交共处取消/回滚边界；Linux 源码/Arch 的所属引擎目录完整替换；暂存和提交失败保留旧构建，回滚失败保留备份并报告恢复路径，保持符号链接/权限和其他资源，不混入已删除的旧引擎文件。

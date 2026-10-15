@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # [INPUT]: Linux 安装产物、固定来源引擎与 browser_ui 的页面实际资源引用验收。
-# [OUTPUT]: x86_64 宿主/引擎、内嵌 UI、B 桌面入口/图标和源引擎全文件/链接完整性验收。
+# [OUTPUT]: x86_64 宿主/引擎、内嵌 UI、B 入口和引擎字节验收；标准发行包另验宿主/内嵌 ELF 的 glibc 2.35 上限。
 # [POS]: Linux 四种安装产物共用的载荷边界；只读产物，不安装或访问用户资料。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import hashlib
 import os
 from pathlib import Path
+import re
+import subprocess
 import sys
 from browser_ui import verify_browser_ui
 
@@ -13,6 +15,20 @@ from browser_ui import verify_browser_ui
 def digest(path):
     with path.open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def verify_glibc(paths, maximum=(2, 35)):
+    # ----- 检查实际 ELF 符号需求，不能由 runner 名称推断兼容性 -----
+    for path in paths:
+        if not path.is_file() or path.is_symlink():
+            continue
+        with path.open('rb') as stream:
+            if stream.read(4) != b'\x7fELF':
+                continue
+        versions = subprocess.check_output(['readelf', '--version-info', '--wide', str(path)], text=True)
+        required = {tuple(map(int, value.split('.'))) for value in re.findall(r'\bGLIBC_([0-9]+(?:\.[0-9]+)+)\b', versions)}
+        if any(version > maximum for version in required):
+            raise RuntimeError(f'ELF exceeds glibc {".".join(map(str, maximum))} baseline: {path.name}')
 
 
 def verify(root, engine):

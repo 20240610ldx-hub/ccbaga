@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # [INPUT]: 可丢弃构建树、安装前缀、Linux 安装器和真实产物验收层。
-# [OUTPUT]: 页面实际资源缺失拒绝、目录移动前后取消恢复、双重失败备份保留及载荷边界回归。
+# [OUTPUT]: 页面资源缺失拒绝、取消恢复、双重失败备份保留、glibc 上限和载荷边界回归。
 # [POS]: 离线临时目录测试，不安装到真实用户目录。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import importlib.util
@@ -184,6 +184,21 @@ class InstallTests(unittest.TestCase):
 
 
 class PayloadTests(unittest.TestCase):
+    def test_glibc_baseline_checks_actual_elf_and_rejects_newer_symbols(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            binary = Path(temporary) / 'host'
+            binary.write_bytes(b'\x7fELFfixture')
+            with patch.object(payload.subprocess, 'check_output', return_value='Name: GLIBC_2.17 Name: GLIBC_2.35') as readelf:
+                payload.verify_glibc([binary])
+                self.assertEqual(readelf.call_args.args[0][-1], str(binary))
+            with patch.object(payload.subprocess, 'check_output', return_value='Name: GLIBC_2.38'):
+                with self.assertRaisesRegex(RuntimeError, 'glibc 2.35'):
+                    payload.verify_glibc([binary])
+            binary.write_text('not an ELF')
+            with patch.object(payload.subprocess, 'check_output') as readelf:
+                payload.verify_glibc([binary])
+                readelf.assert_not_called()
+
     def test_payload_rejects_missing_ui_and_modified_browser(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

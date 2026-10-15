@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# [INPUT]: Ubuntu x86_64、固定引擎、版本、Tauri Linux 配置、Node.js 标准管道身份 UI/Skill 离线测试与标准 rpmbuild。
+# [INPUT]: Ubuntu 22.04 x86_64、固定引擎、版本、Tauri Linux 配置、身份 UI/Skill 离线测试与 rpmbuild/readelf。
 # [OUTPUT]: 验收后的 DEB/RPM/AppImage 和独立 SHA256 清单。
 # [POS]: 无 Apple/更新私钥的 Linux 发布执行层；提取真实产物后逐一核对，不修改用户系统。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
@@ -115,6 +115,7 @@ def main():
                 run(source, '--appimage-extract', cwd=root, stdout=subprocess.DEVNULL)
                 root /= 'squashfs-root'
             payload.verify(root, engine)
+            payload.verify_glibc((root / 'usr').rglob('*'))
         target = output / f'CCBaga-{version}-linux-x86_64.{extension}'
         shutil.copy2(source, target)
         manifests.append(f'{payload.digest(target)}  {target.name}\n')
