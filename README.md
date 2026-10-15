@@ -1,12 +1,13 @@
 <!--
 [INPUT]: 已实现功能、开发配置、跨平台 PR 回归、双应用使用方式与 MIT/第三方许可边界。
-[OUTPUT]: 面向公开仓库的英文产品首页、旅居人员用途声明、安装与开发入口、架构和贡献导航。
+[OUTPUT]: 面向公开仓库的英文产品首页、中文入口、旅居人员用途声明、安装与开发入口、架构和贡献导航。
 [POS]: 项目公开入口，连接产品功能、使用说明与模块导航。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 -->
 <div align="center">
   <img src="docs/brand-logos.svg" width="320" height="149" alt="CCBaga-A and CCBaga-B logos, side by side" />
   <h1>CCBaga</h1>
+  <p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
   <p><strong>A native macOS, Linux and Windows toolkit for a cleaner workspace and an environment you can verify.</strong></p>
   <p>Claude identities · Browser fingerprints · System settings · Network Skill</p>
   <p>
