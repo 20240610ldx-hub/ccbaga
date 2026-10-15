@@ -11,6 +11,7 @@ fn machine() -> Machine {
         timezone: "America/New_York".into(),
         languages: vec!["en-US".into()],
         locale: "en_US".into(),
+        locale_country: "US".into(),
         location_enabled: Some(false),
         timezones: vec!["America/New_York".into()],
         system_proxy: String::new(),
@@ -135,6 +136,7 @@ fn country_checks_follow_region_instead_of_assuming_america() {
     machine.timezone = "Asia/Tokyo".into();
     machine.languages = vec!["ja".into()];
     machine.locale = "ja_JP".into();
+    machine.locale_country = "JP".into();
     let mut config = Config::default();
     config.follow_machine = false;
     config.language = "ja".into();
@@ -279,4 +281,83 @@ fn windows_report_requires_real_platform_cpu_and_version() {
     assert_eq!(result(&report), "ok");
     report.platform = "MacIntel".into(); assert_eq!(result(&report), "mismatch");
     report.platform = "Win32".into(); report.platform_version = "fake".into(); assert_eq!(result(&report), "mismatch");
+}
+
+#[test]
+fn follow_machine_taiwan_preserves_language_script_and_checks_actual_country() {
+    let mut machine = machine();
+    machine.timezone = "Asia/Taipei".into();
+    machine.languages = vec!["zh-Hans-TW".into(), "zh-Hant-TW".into()];
+    machine.locale = "zh_CN@rg=twzzzz".into();
+    machine.locale_country = "TW".into();
+    let config = Config::default();
+    assert_eq!(config.region(&machine).map(|r| r.id), Some("tw"));
+    assert_eq!(config.language(&machine), "zh-Hans-TW");
+    let mut report = network::Report {
+        language: "zh-Hans-TW".into(),
+        languages: machine.languages.clone(),
+        timezone: machine.timezone.clone(),
+        platform: "MacIntel".into(),
+        cores: machine.cores,
+        user_agent: "fixture".into(),
+        platform_version: machine.version.clone(),
+        browser_version: "148".into(),
+        geolocation: "denied".into(),
+        error: String::new(),
+        exit: Some(network::Exit {
+            ip: "203.0.113.1".into(),
+            country: "TW".into(),
+            city: "Taipei".into(),
+            timezone: machine.timezone.clone(),
+            isp: "fixture".into(),
+        }),
+    };
+    let checks = network::checks(&machine, &config, Some(&report), None, "148");
+    assert_eq!(checks[0].status, "ok");
+    assert_eq!(checks[3].status, "ok");
+    report.language = "zh-Hant-TW".into();
+    assert_eq!(
+        network::checks(&machine, &config, Some(&report), None, "148")[3].status,
+        "mismatch"
+    );
+    report.exit.as_mut().unwrap().country = "CN".into();
+    assert_eq!(
+        network::checks(&machine, &config, Some(&report), None, "148")[0].status,
+        "mismatch"
+    );
+    machine.locale_country = "CN".into();
+    assert!(config.region(&machine).is_none());
+    assert_eq!(
+        network::checks(&machine, &config, Some(&report), None, "148")[0].status,
+        "pending"
+    );
+    machine.locale_country.clear();
+    assert!(config.region(&machine).is_none());
+    // A matching timezone and Chinese language alone never establish Taiwan.
+    machine.locale_country = "TW".into();
+    machine.languages = vec!["en-GB".into()];
+    assert_eq!(config.region(&machine).map(|r| r.id), Some("tw"));
+    assert_eq!(config.language(&machine), "en-GB");
+}
+
+#[test]
+fn refreshed_context_recomputes_target_from_effective_machine_country() {
+    let mut context = Context {
+        identity: crate::identities::browser_link::BrowserIdentity {
+            linked: false, status: "unlinked", name: None, email: None, organization: None,
+        },
+        ui_language: "zh".into(), exit_services: &network::SERVICES,
+        config: Config::default(), region: None, machine: machine(), engine_version: "148".into(),
+    };
+    let mut taiwan = machine();
+    taiwan.timezone = "Asia/Taipei".into();
+    taiwan.languages = vec!["zh-Hans-TW".into()];
+    taiwan.locale = "zh_CN@rg=twzzzz".into();
+    taiwan.locale_country = "TW".into();
+    context.update_machine(taiwan.clone());
+    assert_eq!(context.region.map(|r| r.country), Some("TW"));
+    assert_eq!(context.config.language(&context.machine), "zh-Hans-TW");
+    taiwan.locale_country = "CN".into();
+    context.update_machine(taiwan);
+    assert!(context.region.is_none());
 }

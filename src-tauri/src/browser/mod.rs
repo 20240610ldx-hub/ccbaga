@@ -1,5 +1,5 @@
 // [INPUT]: 本机指纹引擎（优先 /Applications/CCBaga-B.app，回退 ~/Applications）、配置/资料边界、真实浏览器观测、宿主界面语言与共享操作日志。
-// [OUTPUT]: 有界绑定身份上下文与浏览器设置/启动/清理和环境核验；宿主重启重新连接现有浏览器，回报时间明确标识通讯状态；上下文提供当前界面语言；launch.args 与 SQLite 当前身份共用独占资料/指纹参数，恢复期间阻断启动。
+// [OUTPUT]: 有界绑定身份上下文与浏览器设置/启动/清理和环境核验；宿主重启重新连接现有浏览器，回报时间明确标识通讯状态；上下文提供当前界面语言与按有效机器区域识别的目标；launch.args 与 SQLite 当前身份共用独占资料/指纹参数，恢复期间阻断启动。
 // [POS]: 独立浏览器模块的唯一编排入口；改变资料前必须退出浏览器；不自行改系统默认浏览器，只发起系统确认。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 pub(crate) mod config;
@@ -76,6 +76,12 @@ pub struct Context {
     config: Config,
     machine: Machine,
     engine_version: String,
+}
+impl Context {
+    fn update_machine(&mut self, machine: Machine) {
+        self.region = self.config.region(&machine);
+        self.machine = machine;
+    }
 }
 #[derive(Serialize)]
 pub struct Snapshot {
@@ -199,7 +205,7 @@ fn open_session(
         identity: identity_context(app)?,
         ui_language: crate::ui_language::ui_language_read(app.clone()),
         exit_services: &network::SERVICES,
-        region: crate::regions::matching(&config.language(machine), &config.timezone(machine)),
+        region: config.region(machine),
         config: config.clone(),
         machine: machine.clone(),
         engine_version,
@@ -454,7 +460,7 @@ fn snapshot(app: &tauri::AppHandle) -> Result<Snapshot, String> {
     Ok(Snapshot {
         ui_language: crate::ui_language::ui_language_read(app.clone()),
         exit_services: &network::SERVICES,
-        region: crate::regions::matching(&config.language(&machine), &config.timezone(&machine)),
+        region: config.region(&machine),
         config,
         machine,
         engine_ready: !engine_version.is_empty(),

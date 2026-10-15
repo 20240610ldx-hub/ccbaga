@@ -1,5 +1,5 @@
 // [INPUT]: 只读有界身份显示摘要、打包的起始页、一次启动的随机令牌、机器上下文、共享界面语言、共用出口服务目录和浏览器实测。
-// [OUTPUT]: 仅 127.0.0.1 的起始页、实时绑定身份/机器/界面语言上下文与带接收时间的观测接口；HTML/脚本/样式/字体与图片 MIME 白名单，资源限定在打包目录；服务存活到会话令牌被替换或清空。
+// [OUTPUT]: 刷新机器时同步按有效国家/时区重算目标； 仅 127.0.0.1 的起始页、实时绑定身份/机器/界面语言上下文与带接收时间的观测接口；HTML/脚本/样式/字体与图片 MIME 白名单，资源限定在打包目录；服务存活到会话令牌被替换或清空。
 // [POS]: Chromium 与工具箱之间的窄桥；不提供文件写入、脚本执行或 Tauri 命令。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::{network::Report, Browser, Context};
@@ -142,7 +142,7 @@ fn handle(
             }
         }
         match super::config::machine() {
-            Ok(machine) => current.machine = machine,
+            Ok(machine) => current.update_machine(machine),
             Err(_) => {
                 answer(
                     stream,
@@ -153,10 +153,6 @@ fn handle(
                 return;
             }
         }
-        current.region = crate::regions::matching(
-            &current.config.language(&current.machine),
-            &current.config.timezone(&current.machine),
-        );
         answer(
             stream,
             "200 OK",
