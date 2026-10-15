@@ -955,6 +955,7 @@
 "重新诊断": "Check again"
 "连接正常": "Connection normal"
 "服务响应正常": "Service responding normally"
+"服务可达，需浏览器验证": "Reachable; browser verification required"
 "受到安全拦截或限制": "Security challenge or restricted"
 "服务响应异常": "Service response abnormal"
 "连接失败或代理阻断": "Connection failed or blocked by proxy"

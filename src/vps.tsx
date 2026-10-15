@@ -21,7 +21,7 @@ export type DomainDiagnosis = {
     message: string;
 };
 
-const claudeDomains=['claude.ai','api.anthropic.com','downloads.claude.ai'] as const;
+const claudeDomains=['claude.ai','api.anthropic.com','platform.claude.com','downloads.claude.ai'] as const;
 export function VpsPanel() {
     const {t,locale}=useI18n();
     const [selected,setSelected]=useState('generic'), [copied,setCopied]=useState(''), [error,setError]=useState('');
