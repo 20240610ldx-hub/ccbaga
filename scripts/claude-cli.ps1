@@ -1,6 +1,6 @@
 ﻿# [INPUT]: 固定 CLI 动作、当前用户根目录与官方原生/npm/bun/WinGet 程序位置。
 # [OUTPUT]: 安装来源/版本和真实完成协议；原生安装器预检失败保留旧程序，可捕获安装/核验失败时从唯一备份恢复并核对哈希。
-# [POS]: Windows CLI 程序边界；拒绝链接目录、自定义启动器，保留配置、技能、会话和项目。
+# [POS]: Windows CLI 程序边界；包管理器仅按 PATH 外部程序发现，拒绝链接目录/自定义启动器，保留配置、技能、会话和项目。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 param([ValidateSet('read','uninstall','reinstall')][string]$action='read')
 $ErrorActionPreference='Stop'
@@ -55,7 +55,7 @@ function Status {
         $matching=@($nativeFiles | Where-Object { (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash -eq $hash })
         if ($matching.Count -gt 0) { $methods.Add('native');$managed.Add($native) }
     }
-    $npm=(Get-Command npm.cmd -ErrorAction SilentlyContinue).Source
+    $npm=(Get-Command npm.cmd -CommandType Application -ErrorAction SilentlyContinue).Source
     $npmRoot=''
     if ($npm) {
         $global:LASTEXITCODE=0
@@ -67,13 +67,13 @@ function Status {
             if ($metadata.name -eq $package) { $methods.Add('npm') }
         }
     }
-    $bun=(Get-Command bun.exe -ErrorAction SilentlyContinue).Source
+    $bun=(Get-Command bun.exe -CommandType Application -ErrorAction SilentlyContinue).Source
     $bunRoot=Join-Path $root '.bun\install\global\node_modules'
     if ($bun -and (RealPath (Join-Path $bunRoot $package))) {
         $meta=Join-Path (Join-Path $bunRoot $package) 'package.json'
         if ((Test-Path -LiteralPath $meta) -and ((Get-Content -LiteralPath $meta -Raw | ConvertFrom-Json).name -eq $package)) { $methods.Add('bun') }
     }
-    $winget=(Get-Command winget.exe -ErrorAction SilentlyContinue).Source
+    $winget=(Get-Command winget.exe -CommandType Application -ErrorAction SilentlyContinue).Source
     $wingetBinary=Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\Anthropic.ClaudeCode_Microsoft.Winget.Source_8wekyb3d8bbwe\claude.exe'
     if($winget -and (RealPath $wingetBinary)) { $methods.Add('winget');$managed.Add($wingetBinary) }
     $cli=''

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # [INPUT]: Windows PowerShell 5.1、Rust 样本程序、可丢弃安装目录与离线官方安装器响应样本。
 # [OUTPUT]: CLI 来源保留重装、PATH 外 npm 检测、安装器字节/文本响应、下载失败保护与个人资产保留回归。
-# [POS]: Windows 平台行为测试；仅操作临时样本，不卸载 runner 或用户的真实 Claude。
+# [POS]: Windows 平台行为测试；子进程丢弃继承的 PSModulePath，90 秒冷启动预算与逐项日志保留全部安全断言；仅操作临时样本。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 import json
 import os
@@ -41,7 +41,7 @@ _ => std::process::exit(9)
         self.local=self.home/'AppData/Local';self.local.mkdir(parents=True)
         self.skill=self.file('.claude/skills/personal/SKILL.md','keep-skill')
         self.settings=self.file('.claude/settings.json','{"keep":true}')
-        self.env=os.environ|{'CC_CLI_USER_DIR':str(self.home),'USERPROFILE':str(self.home),'LOCALAPPDATA':str(self.local),'PATH':str(self.bin)+';'+str(Path(os.environ['SystemRoot'])/'System32'),'CC_FIXTURE_ROOT':str(self.home)}
+        self.env={k:v for k,v in os.environ.items() if k.upper()!='PSMODULEPATH'}|{'CC_CLI_USER_DIR':str(self.home),'USERPROFILE':str(self.home),'LOCALAPPDATA':str(self.local),'PATH':str(self.bin)+';'+str(Path(os.environ['SystemRoot'])/'System32'),'CC_FIXTURE_ROOT':str(self.home)}
     def tearDown(self):self.temporary.cleanup()
     def file(self,name,text):
         path=self.home/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(text,encoding='utf-8');return path
@@ -57,7 +57,7 @@ return @{Content=$content}
 }
 ''' if 'CC_FIXTURE_INSTALLER' in self.env else ''
         script=mock+"\n& {\n"+SCRIPT+"\n} '"+action+"'\n" if mock else SCRIPT
-        return subprocess.run([str(POWERSHELL),'-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',command],input=script,env=self.env,capture_output=True,encoding='utf-8',timeout=30)
+        return subprocess.run([str(POWERSHELL),'-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',command],input=script,env=self.env,capture_output=True,encoding='utf-8',timeout=90)
     def installer(self,content=None):
         if content is None:
             content=r'''param([string]$Target='latest')
@@ -226,7 +226,7 @@ try {
 }
 Write-Output 'SYSTEM_VERIFIED'
 """
-        result=subprocess.run([str(POWERSHELL),'-NoProfile','-NonInteractive','-Command',script],env=os.environ|{'CC_SYSTEM_SCRIPT':str(ROOT/'scripts/windows-region.ps1'),'CC_POWERSHELL':str(POWERSHELL)},capture_output=True,encoding='utf-8',timeout=45)
+        result=subprocess.run([str(POWERSHELL),'-NoProfile','-NonInteractive','-Command',script],env={k:v for k,v in os.environ.items() if k.upper()!='PSMODULEPATH'}|{'CC_SYSTEM_SCRIPT':str(ROOT/'scripts/windows-region.ps1'),'CC_POWERSHELL':str(POWERSHELL)},capture_output=True,encoding='utf-8',timeout=90)
         self.assertEqual(result.returncode,0,result.stderr);self.assertIn('SYSTEM_VERIFIED',result.stdout)
 
-if __name__=='__main__':unittest.main()
+if __name__=='__main__':unittest.main(verbosity=2)

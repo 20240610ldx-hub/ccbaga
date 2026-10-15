@@ -1,6 +1,6 @@
 // [INPUT]: 平台内嵌 claude-cli.sh/ps1、当前用户平台环境、清理事务互斥锁及真实进度通道。
 // [OUTPUT]: Claude Code CLI 只读安装状态、一键卸载/重装与版本核验，配置和个人资产不在删除范围。
-// [POS]: 本机程序安装边界；白名单动作由原生层限定，进程未退出时拒绝修改，输出不暴露包管理器原始诊断；测试脚本替身仅在 cfg(test) 中注入，不接受安装器环境变量。
+// [POS]: 本机程序安装边界；Windows 子进程丢弃继承的 PSModulePath，避免 PowerShell 7 模块污染 5.1；固定动作/事务锁限制修改，输出只含脱敏协议，测试替身仅在 cfg(test) 中注入。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use crate::{
     cleaner::Cleaner,
@@ -166,7 +166,8 @@ fn command(action: &str) -> Result<Command, String> {
         command.creation_flags(0x08000000)
             .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command"])
             .arg(format!("[Console]::InputEncoding = New-Object System.Text.UTF8Encoding; & ([scriptblock]::Create([Console]::In.ReadToEnd())) '{action}'"))
-            .env("CC_CLI_USER_DIR", root);
+            .env("CC_CLI_USER_DIR", root)
+            .env_remove("PSModulePath");
         Ok(command)
     }
     #[cfg(not(windows))]
@@ -410,5 +411,16 @@ esac
             .unwrap_err()
             .contains("超时"));
         assert!(began.elapsed() < Duration::from_secs(3));
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    #[test]
+    fn powershell_child_rebuilds_its_own_module_path() {
+        let command = super::command("read").unwrap();
+        assert!(command.get_envs().any(|(key, value)| {
+            key.to_string_lossy().eq_ignore_ascii_case("PSModulePath") && value.is_none()
+        }));
     }
 }
