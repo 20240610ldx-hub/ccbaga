@@ -19,6 +19,10 @@ test('无效 IP 与失败响应不能被当作核验成功，保留 HTTP 原因'
   const request=(async()=>new Response('',{status:429}));
   await expect(probeBrowserExit(['https://primary.test/','https://backup.test/'],request)).rejects.toThrow('HTTP 429');
 });
+test('IPv6 出口只接受地址字符，不能夹带 URL 语法',()=>{
+  for(const ip of ['::1]:80/#','1::2]/x','2001:db8::1]@host','::1 ','fe80::1%25eth0'])expect(()=>parseExit({ip,country_code:'US'})).toThrow();
+  expect(parseExit({ip:'::ffff:203.0.113.1',country_code:'US'}).ip).toBe('::ffff:203.0.113.1');
+});
 
 // ----- Windows 原生网页回报不能落入 Mac 分支或以错误版本通过 -----
 test('Windows 设备核验接受真实 Win32，拒绝其他平台、CPU 与版本', async () => {

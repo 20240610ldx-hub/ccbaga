@@ -6,7 +6,7 @@
  */
 import type {Exit} from './browser-model';
 function validIp(ip:string):boolean {
-  if(ip.includes(':')){try{return new URL(`http://[${ip}]/`).hostname.startsWith('[');}catch{return false;}}
+  if(ip.includes(':')){if(!/^[0-9A-Fa-f:.]+$/.test(ip))return false;try{return new URL(`http://[${ip}]/`).hostname.startsWith('[');}catch{return false;}}
   return ip.split('.').length===4&&ip.split('.').every(x=>/^(0|[1-9]\d{0,2})$/.test(x)&&Number(x)<=255);
 }
 export function parseExit(value:unknown):Exit {
