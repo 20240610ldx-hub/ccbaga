@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 中英文 YAML、共享翻译入口与 TypeScript 源码目录。
- * [OUTPUT]: 双语键/插槽一致性、全部界面源文案覆盖、原生结果翻译及切换后保留原始数据的回归。
+ * [OUTPUT]: 双语键/插槽一致性、全部界面源文案覆盖、原生结果/浏览器全清理部分失败计数翻译及切换后保留原始数据的回归。
  * [POS]: 本地化的离线验证；不启动图形界面，不修改系统语言或用户设置。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -42,6 +42,8 @@ test('原生错误、参数和原始路径可切换语言，未知消息原样�
   expect(translate('本机：America/New_York；浏览器：待测；出口：待测')).toBe('Computer: America/New_York; browser: Not checked; exit: Not checked');
   expect(translate('已处理 2 项；部分完成，请检查失败记录。')).toBe('Processed 2 items; partially complete. Check the error log.');
   expect(translate('出口检测未完成（ipwho.is：HTTP 429；ipapi.co：网络连接失败）。请检查 TUN/代理连接后重试。')).toBe('Exit check failed (ipwho.is: HTTP 429; ipapi.co: Network connection failed). Check your TUN/proxy connection and retry.');
+  expect(translate('浏览器资料重置未完成；已删除 2/5 个项目，后续未执行。浏览器资料发生变化。')).toBe('Browser cleanup did not finish. Deleted 2/5 items; remaining items were not processed. Browser data changed.');
+  expect(translate('已删除：Default/Bookmarks')).toBe('Deleted: Default/Bookmarks');
   expect(translate('未知错误 0xABC')).toBe('未知错误 0xABC');
   expect(translate('__proto__')).toBe('__proto__');
   const raw='已发现 12 个可选项目。';

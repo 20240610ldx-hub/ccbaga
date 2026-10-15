@@ -1,6 +1,6 @@
 // [INPUT]: 宿主独立资料目录、原生进程核验与已验证配置。
-// [OUTPUT]: 浏览资料占用保护、窄范围 Preferences 更新及缓存/登录数据清理；站点清理保留密码密钥、个人偏好和自动填充。
-// [POS]: 文件边界；清理只遍历固定位置，拒绝链接，不生成备份。
+// [OUTPUT]: 浏览资料占用保护、偏好更新、缓存/站点清理及用户显式确认的完整资料重置；全量预检后按实际删除项目报告 n/N。
+// [POS]: 当前绑定 user-data-dir 的文件边界；完整重置含所有子 Profile 与密码密钥，仅允许 unlink 当前用户的根级 Chromium 崩溃锁，拒绝其他链接/外部所有者，不访问系统钥匙串或其他身份。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 #[cfg(target_os = "linux")]
 use crate::linux::*;
@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 #[cfg(target_os = "macos")]
 use std::ffi::c_char;
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::{
     ffi::CString,
     fs,
@@ -233,5 +233,127 @@ pub fn clear(
         count += 1;
         log(name, true);
     }
+    Ok(count)
+}
+
+fn reset_metadata(profile: &Path, path: &Path) -> Result<fs::Metadata, String> {
+    let meta =
+        fs::symlink_metadata(path).map_err(|_| "浏览器资料发生变化。")?;
+    #[cfg(unix)]
+    {
+        extern "C" {
+            fn getuid() -> u32;
+        }
+        // 崩溃遗留的三个 Chromium 根锁仅删除链接自身，绝不进入链接目标。
+        if meta.file_type().is_symlink()
+            && path.parent() == Some(profile)
+            && matches!(
+                path.file_name().and_then(|s| s.to_str()),
+                Some("SingletonLock" | "SingletonCookie" | "SingletonSocket")
+            )
+            && meta.uid() == unsafe { getuid() }
+        {
+            check_path(profile, profile)?;
+            return Ok(meta);
+        }
+    }
+    check_path(profile, path)?;
+    crate::identities::private::safe(path)?;
+    Ok(meta)
+}
+pub fn reset(
+    profile: &Path,
+    mut ensure_stopped: impl FnMut() -> Result<(), String>,
+    mut log: impl FnMut(&str, bool, usize, usize),
+) -> Result<usize, String> {
+    use crate::identities::private;
+    ensure_stopped()?;
+    check_path(profile, profile)?;
+    match fs::symlink_metadata(profile) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Ok(meta) if meta.is_dir() => {}
+        _ => return Err("无法完整检查浏览器资料目录，未执行重置。".into()),
+    }
+    let original = crate::cleaner::identity::fingerprint(profile)?;
+    let mut pending = vec![profile.to_path_buf()];
+    let mut plan = Vec::new();
+    // ----- 完整预检先于任何删除；不把未知文件或额外 Chromium Profile 排除在外 -----
+    while let Some(path) = pending.pop() {
+        let meta = reset_metadata(profile, &path)?;
+        let directory = meta.is_dir();
+        if directory {
+            pending.extend(
+                fs::read_dir(&path)
+                    .map_err(|_| "无法完整检查浏览器资料目录，未执行重置。")?
+                    .map(|entry| entry.map(|e| e.path()))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|_| "无法完整检查浏览器资料目录，未执行重置。")?,
+            );
+        }
+        if path != profile {
+            let stamp = if directory {
+                Vec::new()
+            } else {
+                crate::cleaner::identity::fingerprint(&path)?
+            };
+            plan.push((path, meta.file_type(), stamp));
+        }
+    }
+    if crate::cleaner::identity::fingerprint(profile)? != original {
+        return Err("浏览器资料发生变化，未执行重置。".into());
+    }
+    plan.sort_by(|a, b| {
+        b.0.components()
+            .count()
+            .cmp(&a.0.components().count())
+            .then(a.0.cmp(&b.0))
+    });
+    let total = plan.len();
+    let mut count = 0;
+    let result = (|| {
+        ensure_stopped()?;
+        let mut checked_at = std::time::Instant::now();
+        for (path, kind, stamp) in plan {
+            // 与身份文件事务相同，每 250ms 复查进程，避免每个小文件都扫描系统进程。
+            if checked_at.elapsed() >= std::time::Duration::from_millis(250) {
+                ensure_stopped()?;
+                checked_at = std::time::Instant::now();
+            }
+            let meta = reset_metadata(profile, &path).map_err(|_| "浏览器资料发生变化。")?;
+            if meta.file_type() != kind
+                || (!kind.is_dir() && crate::cleaner::identity::fingerprint(&path)? != stamp)
+            {
+                return Err("浏览器资料发生变化。".into());
+            }
+            let name = path
+                .strip_prefix(profile)
+                .map_err(|_| "资料路径无效。")?
+                .to_string_lossy();
+            log(&name, false, count, total);
+            // 非递归删除目录：预检后新加入的文件不会被顺带删除。
+            if kind.is_dir() {
+                fs::remove_dir(&path)
+            } else {
+                fs::remove_file(&path)
+            }
+            .map_err(|_| "浏览器资料删除失败。")?;
+            count += 1;
+            log(&name, true, count, total);
+        }
+        ensure_stopped()?;
+        check_path(profile, profile).map_err(|_| "浏览器资料发生变化。")?;
+        private::safe(profile)?;
+        if fs::read_dir(profile)
+            .map_err(|_| "无法复查浏览器资料目录。")?
+            .next()
+            .is_some()
+        {
+            return Err("浏览器资料仍有未清理项目。".into());
+        }
+        Ok::<_, String>(())
+    })();
+    result.map_err(|error| {
+        format!("浏览器资料重置未完成；已删除 {count}/{total} 个项目，后续未执行。{error}")
+    })?;
     Ok(count)
 }

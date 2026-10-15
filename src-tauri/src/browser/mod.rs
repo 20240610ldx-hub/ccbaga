@@ -1,5 +1,5 @@
 // [INPUT]: 本机指纹引擎（优先 /Applications/CCBaga-B.app，回退 ~/Applications）、配置/资料边界、真实浏览器观测、宿主界面语言与共享操作日志。
-// [OUTPUT]: 有界绑定身份上下文与浏览器设置/启动/清理和环境核验；宿主重启重新连接现有浏览器，回报时间明确标识通讯状态；上下文提供当前界面语言与按有效机器区域识别的目标；launch.args 与 SQLite 当前身份共用独占资料/指纹参数，恢复期间阻断启动。
+// [OUTPUT]: 有界绑定身份上下文与浏览器设置/启动/缓存清理、显式完整资料重置和环境核验；完整重置只处理当前绑定 user-data-dir，按真实项目计数；launch.args 与 SQLite 共用资料/指纹参数，恢复期间阻断启动。
 // [POS]: 独立浏览器模块的唯一编排入口；改变资料前必须退出浏览器；不自行改系统默认浏览器，只发起系统确认。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 pub(crate) mod config;
@@ -537,8 +537,13 @@ pub async fn browser_quit(app: tauri::AppHandle) -> Result<Snapshot, String> {
 pub async fn browser_clear(
     app: tauri::AppHandle,
     include_site_data: bool,
+    reset_profile: Option<bool>,
     on_progress: Channel<Progress>,
 ) -> Result<Snapshot, String> {
+    let reset = reset_profile.unwrap_or(false);
+    if reset && !include_site_data {
+        return Err("完整重置需要明确确认全部浏览器资料。".into());
+    }
     run(move || {
         let state = app.state::<Browser>();
         let _guard = state.gate.lock().unwrap();
@@ -548,7 +553,11 @@ pub async fn browser_clear(
         log.log(
             "browser",
             "running",
-            "核验浏览器已退出；只处理独立资料内的固定项目。",
+            if reset {
+                "正在核验当前浏览器的完整资料。"
+            } else {
+                "核验浏览器已退出；只处理独立资料内的固定项目。"
+            },
             0,
             None,
         );
@@ -556,24 +565,68 @@ pub async fn browser_clear(
             return Err("浏览器正在使用资料，退出后再清理。".into());
         }
         let mut count = 0;
-        let total = profile::scan(&profile)?
-            .iter()
-            .filter(|x| include_site_data || !x.login)
-            .count();
-        let result = profile::clear(&profile, include_site_data, |name, done| {
-            if done {
-                count += 1;
-            }
-            log.log(
-                "browser",
-                if done { "ok" } else { "running" },
-                &format!("{}：{name}", if done { "已删除" } else { "正在删除" }),
-                count,
-                Some(total),
-            );
-        });
+        let mut total = 0;
+        let mut reported_at: Option<std::time::Instant> = None;
+        let result = if reset {
+            profile::reset(
+                &profile,
+                || {
+                    if profile::running(&profile)? {
+                        Err("浏览器正在使用资料，退出后再清理。".into())
+                    } else {
+                        Ok(())
+                    }
+                },
+                |name, done, completed, planned| {
+                    count = completed;
+                    total = planned;
+                    if completed == planned
+                        || reported_at.is_none_or(|last| {
+                            last.elapsed() >= std::time::Duration::from_millis(50)
+                        })
+                    {
+                        log.log(
+                            "browser",
+                            "running",
+                            &format!("{}：{name}", if done { "已删除" } else { "正在删除" }),
+                            completed,
+                            Some(planned),
+                        );
+                        reported_at = Some(std::time::Instant::now());
+                    }
+                },
+            )
+        } else {
+            total = profile::scan(&profile)?
+                .iter()
+                .filter(|x| include_site_data || !x.login)
+                .count();
+            profile::clear(&profile, include_site_data, |name, done| {
+                if done {
+                    count += 1;
+                }
+                log.log(
+                    "browser",
+                    if done { "ok" } else { "running" },
+                    &format!("{}：{name}", if done { "已删除" } else { "正在删除" }),
+                    count,
+                    Some(total),
+                );
+            })
+        };
         if let Err(error) = result {
-            log.fail(&error);
+            if reset {
+                renew_session(&app);
+                log.log(
+                    "browser",
+                    "error",
+                    &error,
+                    count,
+                    (total > 0).then_some(total),
+                );
+            } else {
+                log.fail(&error);
+            }
             return Err(error);
         }
         renew_session(&app);

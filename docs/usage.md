@@ -1,3 +1,9 @@
+<!--
+[INPUT]: 当前界面入口、身份保留策略和独立浏览器的清理范围。
+[OUTPUT]: 双应用操作速查、显式浏览器全清理及本地数据边界。
+[POS]: README 的操作指南；不执行命令或保存用户资料。
+[PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+-->
 # Usage guide
 
 CCBaga is intended solely for people residing or traveling abroad to manage their own Claude identities. Use that violates Anthropic's official terms of service is prohibited.
@@ -10,7 +16,7 @@ Open **Guide** in the sidebar. The page supports English and Chinese.
 | --- | --- |
 | Easy setup | Choose a region and select an action. Clearing cache keeps sign-ins; changing the fingerprint restarts CCBaga-B. |
 | Claude identities | Save your work before archiving or switching. Sign-in data follows the identity; choose what else to keep or archive. An empty identity starts a fresh local workspace. |
-| Browser | Save settings, then open the check page. Clearing site data deletes cookies, site storage and recovery sessions without a backup. |
+| Browser | Save settings, then open the check page. Clear cache retains sign-ins. Clear all browser data permanently removes the current identity's passwords, bookmarks, history, extensions, settings and sessions without a backup; confirm separately. |
 | Computer | Adjust time zone, language and region separately. Permission, a restart or sign-out may be required. This does not change your public IP. |
 | Network | Choose an AI tool and give it the copied prompt to install the Skill. The AI handles connection details and asks before remote deployment. The app does not collect SSH keys or perform deployment. |
 

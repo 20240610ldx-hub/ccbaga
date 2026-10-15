@@ -1,6 +1,6 @@
 /**
  * [INPUT]: Node.js 标准管道、已锁定 playwright-core、固定引擎、Vite 与 tests/ 的虚构 Tauri IPC。
- * [OUTPUT]: 工牌、浏览器/网络、残留清理与真实 Channel 阶段动画的 DOM 验收，覆盖双语、默认取消及失败重扫。
+ * [OUTPUT]: 工牌、浏览器/网络与全清理确认、残留清理与真实 Channel 阶段动画的 DOM 验收，覆盖双语、默认取消及失败重扫。
  * [POS]: 发布前无头行为回归；无截图、无真实账号/文件修改，不加载原生宿主，不允许外网请求。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -12,6 +12,7 @@ import {createServer} from 'vite';
 import {chromium} from 'playwright-core';
 import {testBrowserVerification} from './test-browser-verification.ts';
 import {testBrowserProfiles} from './test-browser-profiles.ts';
+import {testBrowserCleanup} from './test-browser-cleanup.ts';
 import {testNetworkDiagnostics} from './test-network-diagnostics.ts';
 import {testClaudeResidue} from './test-claude-residue.ts';
 import {testIdentityOperation} from './test-identity-operation.ts';
@@ -126,6 +127,7 @@ try{
  await current.waitFor({state:'detached'});assert.equal(await page.evaluate(()=>(window as any).identityFixture.state.records.length),count);checks++;
  assert.equal(errors.length,0,errors.join('\n'));
  checks+=await testBrowserVerification(browser,base);
+ checks+=await testBrowserCleanup(browser,base);
  checks+=await testNetworkDiagnostics(browser,base);
  checks+=await testClaudeResidue(browser,base);
  checks+=await testIdentityOperation(browser,base);

@@ -111,6 +111,8 @@ Expired or revoked server-side logins may need authentication again. The app man
 
 Open **Browser** or the companion browser's local test page to measure the actual environment. Checks cover the network exit, country, timezone, language, platform, CPU count, engine version and location settings.
 
+**Clear cache** retains sign-ins and personal browser data. **Clear all browser data** permanently resets the current identity's entire browser profile, including saved passwords, encryption metadata, bookmarks, history, extensions, settings and website sessions. It requires a separate confirmation and creates no backup. Other identities' profiles and the identity vault are retained; the selected fingerprint configuration applies when the browser opens again.
+
 The success page appears only when the measured checks match, the report reaches the cleaner and no measurement error remains. **DNS and WebRTC leak checks are not independently verified.** A green result describes the measured checks, not a guarantee of anonymity or account acceptance.
 
 ### Network setup

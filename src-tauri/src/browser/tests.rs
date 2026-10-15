@@ -1,5 +1,5 @@
 // [INPUT]: 临时样本、指纹参数、固定清理边界与本机 HTTP 限流样本。
-// [OUTPUT]: 临时配置/缓存/密码密钥与设置保留、链接/地区、代理不直连与回环参数、严格时区和 HTTP 服务备援回归。
+// [OUTPUT]: 缓存/旧站点清理保留资产，显式完整重置同时清除密码与密钥、全部子 Profile 并隔离兄弟资料；链接/进程重启阻断与真实删除计数；地区/网络回归。
 // [POS]: 浏览器模块行为验证；不访问用户实际资料。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -108,6 +108,178 @@ fn cache_isolation_and_direct_delete() {
         );
     }
     assert_eq!(fs::read_dir(&root).unwrap().count(), 2);
+    fs::remove_dir_all(root).unwrap();
+}
+#[test]
+fn explicit_profile_reset_clears_all_profiles_keys_and_assets_but_nothing_outside() {
+    let root = sample();
+    let active = root.join("browser/contexts/a/profile");
+    let files = [
+        "Local State",
+        "Default/Login Data",
+        "Default/Login Data For Account",
+        "Default/Bookmarks",
+        "Default/History",
+        "Default/Preferences",
+        "Default/Web Data",
+        "Default/Network/Cookies",
+        "Default/Extensions/example/data",
+        "Profile 1/Login Data",
+        "Profile 1/Bookmarks",
+        "Guest Profile/Local Storage/value",
+        "unknown-provider/credential",
+        "unknown-root-file",
+    ];
+    for file in files {
+        let path = active.join(file);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, b"synthetic profile value").unwrap();
+    }
+    let outside = [
+        "browser/contexts/b/profile/Default/Login Data",
+        "browser/contexts/a/config.json",
+        "browser/contexts/a/seed.owner",
+        "identity-vault/key.bin",
+        "browser-runtime/chrome",
+        "login.keychain-db",
+    ];
+    for file in outside {
+        let path = root.join(file);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, b"keep synthetic external value").unwrap();
+    }
+    let mut events = Vec::new();
+    let count = profile::reset(
+        &active,
+        || Ok(()),
+        |name, done, current, total| events.push((name.to_owned(), done, current, total)),
+    )
+    .unwrap();
+    assert_eq!(fs::read_dir(&active).unwrap().count(), 0);
+    assert_eq!(events.len(), count * 2);
+    for (index, pair) in events.chunks_exact(2).enumerate() {
+        assert_eq!((pair[0].1, pair[0].2, pair[0].3), (false, index, count));
+        assert_eq!((pair[1].1, pair[1].2, pair[1].3), (true, index + 1, count));
+        assert_eq!(pair[0].0, pair[1].0);
+    }
+    for file in outside {
+        assert_eq!(
+            fs::read(root.join(file)).unwrap(),
+            b"keep synthetic external value"
+        );
+    }
+    // 下一次启动的既有偏好层可重建空资料；没有恢复旧密码或书签。
+    profile::preferences(&active, &Config::default(), &machine()).unwrap();
+    assert!(active.join("Default/Preferences").is_file());
+    assert!(!active.join("Default/Login Data").exists());
+    assert!(!active.join("Default/Bookmarks").exists());
+    fs::remove_dir_all(root).unwrap();
+}
+#[test]
+fn profile_reset_preflights_every_link_before_deleting_any_file() {
+    let root = sample();
+    let active = root.join("profile");
+    let outside = root.join("external");
+    fs::create_dir_all(active.join("Default/Cache")).unwrap();
+    fs::create_dir(&outside).unwrap();
+    fs::write(
+        active.join("Default/Cache/data"),
+        b"keep before failed preflight",
+    )
+    .unwrap();
+    fs::write(outside.join("keychain"), b"synthetic external keychain").unwrap();
+    let link = active.join("linked-profile");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&outside, &link).unwrap();
+    #[cfg(windows)]
+    assert!(Command::new("cmd.exe")
+        .args(["/D", "/C", "mklink", "/J"])
+        .arg(link.to_string_lossy().replace('/', "\\"))
+        .arg(outside.to_string_lossy().replace('/', "\\"))
+        .output()
+        .unwrap()
+        .status
+        .success());
+    let mut events = Vec::new();
+    assert!(profile::reset(
+        &active,
+        || Ok(()),
+        |name, _, _, _| events.push(name.to_owned())
+    )
+    .is_err());
+    assert!(events.is_empty());
+    assert!(active.join("Default/Cache/data").exists());
+    assert_eq!(
+        fs::read(outside.join("keychain")).unwrap(),
+        b"synthetic external keychain"
+    );
+    #[cfg(unix)]
+    fs::remove_file(link).unwrap();
+    #[cfg(windows)]
+    fs::remove_dir(link).unwrap();
+    fs::remove_dir_all(root).unwrap();
+}
+#[cfg(unix)]
+#[test]
+fn profile_reset_unlinks_only_owned_root_chromium_crash_locks() {
+    let root = sample();
+    let active = root.join("profile");
+    let outside = root.join("outside");
+    fs::create_dir(&active).unwrap();
+    fs::create_dir(&outside).unwrap();
+    fs::write(outside.join("keep"), b"external fixture").unwrap();
+    for name in ["SingletonLock", "SingletonCookie", "SingletonSocket"] {
+        std::os::unix::fs::symlink(&outside, active.join(name)).unwrap();
+    }
+    assert_eq!(
+        profile::reset(&active, || Ok(()), |_, _, _, _| {}).unwrap(),
+        3
+    );
+    assert_eq!(fs::read_dir(&active).unwrap().count(), 0);
+    assert_eq!(fs::read(outside.join("keep")).unwrap(), b"external fixture");
+    // 相同名称放在子目录中也不能获得根锁例外。
+    fs::create_dir(active.join("Default")).unwrap();
+    std::os::unix::fs::symlink(&outside, active.join("Default/SingletonLock")).unwrap();
+    assert!(profile::reset(&active, || Ok(()), |_, _, _, _| {}).is_err());
+    fs::remove_file(active.join("Default/SingletonLock")).unwrap();
+    fs::remove_dir_all(root).unwrap();
+}
+#[test]
+fn profile_reset_reports_partial_deletion_and_stops_when_browser_restarts() {
+    let root = sample();
+    fs::write(root.join("a"), b"first").unwrap();
+    fs::write(root.join("b"), b"second").unwrap();
+    assert!(profile::reset(
+        &root,
+        || Err("fixture process running".into()),
+        |_, _, _, _| panic!("no deletion before process check")
+    )
+    .is_err());
+    assert!(root.join("a").exists());
+    let mut checks = 0;
+    let mut completed = Vec::new();
+    let error = profile::reset(
+        &root,
+        || {
+            checks += 1;
+            if checks >= 3 {
+                Err("fixture browser restarted".into())
+            } else {
+                Ok(())
+            }
+        },
+        |_, done, count, total| {
+            if done {
+                completed.push((count, total));
+                std::thread::sleep(std::time::Duration::from_millis(260));
+            }
+        },
+    )
+    .unwrap_err();
+    assert!(error.contains("1/2"));
+    assert_eq!(completed, [(1, 2)]);
+    assert!(!root.join("a").exists());
+    assert!(root.join("b").exists());
     fs::remove_dir_all(root).unwrap();
 }
 #[test]
