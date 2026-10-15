@@ -1,11 +1,11 @@
 /**
- * [INPUT]: 脱敏的清理样本与页面选择规则。
+ * [INPUT]: 脱敏的清理样本、页面选择规则与规模样本。
  * [OUTPUT]: 预设范围、父子预览去重及单项选择保护的验证。
  * [POS]: 纯逻辑回归；不接触本机数据或 Tauri 清理命令。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 import {expect,test} from 'bun:test';
-import {effectiveItems,deselectItems,isDescendantPath,presetIds,reselectIds,type Item} from './cleaner-model';
+import {effectiveItems,deselectItems,formatBytes,isDescendantPath,presetIds,reselectIds,type Item} from './cleaner-model';
 const item=(id:string,path:string,risk:string):Item=>({id,path,risk,title:id,group:'test',impact:'',bytes:10,files:1,exact:true,keys:[]});
 const samples=[item('cache','/home/Claude/Cache','safe'),item('desktop','/home/Claude','login'),item('history','/home/.claude/history.jsonl','history'),item('settings','/home/.claude/settings.json','config')];
 test('默认清理不选择账号、历史与配置，完整预设选择全部可清理项',()=>{
@@ -58,4 +58,15 @@ test('保留 POSIX 大小写、反斜杠与合法文件名空格',()=>{
  expect(isDescendantPath('/home/name ','/home/name/child')).toBe(false);
  expect(isDescendantPath('/','/home/child')).toBe(true);
  expect(isDescendantPath('C:\\Users\\Fixture','c:/users/fixture/child')).toBe(true);
+});
+test('规模格式化在四舍五入进位到 1024 时升一档',()=>{
+ expect(formatBytes(0)).toBe('0 B');
+ expect(formatBytes(1023)).toBe('1,023 B');
+ expect(formatBytes(1024)).toBe('1 KB');
+ expect(formatBytes(1024**2-1)).toBe('1 MB');
+ expect(formatBytes(1024**3-1)).toBe('1 GB');
+ expect(formatBytes(1024**2*1023.96)).toBe('1 GB');
+ expect(formatBytes(1024**4-1)).toBe('1 TB');
+ expect(formatBytes(1024**5)).toBe('1,024 TB');
+ expect(formatBytes(0.5)).toBe('1 B');
 });
