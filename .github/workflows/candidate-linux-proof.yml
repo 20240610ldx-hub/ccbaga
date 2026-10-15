@@ -1,0 +1,59 @@
+name: CCBaga Linux installer candidate proof
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    if: github.repository == 'rudycelekli/CCBaga'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+          ref: c3db30c35a8afadcc3ab188a226c9abc20c39168
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Verify exact candidate and Linux baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          test "$(git rev-parse HEAD)" = c3db30c35a8afadcc3ab188a226c9abc20c39168
+          git rev-parse HEAD > proof/head.txt
+          python --version > proof/python.txt
+          uname -a > proof/platform.txt
+          sha256sum scripts/install-linux.py scripts/test-linux.py scripts/CLAUDE.md > proof/source-sha256.txt
+          base=612ddd9f11a3cf2ecd64c41dc53c481cfd862679
+          mkdir -p "$RUNNER_TEMP/baseline"
+          for path in install-linux.py test-linux.py verify-linux-package.py; do
+            git show "$base:scripts/$path" > "$RUNNER_TEMP/baseline/$path"
+          done
+          python "$RUNNER_TEMP/baseline/test-linux.py" > proof/original-suite.log 2>&1
+          python -c 'from pathlib import Path; s=Path("proof/original-suite.log").read_text(); assert "Ran 6 tests" in s and "OK" in s'
+          cp scripts/test-linux.py "$RUNNER_TEMP/baseline/test-linux.py"
+          set +e
+          python "$RUNNER_TEMP/baseline/test-linux.py" InstallTests.test_non_executable_browser_preserves_existing_installation InstallTests.test_incomplete_browser_ui_preserves_existing_installation > proof/before.log 2>&1
+          status=$?
+          set -e
+          echo "$status" > proof/before-exit.txt
+          test "$status" -eq 1
+          python -c 'from pathlib import Path; s=Path("proof/before.log").read_text(); assert "Ran 2 tests" in s and "FAILED (failures=3)" in s and s.count("RuntimeError not raised")==3'
+      - name: Verify fixed Linux installer and package suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/test-linux.py > proof/after.log 2>&1
+          python -c 'from pathlib import Path; s=Path("proof/after.log").read_text(); assert "Ran 8 tests" in s and "OK" in s'
+          git diff --check
+          git diff --exit-code
+      - name: Preserve proof even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ccbaga-linux-installer-proof
+          path: proof/
+          if-no-files-found: error

@@ -94,7 +94,8 @@ class NetworkTests(unittest.TestCase):
         self.assertEqual(n.read_config(path), self.config())
         n.win.assert_private(path) if os.name == 'nt' else self.assertEqual(path.stat().st_mode & 0o777, 0o600)
         with self.assertRaises(FileExistsError): n.configure(path, io.StringIO(json.dumps(self.config())))
-        for conf in [{}, {**self.config(), 'home_port': 0}, {**self.config(), 'pem': None}]:
+        for conf in [{}, {**self.config(), 'home_port': 0}, {**self.config(), 'pem': None},
+                     {**self.config(), 'expected_ip': 16909060}, {**self.config(), 'expected_ip': True}]:
             invalid = self.root/'invalid.json'
             with self.assertRaises(ValueError): n.configure(invalid, io.StringIO(json.dumps(conf)))
             self.assertFalse(invalid.exists())

@@ -1,0 +1,62 @@
+name: Candidate Linux engine replacement proof
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    if: github.repository == 'rudycelekli/CCBaga'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: 40b9e61867f874febf0712b79bb92a215dcf7542
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Native baseline and exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 40b9e61867f874febf0712b79bb92a215dcf7542
+          test "$(uname -s)" = Linux
+          mkdir -p "$RUNNER_TEMP/package-proof/baseline/scripts"
+          export PROOF="$RUNNER_TEMP/package-proof"
+          uname -a > "$PROOF/platform.txt"
+          python --version >> "$PROOF/platform.txt"
+          git show 612ddd9f11a3cf2ecd64c41dc53c481cfd862679:scripts/package-browser.sh > "$PROOF/baseline/scripts/package-browser.sh"
+          cp scripts/package-linux-browser.py scripts/test-package-linux-browser.py "$PROOF/baseline/scripts/"
+          sha256sum "$PROOF/baseline/scripts/package-browser.sh" scripts/package-browser.sh scripts/package-linux-browser.py scripts/test-package-linux-browser.py > "$PROOF/source-hashes.txt"
+          python scripts/test-linux.py -v > "$PROOF/installer.log" 2>&1
+          set +e
+          python "$PROOF/baseline/scripts/test-package-linux-browser.py" -v PackageTests.test_first_package_preserves_complete_engine_and_other_resources PackageTests.test_invalid_source_leaves_old_engine_unchanged PackageTests.test_rebuild_replaces_engine_instead_of_merging_removed_files > "$PROOF/baseline.log" 2>&1
+          status=$?
+          set -e
+          test "$status" = 1
+          python - <<'CONTROL'
+          import os,pathlib
+          log=(pathlib.Path(os.environ['PROOF'])/'baseline.log').read_text()
+          assert 'Ran 3 tests' in log and 'FAILED (failures=1)' in log
+          assert 'test_first_package_preserves_complete_engine_and_other_resources (__main__.PackageTests.test_first_package_preserves_complete_engine_and_other_resources) ... ok' in log
+          assert 'test_invalid_source_leaves_old_engine_unchanged (__main__.PackageTests.test_invalid_source_leaves_old_engine_unchanged) ... ok' in log
+          assert 'test_rebuild_replaces_engine_instead_of_merging_removed_files (__main__.PackageTests.test_rebuild_replaces_engine_instead_of_merging_removed_files) ... FAIL' in log
+          assert 'removed-library.so' in log
+          CONTROL
+          python scripts/test-package-linux-browser.py -v > "$PROOF/fixed.log" 2>&1
+          python - <<'CONTROL'
+          import os,pathlib
+          log=(pathlib.Path(os.environ['PROOF'])/'fixed.log').read_text()
+          assert 'Ran 6 tests' in log and log.rstrip().endswith('OK')
+          CONTROL
+          sh -n scripts/package-browser.sh
+          git diff --check
+      - name: Preserve raw native proof
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-engine-replacement-proof
+          path: ${{ runner.temp }}/package-proof
+          if-no-files-found: warn
