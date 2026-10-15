@@ -339,3 +339,25 @@ fn follow_machine_taiwan_preserves_language_script_and_checks_actual_country() {
     assert_eq!(config.region(&machine).map(|r| r.id), Some("tw"));
     assert_eq!(config.language(&machine), "en-GB");
 }
+
+#[test]
+fn refreshed_context_recomputes_target_from_effective_machine_country() {
+    let mut context = Context {
+        identity: crate::identities::browser_link::BrowserIdentity {
+            linked: false, status: "unlinked", name: None, email: None, organization: None,
+        },
+        ui_language: "zh".into(), exit_services: &network::SERVICES,
+        config: Config::default(), region: None, machine: machine(), engine_version: "148".into(),
+    };
+    let mut taiwan = machine();
+    taiwan.timezone = "Asia/Taipei".into();
+    taiwan.languages = vec!["zh-Hans-TW".into()];
+    taiwan.locale = "zh_CN@rg=twzzzz".into();
+    taiwan.locale_country = "TW".into();
+    context.update_machine(taiwan.clone());
+    assert_eq!(context.region.map(|r| r.country), Some("TW"));
+    assert_eq!(context.config.language(&context.machine), "zh-Hans-TW");
+    taiwan.locale_country = "CN".into();
+    context.update_machine(taiwan);
+    assert!(context.region.is_none());
+}

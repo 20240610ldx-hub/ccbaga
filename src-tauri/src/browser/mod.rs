@@ -77,6 +77,12 @@ pub struct Context {
     machine: Machine,
     engine_version: String,
 }
+impl Context {
+    fn update_machine(&mut self, machine: Machine) {
+        self.region = self.config.region(&machine);
+        self.machine = machine;
+    }
+}
 #[derive(Serialize)]
 pub struct Snapshot {
     ui_language: String,
