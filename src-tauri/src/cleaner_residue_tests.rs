@@ -1,5 +1,5 @@
 // [INPUT]: 临时 Claude 文件、虚构账号配置、隔离 SQLite 保险库与注入的进程状态。
-// [OUTPUT]: 文件范围、凭据脱敏、Desktop 个人配置/虚拟机资产保留、快照过期/不完整、运行/恢复阻断及部分失败回归。
+// [OUTPUT]: 文件范围、凭据脱敏、macOS/Windows Desktop 个人配置与 Linux 排除 macOS 路径、快照过期/不完整、运行/恢复阻断及部分失败回归。
 // [POS]: 文件残留入口的离线安全验收；不改 HOME、不检查真实进程、不访问钥匙串或现有账号。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -76,11 +76,23 @@ fn desktop_personal_assets_are_never_residue_cleanup_targets() {
     }
     f.file(&format!("{desktop}/Local Storage/state"), "login state");
     let scan = collect(&f.0);
-    assert_eq!(scan.items.len(), 1);
-    assert!(scan.items[0].path.ends_with("Local Storage"));
-    assert!(f.clean(&scan, &ids(&scan), || Ok(false)).unwrap().completed);
-    assert!(!f.0.join(desktop).join("Local Storage").exists());
-    assert_eq!(fs::read_dir(f.0.join(desktop)).unwrap().count(), 10);
+    if cfg!(target_os = "linux") {
+        // Linux 仅支持自己的固定目录，不能把 macOS 目录加入可清理范围。
+        assert!(scan.items.is_empty());
+        assert_eq!(
+            fs::read(f.0.join(desktop).join("Local Storage/state")).unwrap(),
+            b"login state"
+        );
+    } else {
+        assert_eq!(scan.items.len(), 1);
+        assert!(scan.items[0].path.ends_with("Local Storage"));
+        assert!(f.clean(&scan, &ids(&scan), || Ok(false)).unwrap().completed);
+        assert!(!f.0.join(desktop).join("Local Storage").exists());
+    }
+    assert_eq!(
+        fs::read_dir(f.0.join(desktop)).unwrap().count(),
+        if cfg!(target_os = "linux") { 11 } else { 10 }
+    );
 }
 
 #[test]

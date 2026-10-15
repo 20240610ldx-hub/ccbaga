@@ -1,5 +1,5 @@
 // [INPUT]: 虚构 UUID/组织/凭据、隔离文件系统和归档格式。
-// [OUTPUT]: A/B 往返去重、刷新凭据覆盖、跨组织隔离、旧版迁移与覆盖故障、不同 Desktop 账号/个人设置和共享代理保留回归。
+// [OUTPUT]: A/B 往返去重、刷新凭据覆盖、跨组织隔离、旧版迁移与覆盖故障、macOS/Windows 不同 Desktop 账号与 Linux 排除 macOS 路径、个人设置和共享代理保留回归。
 // [POS]: 账号匹配与不可变归档代次的离线证明，不读取真实用户数据。
 // [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 use super::*;
@@ -476,7 +476,11 @@ fn opening_and_switching_preserve_distinct_desktop_accounts_and_personal_setting
     let r = Reporter::channel(None);
     s.switch("empty", "Account A", &p, &r).unwrap();
     assert_retained();
-    assert!(!f.home.join(desktop).join("Local Storage").exists());
+    // Linux 不处理 macOS 路径；其余平台仅暂存明确的 Desktop 登录存储。
+    assert_eq!(
+        f.home.join(desktop).join("Local Storage").exists(),
+        cfg!(target_os = "linux")
+    );
     let saved = s.records().into_iter().find(|row| !row.empty).unwrap();
     s.switch(&saved.id, "Empty", &p, &r).unwrap();
     assert_retained();
